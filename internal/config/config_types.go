@@ -913,6 +913,11 @@ type OpenAICompatibility struct {
 
 // OpenAICompatibilityAPIKey represents an API key configuration with optional proxy setting.
 type OpenAICompatibilityAPIKey struct {
+	// RequestCompression is an opt-in reviewed upstream request-body capability.
+	// Empty preserves identity; supported codecs are gzip, br, and zstd.
+	RequestCompression string `yaml:"request-compression,omitempty" json:"request-compression,omitempty"`
+	// ResponseCompression negotiates gzip, br, or zstd independently of uploads.
+	ResponseCompression string `yaml:"response-compression,omitempty" json:"response-compression,omitempty"`
 	// APIKey is the authentication key for accessing the external API services.
 	APIKey string `yaml:"api-key" json:"api-key"`
 

@@ -335,6 +335,12 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				attrs["priority"] = strconv.Itoa(compat.Priority)
 			}
 			addWeightToAttrs(entry.Weight, attrs)
+			if compression := strings.TrimSpace(entry.RequestCompression); compression != "" {
+				attrs["request_compression"] = compression
+			}
+			if compression := strings.TrimSpace(entry.ResponseCompression); compression != "" {
+				attrs["response_compression"] = compression
+			}
 			if key != "" {
 				attrs["api_key"] = key
 			}

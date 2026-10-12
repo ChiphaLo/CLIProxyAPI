@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/interfaces"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	"github.com/tidwall/gjson"
@@ -80,19 +82,46 @@ func (s *responsesLocalInterrupt) framesChan() <-chan []byte {
 // handled immediately so they are not queued behind an active response.
 // The bounded queue backpressures clients instead of retaining unlimited input.
 func readResponsesWebsocketInput(ctx context.Context, cancel context.CancelCauseFunc, conn *websocket.Conn, interrupt func([]byte) error, local *responsesLocalInterrupt, writer *responsesWebsocketWriter, timeline websocketTimelineAppender) (<-chan cliproxyexecutor.WebsocketInput, <-chan struct{}) {
-	input := make(chan cliproxyexecutor.WebsocketInput, 16)
+	capacity := 16
+	admission := handlers.WebsocketAdmissionFromContext(ctx)
+	if admission != nil {
+		capacity = 1
+	}
+	input := make(chan cliproxyexecutor.WebsocketInput, capacity)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		defer close(input)
 		for {
-			kind, payload, errRead := conn.ReadMessage()
+			var payload []byte
+			kind, reader, errRead := conn.NextReader()
+			if errRead == nil {
+				if admission != nil && admission.MaxBytes > 0 {
+					payload, errRead = io.ReadAll(io.LimitReader(reader, admission.MaxBytes+1))
+					if int64(len(payload)) > admission.MaxBytes {
+						_, _ = writer.closeForUpstreamError(&websocket.CloseError{Code: websocket.CloseMessageTooBig, Text: "websocket message exceeds limit"})
+						errRead = &handlers.AdmissionError{Status: 413, Message: "websocket message exceeds 64 MiB"}
+					}
+				} else {
+					payload, errRead = io.ReadAll(reader)
+				}
+			}
 			if errRead != nil {
 				cancel(errRead)
 				return
 			}
 			if kind != websocket.TextMessage && kind != websocket.BinaryMessage {
 				continue
+			}
+			if admission != nil && admission.CheckFrame != nil {
+				if errCheck := admission.CheckFrame(payload); errCheck != nil {
+					_, errWrite := writeResponsesWebsocketError(writer, nil, &interfaces.ErrorMessage{StatusCode: handlers.AdmissionErrorStatus(errCheck), Error: errCheck})
+					if errWrite != nil {
+						cancel(errWrite)
+						return
+					}
+					continue
+				}
 			}
 			// Control frames bypass response.create normalization. The original
 			// response_id, mode, and extension fields must reach upstream unchanged.

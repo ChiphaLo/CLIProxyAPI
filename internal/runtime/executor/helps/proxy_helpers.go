@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/traffic"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
@@ -30,6 +31,23 @@ import (
 //   - *http.Client: An HTTP client with configured proxy or transport
 func NewProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *cliproxyauth.Auth, timeout time.Duration) *http.Client {
 	httpClient := &http.Client{}
+	// Applied after all payload rules, solely as transport framing. The default
+	// remains identity request bodies; capability is explicit per credential.
+	defer func() {
+		coding, responseCoding := "", ""
+		if auth != nil {
+			coding = strings.TrimSpace(auth.Attributes["request_compression"])
+			responseCoding = strings.TrimSpace(auth.Attributes["response_compression"])
+			if coding == "" && auth.Metadata != nil {
+				coding, _ = auth.Metadata["request_compression"].(string)
+			}
+			if responseCoding == "" && auth.Metadata != nil {
+				responseCoding, _ = auth.Metadata["response_compression"].(string)
+			}
+		}
+		httpClient.Transport = traffic.UpstreamRequestCompression(httpClient.Transport, coding)
+		httpClient.Transport = traffic.UpstreamResponseCompression(httpClient.Transport, responseCoding)
+	}()
 	if timeout > 0 {
 		httpClient.Timeout = timeout
 	}

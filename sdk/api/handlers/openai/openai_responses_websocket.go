@@ -44,8 +44,9 @@ const (
 )
 
 var responsesWebsocketUpgrader = websocket.Upgrader{
-	ReadBufferSize:  4096,
-	WriteBufferSize: 4096,
+	ReadBufferSize:    4096,
+	WriteBufferSize:   4096,
+	EnableCompression: true,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
@@ -272,6 +273,9 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		return
 	}
 	writer := newResponsesWebsocketWriter(conn)
+	if admission := handlers.WebsocketAdmissionFromContext(c.Request.Context()); admission != nil && admission.MaxBytes > 0 {
+		conn.SetReadLimit(admission.MaxBytes)
+	}
 	passthroughSessionID := uuid.NewString()
 	socketCtx, cancelSocket := context.WithCancelCause(c.Request.Context())
 	defer cancelSocket(nil)
@@ -450,6 +454,19 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		// )
 		wsTimelineLog.BeginRequest()
 		wsTimelineLog.Append("request", payload, time.Now())
+		admittedAuthID := ""
+		if admission := handlers.WebsocketAdmissionFromContext(socketCtx); admission != nil && admission.AdmitTurn != nil {
+			admitted, body, authID, errAdmit := admission.AdmitTurn(socketCtx, payload)
+			if errAdmit != nil {
+				_, errWrite := writeResponsesWebsocketError(writer, nil, &interfaces.ErrorMessage{StatusCode: handlers.AdmissionErrorStatus(errAdmit), Error: errAdmit})
+				if errWrite != nil {
+					return
+				}
+				continue
+			}
+			payload, admittedAuthID = body, authID
+			c.Request = c.Request.WithContext(admitted)
+		}
 
 		explicitRequestModelName := strings.TrimSpace(gjson.GetBytes(payload, "model").String())
 		requestModelName := explicitRequestModelName
@@ -655,6 +672,10 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		}
 
 		requestJSON = h.prepareCodexMultiAgentV2Tools(c, requestJSON)
+		if admission := handlers.WebsocketAdmissionFromContext(socketCtx); admission != nil && admission.MaxBytes > 0 && int64(len(requestJSON)) > admission.MaxBytes {
+			_, _ = writeResponsesWebsocketError(writer, nil, &interfaces.ErrorMessage{StatusCode: 413, Error: fmt.Errorf("expanded websocket conversation exceeds 64 MiB")})
+			return
+		}
 		requestJSON = h.prepareCodexOrphanDelegation(c, requestJSON)
 
 		if isPrewarm {
@@ -734,6 +755,9 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		}
 		if executionAuthID == "" {
 			executionAuthID = observedCompactionReplayAuthID
+		}
+		if admittedAuthID != "" {
+			executionAuthID = admittedAuthID
 		}
 		if executionAuthID != "" && !isPluginExecutorRoute {
 			cliCtx = handlers.WithPinnedAuthID(cliCtx, executionAuthID)
