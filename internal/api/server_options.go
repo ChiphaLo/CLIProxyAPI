@@ -15,6 +15,7 @@ import (
 
 type serverOptionConfig struct {
 	extraMiddleware       []gin.HandlerFunc
+	proxyMiddleware       []gin.HandlerFunc
 	engineConfigurator    func(*gin.Engine)
 	routerConfigurator    func(*gin.Engine, *handlers.BaseAPIHandler, *config.Config)
 	requestLoggerFactory  func(*config.Config, string) logging.RequestLogger
@@ -57,6 +58,14 @@ func effectiveSDKConfig(cfg *config.Config) *config.SDKConfig {
 func WithMiddleware(mw ...gin.HandlerFunc) ServerOption {
 	return func(cfg *serverOptionConfig) {
 		cfg.extraMiddleware = append(cfg.extraMiddleware, mw...)
+	}
+}
+
+// WithProxyMiddleware adds admission middleware after authentication on native
+// API route groups. It does not apply to management, callbacks, or realtime.
+func WithProxyMiddleware(mw ...gin.HandlerFunc) ServerOption {
+	return func(cfg *serverOptionConfig) {
+		cfg.proxyMiddleware = append(cfg.proxyMiddleware, mw...)
 	}
 }
 

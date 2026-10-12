@@ -154,6 +154,11 @@ func (m *Manager) executeHomeOnce(ctx context.Context, providers []string, req c
 			roundTiming.Observe(lastErr)
 			continue
 		}
+		if err := validateExecutionAuth(execCtx, auth); err != nil {
+			releaseAttempt()
+			selection.End("execution_policy_rejected")
+			return cliproxyexecutor.Response{}, err
+		}
 		preparedAuth, errPrepare := m.prepareHomeRequestAuth(execCtx, selection.Executor, selection)
 		if errPrepare != nil {
 			stateModel := m.selectionModelKeyForAuth(auth, routeModel)
@@ -236,12 +241,17 @@ func (m *Manager) executeHomeOnce(ctx context.Context, providers []string, req c
 			executor := executorForAuth(selection.Executor, preparedAuth)
 			execute := func() (cliproxyexecutor.Response, error) {
 				if countTokens {
-					return executor.CountTokens(executorCtx, preparedAuth, execReq, execOpts)
+					return countTokensValidated(executorCtx, executor, preparedAuth, execReq, execOpts)
 				}
-				return executor.Execute(execCtx, preparedAuth, execReq, execOpts)
+				return executeValidated(execCtx, executor, preparedAuth, execReq, execOpts)
 			}
 			startHomeExec := time.Now()
 			response, errExecute = execute()
+			if isExecutionValidationError(errExecute) {
+				releaseAttempt()
+				selection.End("execution_policy_rejected")
+				return cliproxyexecutor.Response{}, errExecute
+			}
 			errExecute = markUpstreamExecutionAttemptFromContext(execCtx, errExecute)
 			durationHomeExec := time.Since(startHomeExec)
 			if countTokens {

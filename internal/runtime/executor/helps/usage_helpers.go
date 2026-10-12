@@ -56,6 +56,10 @@ type UsageReporter struct {
 	ttftStart           time.Time
 	ttftSet             bool
 	once                sync.Once
+	captureRawUsage     bool
+	rawUsageMu          sync.RWMutex
+	rawUsage            []byte
+	rawUsageFormat      string
 
 	responseModelMu sync.RWMutex
 	// responseModel holds the latest model name reported by the upstream response.
@@ -141,6 +145,7 @@ func NewUsageReporter(ctx context.Context, provider, model string, auth *cliprox
 		serviceTier:     usage.ServiceTierFromContext(ctx),
 		generate:        usage.GenerateFromContext(ctx),
 		stream:          usage.StreamFromContext(ctx),
+		captureRawUsage: usage.RawUsageCaptureEnabled(ctx),
 	}
 	if auth != nil {
 		reporter.authID = auth.ID
@@ -211,6 +216,9 @@ func (r *UsageReporter) accessTokenFingerprint() string {
 // ObserveResponseModel stores the model reported by an upstream response or event and
 // ignores payloads without one; the substitution warning is emitted at publish time.
 func (r *UsageReporter) ObserveResponseModel(payload []byte) {
+	// Usage may arrive after the model identity has become final (Chat SSE).
+	// Capture it independently before the response-model fast path.
+	r.observeRawUsage(payload)
 	if r == nil || r.responseModelFinal.Load() {
 		return
 	}
@@ -633,8 +641,11 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 	// Additional-model records describe a side model (image generation tool usage) that
 	// the upstream response model never refers to, so they must stay empty.
 	responseModel := ""
+	var rawUsage []byte
+	rawUsageFormat := ""
 	if model == r.model {
 		responseModel = r.ResponseModel()
+		rawUsage, rawUsageFormat = r.rawUsageSnapshot()
 	}
 	return usage.Record{
 		RequestID:           r.requestID,
@@ -666,6 +677,8 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 		Failed:              failed,
 		Fail:                fail,
 		Detail:              detail,
+		RawUsage:            rawUsage,
+		RawUsageFormat:      rawUsageFormat,
 	}
 }
 

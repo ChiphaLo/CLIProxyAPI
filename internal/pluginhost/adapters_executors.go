@@ -710,6 +710,7 @@ func (a *executorAdapter) Execute(ctx context.Context, auth *coreauth.Auth, req 
 
 	if reporter != nil {
 		reporter.RecordFirstPacket()
+		reporter.ObserveResponseModel(pluginResp.Payload)
 		detail := helps.ParsePluginExecutorResponseUsage(prepared.outputFormat.String(), pluginResp.Payload)
 		reporter.Publish(ctx, detail)
 		reporter.EnsurePublished(ctx)
@@ -799,6 +800,7 @@ func (a *executorAdapter) observeAndTranslateExecutorStream(ctx context.Context,
 	publishResult := func() {
 		publishOnce.Do(func() {
 			if len(lineBuffer) > 0 {
+				reporter.ObserveResponseModel(lineBuffer)
 				helps.ObservePluginExecutorStreamUsage(prepared.outputFormat.String(), lineBuffer, &streamUsage)
 				lineBuffer = nil
 			}
@@ -858,10 +860,12 @@ func (a *executorAdapter) observeAndTranslateExecutorStream(ctx context.Context,
 						}
 						line := lineBuffer[:idx+1]
 						lineBuffer = lineBuffer[idx+1:]
+						reporter.ObserveResponseModel(line)
 						helps.ObservePluginExecutorStreamUsage(prepared.outputFormat.String(), line, &streamUsage)
 					}
 					if len(lineBuffer) > 0 {
 						if jsonBytes := helps.ExtractStreamJSONPayload(lineBuffer); len(jsonBytes) > 0 && json.Valid(jsonBytes) {
+							reporter.ObserveResponseModel(lineBuffer)
 							helps.ObservePluginExecutorStreamUsage(prepared.outputFormat.String(), lineBuffer, &streamUsage)
 							lineBuffer = nil
 						}

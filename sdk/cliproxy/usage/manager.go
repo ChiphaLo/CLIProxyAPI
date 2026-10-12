@@ -70,6 +70,11 @@ type Record struct {
 	Failed      bool
 	Fail        Failure
 	Detail      Detail
+	// RawUsage is an optional, bounded copy of the original upstream usage object.
+	// It is populated only for requests that explicitly enable raw usage capture.
+	// RawUsageFormat is "chat", "responses", or "gemini"; none is normalized by CPA.
+	RawUsage       []byte
+	RawUsageFormat string
 	// ResponseHeaders stores a snapshot of upstream response headers for usage sinks.
 	ResponseHeaders http.Header
 }
@@ -412,6 +417,7 @@ type Manager struct {
 	once     sync.Once
 	stopOnce sync.Once
 	cancel   context.CancelFunc
+	done     chan struct{}
 
 	mu     sync.Mutex
 	cond   *sync.Cond
@@ -425,7 +431,7 @@ type Manager struct {
 
 // NewManager constructs a manager with a buffered queue.
 func NewManager(buffer int) *Manager {
-	m := &Manager{}
+	m := &Manager{done: make(chan struct{})}
 	m.cond = sync.NewCond(&m.mu)
 	return m
 }
@@ -459,6 +465,25 @@ func (m *Manager) Stop() {
 		m.mu.Unlock()
 		m.cond.Broadcast()
 	})
+}
+
+// StopAndWait drains queued records before receipt sinks are closed.
+// Cancellation only bounds the shutdown wait; it does not discard the queue.
+func (m *Manager) StopAndWait(ctx context.Context) error {
+	if m == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.Start(context.Background())
+	m.Stop()
+	select {
+	case <-m.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Register appends a plugin to the delivery list.
@@ -545,6 +570,7 @@ func (m *Manager) Publish(ctx context.Context, record Record) {
 }
 
 func (m *Manager) run(ctx context.Context) {
+	defer close(m.done)
 	for {
 		m.mu.Lock()
 		for !m.closed && len(m.queue) == 0 {

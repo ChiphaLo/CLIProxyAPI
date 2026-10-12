@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
@@ -149,6 +150,12 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 
 	url := strings.TrimSuffix(baseURL, "/") + endpoint
 	translated = helps.ApplyPayloadConfigWithRequest(e.cfg, baseModel, to.String(), from.String(), "", translated, originalTranslated, requestedModel, requestPath, opts.Headers)
+	// This opt-in adapter only reads the final payload; it never overrides user
+	// payload rules. Upstream retains all general protocol/name translation.
+	bridge, err := opencode.NewChatBridge(ctx, translated)
+	if err != nil {
+		return resp, statusErr{code: http.StatusBadRequest, msg: err.Error()}
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
 		return resp, err
@@ -208,6 +215,10 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, body)
 	reporter.ObserveResponseModel(body)
+	body, err = bridge.Response(body)
+	if err != nil {
+		return resp, statusErr{code: http.StatusBadGateway, msg: opencode.FormatError}
+	}
 	// Ensure we at least record the request even if upstream doesn't return usage
 	// Translate response back to source format when needed
 	var param any
@@ -374,6 +385,10 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 
 	url := strings.TrimSuffix(baseURL, "/") + "/chat/completions"
 	translated = helps.ApplyPayloadConfigWithRequest(e.cfg, baseModel, to.String(), from.String(), "", translated, originalTranslated, requestedModel, requestPath, opts.Headers)
+	bridge, err := opencode.NewChatBridge(ctx, translated)
+	if err != nil {
+		return nil, statusErr{code: http.StatusBadRequest, msg: err.Error()}
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(translated))
 	if err != nil {
 		return nil, err
@@ -462,6 +477,32 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			streamFailed = true
 		}
 
+		translateAndSend := func(dataPayload []byte) bool {
+			streamLine := append([]byte("data: "), dataPayload...)
+			chunks := helps.TranslateStreamWithClaudeInputTokens(ctx, to, responseFormat, req.Model, helps.ApplyPatchOriginalRequest(req, opts), translated, streamLine, &param, claudeInputTokens)
+			helps.RecordApplyPatchStreamFailure(ctx, param, reporter, statusErr{code: http.StatusBadGateway, msg: helps.ApplyPatchUpstreamErrorMessage})
+			for _, chunk := range chunks {
+				select {
+				case out <- cliproxyexecutor.StreamChunk{Payload: chunk}:
+				case <-ctx.Done():
+					streamAborted = true
+					return true
+				}
+			}
+			if helps.ApplyPatchTranslationError(param) != nil {
+				publishStreamError(statusErr{code: http.StatusBadGateway, msg: helps.ApplyPatchUpstreamErrorMessage}, false)
+				return true
+			}
+			return false
+		}
+		finishBridge := func() bool {
+			last, errFinish := bridge.Finish()
+			if errFinish != nil {
+				publishStreamError(statusErr{code: http.StatusBadGateway, msg: opencode.FormatError}, false)
+				return true
+			}
+			return len(last) > 0 && translateAndSend(last)
+		}
 		processFrame := func() bool {
 			eventName := upstreamEvent
 			upstreamEvent = ""
@@ -502,19 +543,19 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 
 			// Observe complete upstream frames before translation or downstream backpressure.
 			helps.ObserveChatTokenEvent(reporter, dataPayload)
-			streamLine := append([]byte("data: "), dataPayload...)
-			chunks := helps.TranslateStreamWithClaudeInputTokens(ctx, to, responseFormat, req.Model, helps.ApplyPatchOriginalRequest(req, opts), translated, streamLine, &param, claudeInputTokens)
-			helps.RecordApplyPatchStreamFailure(ctx, param, reporter, statusErr{code: http.StatusBadGateway, msg: helps.ApplyPatchUpstreamErrorMessage})
-			for i := range chunks {
-				select {
-				case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
-				case <-ctx.Done():
-					streamAborted = true
+			if isDone {
+				if finishBridge() {
+					return true
+				}
+			} else {
+				var errBridge error
+				dataPayload, errBridge = bridge.Event(dataPayload)
+				if errBridge != nil {
+					publishStreamError(statusErr{code: http.StatusBadGateway, msg: opencode.FormatError}, false)
 					return true
 				}
 			}
-			if helps.ApplyPatchTranslationError(param) != nil {
-				publishStreamError(statusErr{code: http.StatusBadGateway, msg: helps.ApplyPatchUpstreamErrorMessage}, false)
+			if translateAndSend(dataPayload) {
 				return true
 			}
 			if isDone {
@@ -555,6 +596,9 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		errScan := scanner.Err()
 		if errScan == nil && !seenDone && !streamFailed && !streamAborted && len(frameData) > 0 {
 			_ = processFrame()
+		}
+		if errScan == nil && !seenDone && !streamFailed && !streamAborted && finishBridge() {
+			return
 		}
 		if !streamFailed && !streamAborted && helps.EndApplyPatchStream(ctx, param, reporter, out, statusErr{code: http.StatusBadGateway, msg: helps.ApplyPatchUpstreamErrorMessage}) {
 			return

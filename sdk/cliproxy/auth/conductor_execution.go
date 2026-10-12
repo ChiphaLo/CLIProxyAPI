@@ -324,6 +324,9 @@ type requestToFormatResolver interface {
 }
 
 func isRequestTerminatedError(err error) bool {
+	if isExecutionValidationError(err) {
+		return true
+	}
 	var terminated *cliproxyexecutor.RequestTerminatedError
 	return errors.As(err, &terminated) && terminated != nil
 }
@@ -537,6 +540,9 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			continue
 		}
 		attempted[auth.ID] = struct{}{}
+		if err := validateExecutionAuth(execCtx, auth); err != nil {
+			return cliproxyexecutor.Response{}, err
+		}
 		var errPrepare error
 		auth, errPrepare = m.prepareRequestAuth(execCtx, executor, auth)
 		if errPrepare != nil {
@@ -592,7 +598,10 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			execReq = attachResolvedExecutionModelInfo(routing, execReq, auth, routeModel, upstreamModel, restoreExecutionModel)
 			execCtx = syncMetadataSessionToContext(execCtx, execOpts.Metadata)
 			startExec := time.Now()
-			resp, errExec := executor.Execute(execCtx, auth, execReq, execOpts)
+			resp, errExec := executeValidated(execCtx, executor, auth, execReq, execOpts)
+			if isExecutionValidationError(errExec) {
+				return cliproxyexecutor.Response{}, errExec
+			}
 			errExec = markUpstreamExecutionAttemptFromContext(execCtx, errExec)
 			durationExec := time.Since(startExec)
 			if errExec != nil {
@@ -609,7 +618,10 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					execCtx = newUpstreamAttemptContext(execCtx)
 					execCtx = syncMetadataSessionToContext(execCtx, execOpts.Metadata)
 					startRetry := time.Now()
-					resp, errExec = executor.Execute(execCtx, auth, execReq, execOpts)
+					resp, errExec = executeValidated(execCtx, executor, auth, execReq, execOpts)
+					if isExecutionValidationError(errExec) {
+						return cliproxyexecutor.Response{}, errExec
+					}
 					errExec = markUpstreamExecutionAttemptFromContext(execCtx, errExec)
 					durationRetry := time.Since(startRetry)
 					if errExec != nil {
@@ -749,6 +761,9 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			continue
 		}
 		attempted[auth.ID] = struct{}{}
+		if err := validateExecutionAuth(execCtx, auth); err != nil {
+			return cliproxyexecutor.Response{}, err
+		}
 		var errPrepare error
 		auth, errPrepare = m.prepareRequestAuth(execCtx, executor, auth)
 		if errPrepare != nil {
@@ -804,7 +819,10 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			execReq = attachResolvedExecutionModelInfo(routing, execReq, auth, routeModel, upstreamModel, restoreExecutionModel)
 			execCtx = syncMetadataSessionToContext(execCtx, execOpts.Metadata)
 			startExec := time.Now()
-			resp, errExec := executor.CountTokens(execCtx, auth, execReq, execOpts)
+			resp, errExec := countTokensValidated(execCtx, executor, auth, execReq, execOpts)
+			if isExecutionValidationError(errExec) {
+				return cliproxyexecutor.Response{}, errExec
+			}
 			errExec = markUpstreamExecutionAttemptFromContext(execCtx, errExec)
 			durationExec := time.Since(startExec)
 			if errExec != nil {
@@ -821,7 +839,10 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					execCtx = newUpstreamAttemptContext(execCtx)
 					execCtx = syncMetadataSessionToContext(execCtx, execOpts.Metadata)
 					startRetry := time.Now()
-					resp, errExec = executor.CountTokens(execCtx, auth, execReq, execOpts)
+					resp, errExec = countTokensValidated(execCtx, executor, auth, execReq, execOpts)
+					if isExecutionValidationError(errExec) {
+						return cliproxyexecutor.Response{}, errExec
+					}
 					errExec = markUpstreamExecutionAttemptFromContext(execCtx, errExec)
 					durationRetry := time.Since(startRetry)
 					if errExec != nil {
@@ -1081,6 +1102,13 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			continue
 		}
 		attempted[auth.ID] = struct{}{}
+		if err := validateExecutionAuth(execCtx, auth); err != nil {
+			releaseAttempt()
+			if selection != nil {
+				selection.End("execution_policy_rejected")
+			}
+			return nil, err
+		}
 		var errPrepare error
 		if selection != nil {
 			auth, errPrepare = m.prepareHomeRequestAuth(execCtx, executor, selection)
@@ -1176,6 +1204,13 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			pooled = false
 		}
 		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, execReq, execOpts, routeModel, streamExecutionModel, models, pooled, aliasResult, routing, !homeMode || selection != nil, selection != nil)
+		if isExecutionValidationError(errStream) {
+			releaseAttempt()
+			if selection != nil {
+				selection.End("execution_policy_rejected")
+			}
+			return nil, errStream
+		}
 		if errStream != nil {
 			if hasUpstreamExecutionAttempt(errStream) {
 				upstreamErr = errStream

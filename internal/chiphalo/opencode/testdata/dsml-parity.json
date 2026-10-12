@@ -1,0 +1,4591 @@
+[
+  {
+    "name": "string-0",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\"></｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": ""
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-1",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\"></｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-2",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-3",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-4",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">\ntext(`a\\nb`);\n</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "\ntext(`a\\nb`);\n"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-5",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">\ntext(`a\\nb`);\n</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-6",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">const message=\"中文<&>\";\ntext(message);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "const message=\"中文<&>\";\ntext(message);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-7",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">const message=\"中文<&>\";\ntext(message);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-8",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(\"quote\\\"\");</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(\"quote\\\"\");"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-9",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">text(\"quote\\\"\");</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-10",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"unknown\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-11",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"unknown\"><｜｜DSML｜｜ parameter name=\"command\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-12",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"unknown\"><｜｜DSML｜｜ parameter name=\"workdir\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-13",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "identity-14",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"command\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-15",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"workdir\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-16",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"functions.exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-17",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"functions.exec\"><｜｜DSML｜｜ parameter name=\"command\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-18",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"functions.exec\"><｜｜DSML｜｜ parameter name=\"workdir\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-19",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "whole-turn-20",
+    "text": "\n\t<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>\n",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "whole-turn-21",
+    "text": "Example:\n<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-22",
+    "text": "```\n<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>\n```",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-23",
+    "text": "><｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-24",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>Done",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-25",
+    "text": "\"<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-26",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-27",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ ca",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-28",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-29",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSM",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-30",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-31",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-32",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invok",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-33",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ in",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-34",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-35",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSM",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-36",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-37",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter><",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-38",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ paramete",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-39",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ param",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-40",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ pa",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-41",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-42",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSM",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-43",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-44",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);<",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-45",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-46",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">tex",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-47",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-48",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"tru",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-49",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-50",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" strin",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-51",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" st",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-52",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-53",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"inp",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-54",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-55",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter nam",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-56",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter ",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-57",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ paramet",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-58",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ para",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-59",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ p",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-60",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-61",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DS",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-62",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-63",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-64",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"ex",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-65",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-66",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke na",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-67",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-68",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ inv",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-69",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ ",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-70",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-71",
+    "text": "<｜｜DSML｜｜ calls><｜｜D",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-72",
+    "text": "<｜｜DSML｜｜ calls><",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-73",
+    "text": "<｜｜DSML｜｜ call",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-74",
+    "text": "<｜｜DSML｜｜ c",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-75",
+    "text": "<｜｜DSML｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-76",
+    "text": "<｜｜DS",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-77",
+    "text": "<｜",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-78",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">NaN</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-79",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">Infinity</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-80",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">{\"x\":1,\"x\":2}</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-81",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">{\"x\":{\"y\":1,\"y\":2}}</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-82",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">{} {}</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-83",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">[1,2,3]</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": [
+          1,
+          2,
+          3
+        ]
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-84",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">true</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": true
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-85",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">null</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": null
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-86",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">1.5</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": 1.5
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-87",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"false\">10e2</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": 1000.0
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-88",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\"></|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": ""
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-89",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\"></|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-90",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-91",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-92",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">\ntext(`a\\nb`);\n</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "\ntext(`a\\nb`);\n"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-93",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">\ntext(`a\\nb`);\n</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-94",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">const message=\"中文<&>\";\ntext(message);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "const message=\"中文<&>\";\ntext(message);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-95",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">const message=\"中文<&>\";\ntext(message);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "string-96",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(\"quote\\\"\");</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(\"quote\\\"\");"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "string-97",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">text(\"quote\\\"\");</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-98",
+    "text": "<|DSML| calls><|DSML| invoke name=\"unknown\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-99",
+    "text": "<|DSML| calls><|DSML| invoke name=\"unknown\"><|DSML| parameter name=\"command\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-100",
+    "text": "<|DSML| calls><|DSML| invoke name=\"unknown\"><|DSML| parameter name=\"workdir\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-101",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "identity-102",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"command\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-103",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"workdir\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-104",
+    "text": "<|DSML| calls><|DSML| invoke name=\"functions.exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-105",
+    "text": "<|DSML| calls><|DSML| invoke name=\"functions.exec\"><|DSML| parameter name=\"command\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "identity-106",
+    "text": "<|DSML| calls><|DSML| invoke name=\"functions.exec\"><|DSML| parameter name=\"workdir\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-107",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "whole-turn-108",
+    "text": "\n\t<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>\n",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "whole-turn-109",
+    "text": "Example:\n<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-110",
+    "text": "```\n<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>\n```",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-111",
+    "text": "><|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-112",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>Done",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "whole-turn-113",
+    "text": "\"<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls>\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-114",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| calls",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-115",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML| ca",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-116",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DSML|",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-117",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></|DS",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-118",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke></",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-119",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| invoke",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-120",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| inv",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-121",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSML| ",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-122",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|DSM",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-123",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter></|",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-124",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| parameter>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-125",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| paramet",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-126",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| para",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-127",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML| p",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-128",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|DSML",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-129",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);</|D",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-130",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1);<",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-131",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">text(1",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-132",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">tex",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-133",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"true\">",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-134",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"tru",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-135",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-136",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" strin",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-137",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" st",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-138",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-139",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"inp",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-140",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-141",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter nam",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-142",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter ",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-143",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| paramet",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-144",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| para",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-145",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| p",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-146",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-147",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|D",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-148",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\">",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-149",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exe",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-150",
+    "text": "<|DSML| calls><|DSML| invoke name=\"",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-151",
+    "text": "<|DSML| calls><|DSML| invoke nam",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-152",
+    "text": "<|DSML| calls><|DSML| invoke ",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-153",
+    "text": "<|DSML| calls><|DSML| invo",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-154",
+    "text": "<|DSML| calls><|DSML| i",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-155",
+    "text": "<|DSML| calls><|DSML",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-156",
+    "text": "<|DSML| calls><|D",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-157",
+    "text": "<|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-158",
+    "text": "<|DSML| cal",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-159",
+    "text": "<|DSML| ",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-160",
+    "text": "<|DSM",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "truncated-161",
+    "text": "<|",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-162",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">NaN</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-163",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">Infinity</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-164",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">{\"x\":1,\"x\":2}</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-165",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">{\"x\":{\"y\":1,\"y\":2}}</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-166",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">{} {}</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "json-167",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">[1,2,3]</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": [
+          1,
+          2,
+          3
+        ]
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-168",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">true</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": true
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-169",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">null</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": null
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-170",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">1.5</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": 1.5
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "json-171",
+    "text": "<|DSML| calls><|DSML| invoke name=\"exec\"><|DSML| parameter name=\"input\" string=\"false\">10e2</|DSML| parameter></|DSML| invoke></|DSML| calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {}
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": 1000.0
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "disallowed-choice",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {},
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "external-ref",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "$ref": "https://example.invalid/schema"
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "local-ref",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "$defs": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ]
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "calls-0",
+    "text": "<｜｜DSML｜｜ calls></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  },
+  {
+    "name": "calls-1",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec"
+    ]
+  },
+  {
+    "name": "calls-2",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec",
+      "exec"
+    ]
+  },
+  {
+    "name": "calls-32",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": true,
+    "arguments": [
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      },
+      {
+        "input": "text(1);"
+      }
+    ],
+    "names": [
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec",
+      "exec"
+    ]
+  },
+  {
+    "name": "calls-33",
+    "text": "<｜｜DSML｜｜ calls><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke><｜｜DSML｜｜ invoke name=\"exec\"><｜｜DSML｜｜ parameter name=\"input\" string=\"true\">text(1);</｜｜DSML｜｜ parameter></｜｜DSML｜｜ invoke></｜｜DSML｜｜ calls>",
+    "declarations": {
+      "exec": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "allowed": {
+      "exec": true
+    },
+    "accepted": false,
+    "arguments": [],
+    "names": []
+  }
+]

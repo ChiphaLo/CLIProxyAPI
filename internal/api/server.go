@@ -64,7 +64,8 @@ type Server struct {
 	oldConfigYaml []byte
 
 	// accessManager handles request authentication providers.
-	accessManager *sdkaccess.Manager
+	accessManager   *sdkaccess.Manager
+	proxyMiddleware []gin.HandlerFunc
 
 	// requestLogger is the request logger instance for dynamic configuration updates.
 	requestLogger logging.RequestLogger
@@ -182,6 +183,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 		handlers:            handlers.NewBaseAPIHandlers(effectiveSDKConfig(cfg), authManager),
 		cfg:                 cfg,
 		accessManager:       accessManager,
+		proxyMiddleware:     optionState.proxyMiddleware,
 		requestLogger:       requestLogger,
 		loggerToggle:        toggle,
 		configFilePath:      configFilePath,
