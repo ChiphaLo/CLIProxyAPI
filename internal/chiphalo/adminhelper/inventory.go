@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/providerprobe"
 )
 
 // EnableInventory must run before Serve; the HTTP-only shadow adapter cannot
@@ -15,6 +16,7 @@ func (s *Service) EnableInventory(backend *HTTPBackend) error {
 		return errors.New("authenticated private inventory required")
 	}
 	s.inventory = backend
+	s.probe = &providerprobe.Fetcher{}
 	return nil
 }
 

@@ -259,7 +259,12 @@ func (s *Server) normalizeProvider(ctx context.Context, p map[string]any, old ma
 }
 func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, body map[string]any) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	locked := true
+	defer func() {
+		if locked {
+			s.mu.Unlock()
+		}
+	}()
 	state, err := s.state()
 	if err != nil {
 		reject(w, 503, err.Error())
@@ -351,11 +356,15 @@ func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, 
 		if proxy != "" {
 			policy = "cpa-egress"
 		}
-		payload := map[string]any{"provider_id": id, "base_url": base, "proxy_policy": policy}
+		payload := map[string]any{"provider_id": id, "base_url": base, "proxy_policy": policy, "proxy_url": proxy}
 		if key := stringValue(body["apiKey"]); key != "" {
 			payload["api_key"] = key
 		}
-		s.forward(w, r, "probe_provider_models", payload)
+		// The immutable probe snapshot must not block unrelated GUI state reads
+		// while a public provider is slow or unreachable.
+		locked = false
+		s.mu.Unlock()
+		s.providerProbe(w, r, payload)
 		return
 	}
 	if len(parts) != 1 {

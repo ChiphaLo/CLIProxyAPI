@@ -16,17 +16,20 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/clientkeys"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/providerprobe"
 )
 
 type Paths struct{ Keys, Vault, Lock, Audit string }
 
 type Service struct {
-	paths     Paths
-	mu        sync.Mutex
-	gate      chan struct{}
-	now       func() time.Time
-	apply     *Applier
-	inventory *HTTPBackend
+	paths      Paths
+	mu         sync.Mutex
+	gate       chan struct{}
+	now        func() time.Time
+	apply      *Applier
+	inventory  *HTTPBackend
+	probe      *providerprobe.Fetcher
+	probeSlots chan struct{}
 }
 
 func New(paths Paths) (*Service, error) {
@@ -37,7 +40,7 @@ func New(paths Paths) (*Service, error) {
 		}
 		seen[path] = true
 	}
-	return &Service{paths: paths, now: time.Now, gate: make(chan struct{}, 1)}, nil
+	return &Service{paths: paths, now: time.Now, gate: make(chan struct{}, 1), probeSlots: make(chan struct{}, 2)}, nil
 }
 
 func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result {
@@ -46,6 +49,9 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 	return s.dispatchContext(ctx, op, payload)
 }
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
+	if op == "probe_provider_models" {
+		return s.probeModels(ctx, payload)
+	}
 	switch op {
 	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed":
 	default:

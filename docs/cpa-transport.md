@@ -822,3 +822,58 @@ Provider probes/model synchronization, safe automatic subscription recovery,
 Reset wiring, production hosting identities, actual refresh-owner handoff and the
 verified code/routes-only rollback gate still remain before production cutover.
 The shadow guards and `production_ready:false` remain intact.
+
+## Go provider catalog probes
+
+The GUI's existing provider models/test actions now call a Go-only probe through
+the private helper. Probes are read-only: they do not publish configuration,
+rewrite subscriptions, store supplied test keys, refresh OAuth or change prices.
+Two independent probe slots keep slow public providers out of the helper mutation
+gate, and the GUI releases its subscription-state lock before waiting for a probe.
+The exact configured proxy tuple is passed instead of silently selecting a
+different default. Direct connections ignore environment proxies; the allowlisted
+SOCKS settings retain cancelable acquisition.
+
+Stored vault credentials are usable only for the matching trusted published
+provider ID, origin and proxy. A caller changing a draft URL must provide an
+explicit test key; possession of GUI control no longer implicitly authorizes
+exporting an existing key to an arbitrary public site. Origins require HTTPS,
+no credentials/query/fragment/literal IP, bounded DNS results and exclusively
+public destination addresses. Both direct and SOCKS paths dial the validated IPs
+with the original TLS hostname, rather than resolving again after validation.
+This pinning also deliberately forbids SOCKS-side DNS from bypassing the public
+destination check. Redirects are never followed, credentials stay in headers,
+and no connected-upstream read/write or TLS-handshake timeout is added.
+
+The response reader caps the decompressed body at 4 MiB. Catalogs support the
+existing data/models/plain-array forms, deduplicate model IDs and report total
+count plus truncation. Results are limited to 500 IDs and a 58 KiB escaped-JSON
+budget so unusual names cannot overflow the 64 KiB private-control envelope.
+Upstream bodies, headers and raw transport errors are not returned on failures.
+GUI error responses distinguish invalid input, busy admission, helper unavailable
+and upstream rejection instead of an empty red error box or empty success list.
+
+### Probe evidence and limits
+
+Twenty-four Linux probe tests/subcases and 25 Linux helper tests passed without
+failures/skips. They cover accepted catalog shapes, headers, private/mixed DNS,
+literal/unsafe URLs, redirects, error-body redaction, malformed/oversized bodies,
+model count/escaped-byte bounds, both SOCKS schemes, environment proxy isolation,
+caller cancellation, published-tuple enforcement, explicit draft test keys,
+unchanged vaults and independent admission. The GUI lock/proxy test passed under
+the Windows race detector; scoped vet and the required server build passed.
+
+The final copied-environment regression passed 77 integration checks and 26 Linux
+GUI tests/subcases. Actual GUI HTTP and Unix helper calls rejected stored-key
+origin changes, rejected unsafe explicit-key URLs and returned an explicit
+unavailable-origin failure in the offline copy. Exact subscription/key/vault
+bytes remained unchanged, GUI state stayed accessible, and the existing complete
+quota-wrapper/billing/transaction/recovery checks stayed green. Production tracked
+files and service PIDs remained unchanged.
+
+These are offline integration and synthetic successful-response tests, not a
+claim of a live successful provider catalog query. The container used
+`--network none` and read-only original OAuth mounts; no real inference, OAuth
+refresh or Banked Reset was performed. Official account model synchronization,
+safe automatic subscription recovery, Reset management, production hosting,
+refresh-owner handoff and verified code/routes-only rollback remain pending.
