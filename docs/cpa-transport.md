@@ -403,3 +403,61 @@ Docker status reads were adapted to the isolated processes; these checks do not
 establish host-level systemd sandbox equivalence. The Go runtime still has no
 production launch mode. The private management/GUI/helper/quota integration and
 actual refresh-owner handoff remain necessary before atomic production cutover.
+
+## Incremental Go GUI control helper
+
+`cmd/cpa-admin-helper` now supplies the existing newline-delimited Unix control
+protocol for six local operations: issued-key create/update/delete/read and
+provider-secret set/delete. It is **shadow-only** and requires an explicit
+private copied-environment marker; it is not a production helper replacement.
+The copied Python GUI uses its original IPC client and HTTP key routes, without
+a Python subprocess fallback inside the Go helper. Unmigrated operations return
+an explicit failure. The GUI itself and the quota collector are not yet Go.
+
+Linux `SO_PEERCRED` restricts connections to the captured GUI UID. UID 0 does not
+implicitly bypass that check. The socket retains root/GUI-group 0660 permissions
+in a controlled 0750 directory. Envelopes reject unknown or duplicate fields,
+invalid request IDs and missing newline framing. Request size is bounded to
+1 MiB, response size to 64 KiB, and connections to 16 concurrent workers. An
+oversized response returns complete error JSON rather than a truncated frame.
+Only metadata is audited; request payloads and credentials are never logged.
+Failure to persist the start audit rejects mutation before dispatch. If the
+completion audit fails, the response explicitly reports an uncertain outcome.
+
+Key mutations reuse the gateway's issued-key policy validator and the existing
+SHA-256 schema. Plaintext newly issued keys are returned once and never stored.
+Unknown root/entry fields, existing IDs, historical display metadata and other
+provider secrets survive edits. Corrupt or missing databases fail closed rather
+than being replaced with an empty database. Clearing a scope also removes its
+legacy alias, preventing the backwards-compatible reader from restoring an old
+restriction after an explicit clear. Readers still preserve existing aliases.
+
+Mutations serialize with a local mutex and the existing inter-process apply lock,
+then fsync and atomically rename a complete document while preserving ownership.
+This deliberately requires consumers to reopen paths: **single-file Docker bind
+mounts and non-participating legacy in-place writers are not compatible**. The
+increment must not be enabled alongside such writers in production. The helper
+also does not yet provide durable request-ID deduplication or a cross-file apply
+transaction. Configuration publication, model probing/sync, service status,
+private v8 management and quota/Reset operations remain to be migrated before
+cutover. No Reset operation is used as a test.
+
+The copied environment exposed a real capability-ordering fault: restoring a
+different service UID before chmod required CAP_FOWNER. Staging permissions are
+now set before restoring owner/group. The isolated integration keeps all
+capabilities dropped except the same narrow multi-UID test capabilities; it
+does not add CAP_FOWNER to work around the defect.
+
+The final 2026-10-13 hyvps run passed 11 Go/Linux tests with no failures or skips
+and 20 copied-environment integration checks. The real GUI login/key HTTP routes
+and its unchanged IPC client exercised the Go helper. The Go gateway accepted a
+GUI-issued key, rejected it immediately after disabling without a restart, and
+retained all 13 models. Key edits and vault secrets survived helper restarts;
+fixture deletion preserved the existing database records, unknown fields and
+owner/group/mode. Audit-fault tests rejected mutations before dispatch. Windows
+focused race tests, scoped Windows/Linux vet and the required server build passed.
+The integration used local HTTP handlers, not a new external/TLS performance or
+real inference test. Historical usage, quota history, OAuth files and account
+configuration were unchanged; read-only production checks also confirmed stable
+tracked files and service PIDs. All test containers used `--network none` and
+were stopped; no real inference, refresh or Reset request was made.

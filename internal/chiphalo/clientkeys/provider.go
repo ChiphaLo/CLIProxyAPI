@@ -22,6 +22,13 @@ import (
 
 const ProviderID = "chiphalo-legacy-keys"
 
+// ValidateDatabase checks issued-key policy syntax without an admin credential.
+// The running gateway additionally checks collisions with its actual admin key.
+func ValidateDatabase(raw []byte) error {
+	p := &Provider{}
+	return p.Reload(raw)
+}
+
 var identityPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,128}$`)
 
 type Entry struct {
