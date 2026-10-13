@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatecontrol"
 )
 
 const StateContract = "cpa-legacy-v1"
@@ -28,11 +30,14 @@ var validID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$`)
 // Manifest contains no keys or auth material. Each release has a private,
 // immutable directory containing manifest.json and its hashed artifacts.
 type Manifest struct {
-	ID            string            `json:"release_id"`
-	Endpoint      string            `json:"endpoint"`
-	StateContract string            `json:"state_contract"`
-	ConfigSHA256  string            `json:"config_sha256"`
-	Artifacts     map[string]string `json:"artifacts"`
+	ID                   string            `json:"release_id"`
+	Endpoint             string            `json:"endpoint"`
+	StateContract        string            `json:"state_contract"`
+	ConfigSHA256         string            `json:"config_sha256"`
+	Artifacts            map[string]string `json:"artifacts"`
+	SharedBusinessConfig bool              `json:"shared_business_config,omitempty"`
+	PrivateControlSocket string            `json:"private_control_socket,omitempty"`
+	GatewayUID           uint32            `json:"gateway_uid,omitempty"`
 }
 
 type Reference struct {
@@ -160,14 +165,17 @@ func (c *Controller) load(id string) (*selection, error) {
 	if err := decode(raw, &manifest); err != nil {
 		return nil, fmt.Errorf("invalid release manifest")
 	}
-	if manifest.ID != id || manifest.StateContract != StateContract || !validDigest(manifest.ConfigSHA256) {
+	if manifest.ID != id || manifest.StateContract != StateContract || (!manifest.SharedBusinessConfig && !validDigest(manifest.ConfigSHA256)) || (manifest.SharedBusinessConfig && manifest.ConfigSHA256 != "") {
 		return nil, fmt.Errorf("release identity or shared data contract is incompatible")
+	}
+	if manifest.SharedBusinessConfig && (!filepath.IsAbs(manifest.PrivateControlSocket) || filepath.Clean(manifest.PrivateControlSocket) != manifest.PrivateControlSocket || manifest.GatewayUID == 0) {
+		return nil, fmt.Errorf("shared business release requires a fixed private gateway identity")
 	}
 	endpoint, err := loopbackURL(manifest.Endpoint)
 	if err != nil {
 		return nil, err
 	}
-	if len(manifest.Artifacts) < 2 || len(manifest.Artifacts) > 64 || manifest.Artifacts["config.yaml"] != manifest.ConfigSHA256 {
+	if len(manifest.Artifacts) < 2 || len(manifest.Artifacts) > 64 || (!manifest.SharedBusinessConfig && manifest.Artifacts["config.yaml"] != manifest.ConfigSHA256) || (manifest.SharedBusinessConfig && (manifest.Artifacts["config.yaml"] != "" || manifest.Artifacts["hosting.json"] == "")) {
 		return nil, fmt.Errorf("release must pin its config and executable artifacts")
 	}
 	for name, expected := range manifest.Artifacts {
@@ -250,11 +258,17 @@ func (c *Controller) change(ctx context.Context, id string, expectedRevision uin
 }
 
 func (c *Controller) ready(ctx context.Context, manifest Manifest) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifest.Endpoint+"/__cpa_release/ready", nil)
+	client, endpoint := c.client, manifest.Endpoint
+	if manifest.SharedBusinessConfig {
+		client = privatecontrol.Client(manifest.PrivateControlSocket, manifest.GatewayUID)
+		defer client.CloseIdleConnections()
+		endpoint = "http://cpa-control"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/__cpa_release/ready", nil)
 	if err != nil {
 		return err
 	}
-	response, err := c.client.Do(req)
+	response, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("candidate is not reachable")
 	}
@@ -267,13 +281,25 @@ func (c *Controller) ready(ctx context.Context, manifest Manifest) error {
 		return fmt.Errorf("invalid candidate readiness reply")
 	}
 	var ready struct {
-		ID            string `json:"release_id"`
-		ConfigSHA256  string `json:"config_sha256"`
-		StateContract string `json:"state_contract"`
-		Ready         bool   `json:"ready"`
+		ID                 string          `json:"release_id"`
+		ConfigSHA256       string          `json:"config_sha256"`
+		StateContract      string          `json:"state_contract"`
+		Ready              bool            `json:"ready"`
+		ProductionReady    bool            `json:"production_ready,omitempty"`
+		ConfigurationReady bool            `json:"configuration_ready,omitempty"`
+		Pending            bool            `json:"config_apply_pending,omitempty"`
+		Refresh            bool            `json:"credential_refresh,omitempty"`
+		Catalog            json.RawMessage `json:"catalog,omitempty"`
 	}
-	if decode(raw, &ready) != nil || !ready.Ready || ready.ID != manifest.ID || ready.ConfigSHA256 != manifest.ConfigSHA256 || ready.StateContract != manifest.StateContract {
+	if decode(raw, &ready) != nil || !ready.Ready || ready.ID != manifest.ID || ready.StateContract != manifest.StateContract {
 		return fmt.Errorf("candidate readiness identity mismatch")
+	}
+	if manifest.SharedBusinessConfig {
+		if !ready.ProductionReady || !ready.ConfigurationReady || ready.Pending || !validDigest(ready.ConfigSHA256) {
+			return fmt.Errorf("shared business configuration readiness is unconfirmed")
+		}
+	} else if ready.ConfigSHA256 != manifest.ConfigSHA256 {
+		return fmt.Errorf("candidate configuration identity mismatch")
 	}
 	return nil
 }

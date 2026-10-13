@@ -17,36 +17,59 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/hosting"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatecontrol"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
 )
 
 func run() error {
+	hosted := flag.String("hosting-manifest", "", "Explicit verified hosting manifest; independent of shadow mode")
 	root := flag.String("shadow-root", "", "Copied-environment root; production mode is not enabled")
 	socket := flag.String("control", "", "Authenticated SDK management socket inside shadow root")
 	uid := flag.Uint("gateway-uid", 0, "Expected private gateway peer UID")
 	once := flag.Bool("once", false, "Collect one snapshot and exit")
 	interval := flag.Duration("interval", 60*time.Second, "Single-writer collection interval")
 	flag.Parse()
-	if !filepath.IsAbs(*root) || filepath.Clean(*root) != *root || *root == "/" || *uid > 4294967295 || *interval < 30*time.Second {
-		return errors.New("explicit private shadow root and bounded polling rate required")
+	if *interval < 30*time.Second {
+		return errors.New("bounded polling rate required")
 	}
-	for _, live := range []string{"/opt/unified-ai-gateway", "/opt/cpa-gui-shadow", "/var/lib/cpa-admin"} {
-		if *root == live || strings.HasPrefix(*root, live+"/") {
-			return errors.New("quota shadow refuses production data paths")
+	var host *hosting.Manifest
+	if *hosted != "" {
+		if *root != "" || *socket != "" {
+			return errors.New("hosted and shadow quota modes are mutually exclusive")
 		}
+		var err error
+		host, err = hosting.Load(*hosted, "cpa-quota-collector")
+		if err != nil {
+			return err
+		}
+		if err := hosting.ConfirmLegacyExit(host); err != nil {
+			return err
+		}
+		*socket = host.Control()
+		*uid = uint(host.GatewayUID)
 	}
-	resolved, err := filepath.EvalSymlinks(*root)
-	if err != nil || resolved != *root {
-		return errors.New("real shadow root required")
-	}
-	marker, err := privatefile.Read(filepath.Join(*root, ".cpa-shadow-root"), 128, true)
-	if err != nil || strings.TrimSpace(string(marker)) != "cpa-shadow-validation-v1" {
-		return errors.New("private shadow marker required")
-	}
-	if !filepath.IsAbs(*socket) || filepath.Clean(*socket) != *socket || !strings.HasPrefix(*socket, *root+string(filepath.Separator)) {
-		return errors.New("private quota control socket must remain inside shadow root")
+	if host == nil {
+		if !filepath.IsAbs(*root) || filepath.Clean(*root) != *root || *root == "/" || *uid > 4294967295 || *interval < 30*time.Second {
+			return errors.New("explicit private shadow root and bounded polling rate required")
+		}
+		for _, live := range []string{"/opt/unified-ai-gateway", "/opt/cpa-gui-shadow", "/var/lib/cpa-admin"} {
+			if *root == live || strings.HasPrefix(*root, live+"/") {
+				return errors.New("quota shadow refuses production data paths")
+			}
+		}
+		resolved, err := filepath.EvalSymlinks(*root)
+		if err != nil || resolved != *root {
+			return errors.New("real shadow root required")
+		}
+		marker, err := privatefile.Read(filepath.Join(*root, ".cpa-shadow-root"), 128, true)
+		if err != nil || strings.TrimSpace(string(marker)) != "cpa-shadow-validation-v1" {
+			return errors.New("private shadow marker required")
+		}
+		if !filepath.IsAbs(*socket) || filepath.Clean(*socket) != *socket || !strings.HasPrefix(*socket, *root+string(filepath.Separator)) {
+			return errors.New("private quota control socket must remain inside shadow root")
+		}
 	}
 	gateway, err := user.Lookup("cpa-gateway")
 	if err != nil {
@@ -66,7 +89,14 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	store, err := quota.OpenStore(ctx, filepath.Join(*root, "opt/unified-ai-gateway/data"), uint32(dataUID), uint32(observeGID))
+	data := filepath.Join(*root, "opt/unified-ai-gateway/data")
+	if host != nil {
+		data = filepath.Join(host.BusinessRoot, "data")
+		if uint32(dataUID) != host.GatewayUID || uint32(observeGID) != host.ObserveGID {
+			return errors.New("hosted quota identities differ from service database")
+		}
+	}
+	store, err := quota.OpenStore(ctx, data, uint32(dataUID), uint32(observeGID))
 	if err != nil {
 		return err
 	}

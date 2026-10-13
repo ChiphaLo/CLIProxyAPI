@@ -1081,3 +1081,72 @@ gateway action requires an explicit hosting capability. Existing shadow
 entrypoints do not enable it and still report `production_ready:false`. Its
 actual hosting activation is therefore a remaining production-bootstrap gate,
 not a side effect of compiling or running the copied-environment checks.
+
+## Verified hosted entrypoints and shared-business release readiness
+
+The four Go service executables now have a separate `--hosting-manifest` entry.
+It does not relax or reuse shadow CLI authority. The bounded manifest rejects
+duplicate/unknown fields, arbitrary actor identities, public listeners, writable
+code parents, symlinks, changed executable hashes and non-exact ingress peers.
+Executable inventory is complete and rooted in deployment-owned immutable code.
+The named `cpa-gateway`, `cpa-gui` and `cpa-observe` database identities must match.
+
+Rehearsal hosting refuses known production business paths and any non-loopback
+network interface. Original copied OAuth stores remain read-only and refresh is
+disabled; readiness stays `cpa-shadow-validation-v1` / `production_ready:false`.
+The GUI can traverse only its own view and the necessary public data namespace;
+the gateway does not require access to the GUI's private parent. The test archive
+extractor's private `/opt` parent was adjusted for **traversal only in the
+disposable copy**; no leaf secret permissions or production paths were changed.
+
+Production hosting is a distinct, machine-pinned policy using the existing
+business/config/auth/GUI paths, not packaged business snapshots. Before opening
+credentials it requires a root-controlled proof naming all four old gateway,
+OAuth, GUI and helper PID/start identities and refuses any still-live generation.
+This matters because the original Python/7.x runtime does not cooperate with the
+new flock lease. A lock by itself cannot exclude that old writer. The initial
+cutover supervisor must stop/verify those processes and control their restart;
+the validation code does not stop them or fabricate the proof.
+
+The gateway acquires the shared refresh lease **before** reading credentials,
+sets the SDK guard before load, and uses durable upstream-compatible persistence.
+Shutdown keeps ownership until active refresh-and-persist operations finish.
+Copy rehearsals never acquire or exercise original-token refresh. Production
+helper/collector peers authenticate the gateway UID on the private socket; GUI
+control remains restricted to its distinct UID. The helper's root identity is
+retained for the existing root-owned vault/configuration, not granted to the GUI
+or gateway. Deployment sandbox/capability restrictions remain a cutover concern.
+
+The release controller additionally supports a shared-business manifest: it pins
+code and hosting artifacts, refuses a frozen `config.yaml` artifact, and confirms
+current SDK readiness through the fixed Unix socket and expected gateway UID.
+Rollback can therefore select previous code using **current** business state and
+configuration hash; it does not require or restore an obsolete provider/history
+snapshot. Ordinary fixed-configuration release manifests retain their old rules.
+This does not implement initial legacy-to-Go process supervision by itself.
+
+### Hosted evidence
+
+The final captured-image hosted rehearsal passed 71 integration checks with the
+gateway actually running as UID 985, GUI UID 995, helper control owner UID 0 and
+gateway socket UID 985. It retained the original 13 models/two members/three
+providers, current token billing, login persistence, async catalog behavior,
+provider configuration application and fault/restart recovery. All auth/history
+protection and production-file/PID checks passed; every run used network-none.
+
+Linux hosting tests passed 11 cases/subcases. They include a synthetic credential
+running through the **real SDK ForceRefreshAuth → upstream refresh patch →
+FileTokenStore → durable confirmation** chain: a canceled drain retained the
+lease, a second owner was refused, the next owner loaded the persisted generation,
+and the drained old manager could not refresh again. The synthetic executor makes
+no external requests and uses no copied token. PID-generation proof tests cover
+live, unreadable, malformed, duplicate/missing-role and reused-PID cases.
+Two Linux shared-release tests confirmed changed provider/receipt/account data
+survives rollback and shadow readiness cannot be promoted. Scoped Windows
+race/vet and the required server build also passed; Windows is not Unix ownership
+or durability evidence.
+
+The initial cutover/rollback supervisor, final deployment sandbox review and
+end-to-end one-command rollback rehearsal still need completion before the
+production-replacement checkpoint. No ciyun service was restarted or replaced,
+no original OAuth credential was refreshed, and no Reset action was tested.

@@ -17,6 +17,7 @@ func main() {
 }
 
 func run() error {
+	hosted := flag.String("hosting-manifest", "", "Explicit verified hosting manifest; independent of shadow mode")
 	root := flag.String("shadow-root", "", "Private disposable copied environment; production is unsupported")
 	socket := flag.String("socket", "", "Isolated Unix control socket")
 	uid := flag.Uint("gui-uid", 995, "Authorized GUI peer UID")
@@ -30,5 +31,11 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	if *hosted != "" {
+		if *root != "" || *origin != "" || *controlSocket != "" || *socket != "" {
+			return fmt.Errorf("hosted and shadow helper modes are mutually exclusive")
+		}
+		return serveHosted(ctx, *hosted)
+	}
 	return serve(ctx, *root, *socket, uint32(*uid), *gid, *origin, *controlSocket, uint32(*controlUID))
 }

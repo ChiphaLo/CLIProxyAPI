@@ -14,17 +14,32 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/hosting"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/webgui"
 )
 
 func run() error {
+	hosted := flag.String("hosting-manifest", "", "Explicit verified hosting manifest; independent of shadow mode")
 	root := flag.String("shadow-root", "", "Copied-environment root; production hosting is not enabled")
 	listen := flag.String("listen", "127.0.0.1:8320", "Explicit loopback-only GUI listener")
 	socket := flag.String("helper", "", "Private helper Unix socket")
 	uid := flag.Uint("helper-uid", 0, "Expected helper service UID")
 	peers := flag.String("trusted-peers", "", "Comma-separated explicit loopback reverse proxy peers")
 	flag.Parse()
+	if *hosted != "" {
+		if *root != "" || *socket != "" {
+			return errors.New("hosted and shadow GUI modes are mutually exclusive")
+		}
+		m, err := hosting.Load(*hosted, "cpa-gui")
+		if err != nil {
+			return err
+		}
+		if err := hosting.ConfirmLegacyExit(m); err != nil {
+			return err
+		}
+		return serveGUI(webgui.Options{Data: filepath.Join(m.GUIRoot, "data"), Usage: filepath.Join(m.BusinessRoot, "data/usage.jsonl"), Quota: filepath.Join(m.BusinessRoot, "data/oauth-accounts.json"), Exposed: filepath.Join(m.BusinessRoot, "config/exposed-codex-models.json"), Origin: "https://cpa.chipha.de", Helper: webgui.UnixHelper{Path: m.Helper(), UID: 0}, TrustedPeers: m.TrustedPeers}, m.GUIListen)
+	}
 	if !filepath.IsAbs(*root) || filepath.Clean(*root) != *root || *root == "/" || *root == "" || *uid > 4294967295 {
 		return errors.New("explicit private shadow root required")
 	}
@@ -50,11 +65,14 @@ func run() error {
 		trusted = strings.Split(*peers, ",")
 	}
 	base := filepath.Join(*root, "opt/unified-ai-gateway")
-	server, err := webgui.New(webgui.Options{Data: filepath.Join(*root, "opt/cpa-gui-shadow/data"), Usage: filepath.Join(base, "data/usage.jsonl"), Quota: filepath.Join(base, "data/oauth-accounts.json"), Exposed: filepath.Join(base, "config/exposed-codex-models.json"), Origin: "https://cpa.chipha.de", Helper: webgui.UnixHelper{Path: *socket, UID: uint32(*uid)}, TrustedPeers: trusted})
+	return serveGUI(webgui.Options{Data: filepath.Join(*root, "opt/cpa-gui-shadow/data"), Usage: filepath.Join(base, "data/usage.jsonl"), Quota: filepath.Join(base, "data/oauth-accounts.json"), Exposed: filepath.Join(base, "config/exposed-codex-models.json"), Origin: "https://cpa.chipha.de", Helper: webgui.UnixHelper{Path: *socket, UID: uint32(*uid)}, TrustedPeers: trusted}, *listen)
+}
+func serveGUI(options webgui.Options, listen string) error {
+	server, err := webgui.New(options)
 	if err != nil {
 		return err
 	}
-	listener, err := net.Listen("tcp", *listen)
+	listener, err := net.Listen("tcp", listen)
 	if err != nil {
 		return errors.New("cannot open shadow GUI listener")
 	}

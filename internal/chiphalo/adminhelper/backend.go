@@ -119,7 +119,7 @@ func (b *HTTPBackend) Await(ctx context.Context, digest string, models []string)
 				Ready bool `json:"ready"`
 			} `json:"catalog"`
 		}
-		if b.get(ctx, "/__cpa_release/ready", false, &ready) == nil && ready.StateContract == "cpa-shadow-validation-v1" && !ready.ProductionReady && ready.Digest == digest && ready.Catalog.Ready && (ready.Ready || ready.ConfigurationReady) {
+		if b.get(ctx, "/__cpa_release/ready", false, &ready) == nil && (ready.StateContract == "cpa-shadow-validation-v1" && !ready.ProductionReady || b.private && ready.StateContract == "cpa-legacy-v1" && ready.ProductionReady) && ready.Digest == digest && ready.Catalog.Ready && (ready.Ready || ready.ConfigurationReady) {
 			ids, err := b.Catalog(ctx)
 			if err == nil && slices.Equal(ids, models) {
 				return nil

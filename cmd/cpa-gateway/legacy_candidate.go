@@ -21,9 +21,11 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/durableauth"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/hosting"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatecontrol"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/refreshowner"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
@@ -38,6 +40,7 @@ type candidateOptions struct {
 	ControlSocket                         string
 	ControlUID                            uint32
 	Paths                                 gateway.LivePaths
+	Hosted                                *hosting.Manifest
 }
 
 // shadowStore locks the watcher's auth root to the explicit private copy even
@@ -124,9 +127,26 @@ func candidateTransform(options candidateOptions) (func(*config.Config) error, e
 }
 
 func runLegacyCandidate(options candidateOptions) error {
-	transform, err := candidateTransform(options)
+	var transform func(*config.Config) error
+	var err error
+	if options.Hosted == nil {
+		transform, err = candidateTransform(options)
+	} else {
+		transform, err = hostedTransform(options)
+	}
 	if err != nil {
 		return err
+	}
+	var lease *refreshowner.Lease
+	production := options.Hosted != nil && options.Hosted.Production()
+	if production {
+		lease, err = refreshowner.Open(options.Hosted.OAuthHealth())
+		if err != nil {
+			return err
+		}
+		// Do not release refresh ownership while a refresh-and-persist operation
+		// is still active. Supervisors must not force handoff on a drain timeout.
+		defer func() { _ = lease.Close(hostedDrainContext()) }()
 	}
 	raw, err := privatefile.Read(options.Config, 4*1024*1024, true)
 	if err != nil {
@@ -152,7 +172,11 @@ func runLegacyCandidate(options candidateOptions) error {
 	defer func() { _ = audit.Close() }()
 	store := &shadowStore{FileTokenStore: sdkauth.NewFileTokenStore(), root: options.Paths.AuthDir}
 	store.SetBaseDir(options.Paths.AuthDir)
-	guardedStore, err := durableauth.Open(options.Paths.AuthDir, options.Root, store, true)
+	healthRoot := options.Root
+	if options.Hosted != nil {
+		healthRoot = options.Hosted.OAuthHealth()
+	}
+	guardedStore, err := durableauth.Open(options.Paths.AuthDir, healthRoot, store, !production)
 	if err != nil {
 		return err
 	}
@@ -160,7 +184,13 @@ func runLegacyCandidate(options candidateOptions) error {
 	manager := coreauth.NewManager(guardedStore, nil, nil)
 	// A copied refresh token is still the same upstream secret. No shadow
 	// runtime may rotate it or race the live production token owner.
-	manager.DisableCredentialRefresh()
+	if production {
+		if err := manager.SetCredentialRefreshGuard(lease.Begin); err != nil {
+			return err
+		}
+	} else {
+		manager.DisableCredentialRefresh()
+	}
 	live.RegisterAccess()
 	accessManager := sdkaccess.NewManager()
 	if err := accessManager.PinProvider(live); err != nil {
@@ -188,7 +218,11 @@ func runLegacyCandidate(options candidateOptions) error {
 			status = http.StatusOK
 		}
 		// Deliberately incompatible with the production release controller.
-		return status, map[string]any{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false, "catalog": readiness}
+		contract, id := "cpa-shadow-validation-v1", ""
+		if options.Hosted != nil {
+			contract, id = options.Hosted.HealthContract(), options.Hosted.ReleaseID
+		}
+		return status, map[string]any{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": production, "release_id": id, "state_contract": contract, "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": production, "catalog": readiness}
 	}
 	serverOptions := []api.ServerOption{api.WithMiddleware(audit.Middleware(), func(c *gin.Context) {
 		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/__cpa_release/ready" {
@@ -216,14 +250,16 @@ func runLegacyCandidate(options candidateOptions) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 	if options.ControlSocket != "" {
-		if err := withinCandidate(options.Root, filepath.Dir(options.ControlSocket)); err != nil {
-			return err
+		if options.Hosted == nil {
+			if err := withinCandidate(options.Root, filepath.Dir(options.ControlSocket)); err != nil {
+				return err
+			}
 		}
 		listener, err := privatecontrol.Listen(options.ControlSocket, options.ControlUID)
 		if err != nil {
 			return err
 		}
-		server := &http.Server{Handler: live.PrivateManagementWithActions(options.Config, manager, ready, quota.Fetcher{}, gateway.CatalogActions{Reload: service.ReloadReviewedModelCatalog}), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
+		server := &http.Server{Handler: live.PrivateManagementWithActions(options.Config, manager, ready, quota.Fetcher{}, gateway.CatalogActions{Reload: service.ReloadReviewedModelCatalog, AllowResetConsume: production}), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
 		defer func() { _ = server.Close() }()
 		go func() {
 			if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

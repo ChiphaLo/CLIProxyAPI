@@ -28,6 +28,7 @@ import (
 )
 
 func run() error {
+	hostedManifest := flag.String("hosting-manifest", "", "Explicit verified hosting manifest; independent of shadow mode")
 	configPath := flag.String("config", "config.yaml", "Upstream v8 or legacy configuration file")
 	receiptsPath := flag.String("receipts", "", "Private usage.jsonl output (required)")
 	localModel := flag.Bool("local-model", false, "Use embedded model catalogs")
@@ -44,6 +45,12 @@ func run() error {
 	keyStore := flag.String("legacy-key-store", "", "Existing SHA-256 issued-key database for preflight")
 	legacyEnv := flag.String("legacy-env", "", "Private literal gateway.env for read-only preflight")
 	flag.Parse()
+	if *hostedManifest != "" {
+		if *legacyCandidate || *checkProfile || *isolationTest {
+			return fmt.Errorf("hosted and shadow modes are mutually exclusive")
+		}
+		return runHosted(*hostedManifest)
+	}
 	if *controlUID > 4294967295 {
 		return fmt.Errorf("invalid private management peer UID")
 	}
