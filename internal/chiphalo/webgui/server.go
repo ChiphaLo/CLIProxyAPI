@@ -100,6 +100,7 @@ type Server struct {
 	slots      chan struct{}
 	fitCache   quotaFitCache
 	resetCache resetCreditCache
+	stateFault func(string) error
 }
 
 func New(options Options) (*Server, error) {

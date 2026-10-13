@@ -29,14 +29,7 @@ func clone(value map[string]any) map[string]any {
 func stringValue(value any) string { v, _ := value.(string); return strings.TrimSpace(v) }
 func number(value any) float64     { v, _ := value.(float64); return v }
 func (s *Server) state() (map[string]any, error) {
-	var state map[string]any
-	if readJSON(filepath.Join(s.options.Data, "state.json"), 4*1024*1024, false, &state) != nil || state == nil {
-		return nil, errors.New("GUI state unavailable; no inventory was reset")
-	}
-	if _, ok := state["providers"].([]any); !ok {
-		return nil, errors.New("GUI provider inventory invalid")
-	}
-	return state, nil
+	return s.loadRecoverableState()
 }
 func (s *Server) saveState(state map[string]any) error {
 	path := filepath.Join(s.options.Data, "state.json")
@@ -63,11 +56,11 @@ func (s *Server) saveState(state map[string]any) error {
 	if e := file.Close(); err == nil {
 		err = e
 	}
-	if err != nil {
+	if err != nil || syncParent(dir) != nil {
 		return errors.New("state backup durability unconfirmed")
 	}
 	state["updatedAt"] = s.options.Now().Unix()
-	if err := writeJSON(path, state); err != nil {
+	if err := s.commitState(state, raw); err != nil {
 		return err
 	}
 	entries, err := os.ReadDir(dir)

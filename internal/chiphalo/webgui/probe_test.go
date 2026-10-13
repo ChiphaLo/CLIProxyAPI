@@ -3,7 +3,6 @@ package webgui
 import (
 	"context"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -15,9 +14,12 @@ func (f probeHelperFunc) Call(ctx context.Context, op string, payload map[string
 }
 func TestProviderProbePreservesExactProxyAndReleasesStateLock(t *testing.T) {
 	s, _ := fixtureServer(t)
-	state, _ := s.state()
+	state, err := s.state()
+	if err != nil {
+		t.Fatal(err)
+	}
 	state["providers"] = []any{map[string]any{"id": "fixture", "baseUrl": "https://api.example/v1", "proxyUrl": "socks5h://172.17.0.1:10808", "models": []any{}}}
-	if err := writeJSON(filepath.Join(s.options.Data, "state.json"), state); err != nil {
+	if err := s.saveState(state); err != nil {
 		t.Fatal(err)
 	}
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})

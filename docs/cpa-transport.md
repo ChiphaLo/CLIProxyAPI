@@ -927,3 +927,56 @@ separate pending implementation; read-only metadata is not claimed to complete
 that irreversible path. Subscription recovery, official model synchronization,
 production hosting/refresh ownership and verified code/routes-only rollback also
 remain before cutover. Shadow and `production_ready:false` gates stay closed.
+
+## Confirmed Go subscription-state recovery
+
+The Go GUI now checkpoints a healthy existing subscription document before its
+first use and journals later authorized draft publications. Private immutable
+postimages contain the complete document, including deletion tombstones and
+unknown extension fields. Their hash/filename/version manifest is separate from
+the existing pre-edit backups. Draft publication fsyncs the image and a pending
+before/after-hash fence, atomically publishes the document, confirms the new
+checkpoint and then durably removes the fence. Existing file ownership/mode and
+the original pre-edit backup retention policy are preserved.
+
+An interrupted pre-publication write retains the old state; a confirmed published
+postimage is finalized on restart instead of rolling back an already accepted
+draft. Unexpected external bytes or malformed journals are not overwritten.
+Missing or corrupted state can recover only from the latest confirmed complete
+postimage, not a guessed merge of an older preimage and the gateway catalog.
+Damaged bytes are preserved privately before replacement, and recovery metadata
+is visible in the GUI. Recovery is a draft-inventory action: it does not apply
+routes, issue/revoke keys, restore prices, touch OAuth, replay request history or
+consume a Reset. Intentional empty inventories and removal tombstones remain valid.
+
+This is a deliberate safety refinement of the Python seed/preimage recovery:
+blindly merging an older backup can resurrect deliberately deleted subscriptions.
+Initial corruption without a confirmed Go checkpoint requires explicit operator
+reconciliation; the service refuses to fabricate an inventory. Likewise, an
+otherwise valid document edited outside the confirmed writer transaction is a
+conflict, not silently adopted. Production writer handoff/re-entry after rollback
+must reconcile ownership/checkpoints against live current data, not restore an
+older business snapshot. That hosting gate is still pending.
+
+### Recovery evidence
+
+The copied-environment regression passed 88 integration checks. Actual Go GUI
+requests bootstrapped a checkpoint, recovered an intentionally damaged copied
+state with exact provider/tombstone/extension fields, preserved damaged private
+evidence, exposed recovery status and retained the login and inventory across a
+real GUI restart. Auth files, keys, vault, configured prices, usage/history and
+published routes were unchanged by recovery. Complete historical fitting, probe,
+read-only Reset metadata and configuration fault/recovery checks stayed green.
+Production tracked files and service PIDs remained unchanged.
+
+The final Linux GUI run passed 40 tests/subcases without failures/skips, including
+real child-process SIGKILL before/after state publication, restart confirmation,
+later corruption recovery, deleted-subscription preservation, missing state,
+unknown fields, valid external edits, malformed journals/checkpoints and file/
+directory symlink refusal. Scoped Windows race/vet and the required server build
+passed. Windows tests are compatibility checks, not Linux durability evidence.
+All copied/Unix tests used the captured image with `--network none`; original
+OAuth mounts stayed read-only. No live inference, OAuth refresh or Reset consume
+was tested. Official model synchronization, consumption wiring, production host
+identities/refresh ownership and verified code/routes-only rollback still remain
+before cutover; shadow guards and `production_ready:false` are unchanged.
