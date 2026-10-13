@@ -29,6 +29,7 @@ import (
 
 func run() error {
 	hostedManifest := flag.String("hosting-manifest", "", "Explicit verified hosting manifest; independent of shadow mode")
+	drained := flag.Bool("check-drained", false, "Check refresh ownership release without loading credentials or starting a server")
 	configPath := flag.String("config", "config.yaml", "Upstream v8 or legacy configuration file")
 	receiptsPath := flag.String("receipts", "", "Private usage.jsonl output (required)")
 	localModel := flag.Bool("local-model", false, "Use embedded model catalogs")
@@ -49,7 +50,13 @@ func run() error {
 		if *legacyCandidate || *checkProfile || *isolationTest {
 			return fmt.Errorf("hosted and shadow modes are mutually exclusive")
 		}
+		if *drained {
+			return checkHostedDrain(*hostedManifest)
+		}
 		return runHosted(*hostedManifest)
+	}
+	if *drained {
+		return fmt.Errorf("refresh drain check requires verified hosting")
 	}
 	if *controlUID > 4294967295 {
 		return fmt.Errorf("invalid private management peer UID")

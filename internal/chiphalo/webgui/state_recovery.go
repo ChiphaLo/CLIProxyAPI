@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 )
 
@@ -39,7 +40,7 @@ func stateDigest(raw []byte) string {
 }
 func decodeState(raw []byte) (map[string]any, error) {
 	var value map[string]any
-	if privatefile.Decode(raw, &value) != nil || value == nil {
+	if configbundle.DecodeDraft(raw, &value) != nil || value == nil {
 		return nil, errors.New("invalid subscription document")
 	}
 	if _, ok := value["providers"].([]any); !ok {

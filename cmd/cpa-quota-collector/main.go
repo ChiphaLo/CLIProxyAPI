@@ -47,6 +47,9 @@ func run() error {
 		if err := hosting.ConfirmLegacyExit(host); err != nil {
 			return err
 		}
+		if err := hosting.ConfirmRuntimeOwner(host); err != nil {
+			return err
+		}
 		*socket = host.Control()
 		*uid = uint(host.GatewayUID)
 	}

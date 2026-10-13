@@ -21,6 +21,8 @@ import (
 
 func run() error {
 	hosted := flag.String("hosting-manifest", "", "Explicit verified hosting manifest; independent of shadow mode")
+	adopt := flag.Bool("adopt-current-state", false, "CLI-only root-authorized recovery-metadata handoff; never restores business state")
+	check := flag.Bool("check-ready", false, "Validate current GUI state/session and peer-authenticated helper readiness without a listener")
 	root := flag.String("shadow-root", "", "Copied-environment root; production hosting is not enabled")
 	listen := flag.String("listen", "127.0.0.1:8320", "Explicit loopback-only GUI listener")
 	socket := flag.String("helper", "", "Private helper Unix socket")
@@ -38,7 +40,30 @@ func run() error {
 		if err := hosting.ConfirmLegacyExit(m); err != nil {
 			return err
 		}
+		if *adopt {
+			if *check {
+				return errors.New("adoption and readiness are mutually exclusive")
+			}
+			ticket, err := hosting.ReadGUIAdoption(m)
+			if err != nil {
+				return err
+			}
+			return webgui.AdoptCurrentState(filepath.Join(m.GUIRoot, "data"), ticket.StateSHA, ticket.MetadataSHA)
+		}
+		if *check {
+			s, err := webgui.New(webgui.Options{Data: filepath.Join(m.GUIRoot, "data"), Usage: filepath.Join(m.BusinessRoot, "data/usage.jsonl"), Quota: filepath.Join(m.BusinessRoot, "data/oauth-accounts.json"), Exposed: filepath.Join(m.BusinessRoot, "config/exposed-codex-models.json"), Origin: "https://cpa.chipha.de", Helper: webgui.UnixHelper{Path: m.Helper(), UID: 0}, TrustedPeers: m.TrustedPeers})
+			if err != nil {
+				return err
+			}
+			return s.CheckReady(context.Background())
+		}
+		if err := hosting.ConfirmRuntimeOwner(m); err != nil {
+			return err
+		}
 		return serveGUI(webgui.Options{Data: filepath.Join(m.GUIRoot, "data"), Usage: filepath.Join(m.BusinessRoot, "data/usage.jsonl"), Quota: filepath.Join(m.BusinessRoot, "data/oauth-accounts.json"), Exposed: filepath.Join(m.BusinessRoot, "config/exposed-codex-models.json"), Origin: "https://cpa.chipha.de", Helper: webgui.UnixHelper{Path: m.Helper(), UID: 0}, TrustedPeers: m.TrustedPeers}, m.GUIListen)
+	}
+	if *adopt || *check {
+		return errors.New("GUI adoption/readiness requires verified hosting")
 	}
 	if !filepath.IsAbs(*root) || filepath.Clean(*root) != *root || *root == "/" || *root == "" || *uid > 4294967295 {
 		return errors.New("explicit private shadow root required")
@@ -79,10 +104,11 @@ func serveGUI(options webgui.Options, listen string) error {
 	service := &http.Server{Handler: server, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16384}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	go func() { <-ctx.Done(); _ = service.Close() }()
+	drained := make(chan error, 1)
+	go func() { <-ctx.Done(); drained <- service.Shutdown(context.Background()) }()
 	err = service.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
-		return nil
+		return <-drained
 	}
 	return err
 }

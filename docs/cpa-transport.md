@@ -1160,3 +1160,95 @@ data. The private readiness servers were authenticated using SO_PEERCRED.
 The Linux shared-release suite now has three passing cases with no skips.
 This verifies the release-control command, not yet the initial ciyun legacy
 process supervisor or a production rollback invocation.
+
+## Initial legacy handoff and pre-replacement checkpoint (2026-10-14)
+
+The earlier initial-supervisor and sandbox gates above are superseded by this
+section. Production ciyun hk has **not** been modified, restarted or replaced.
+The checkpoint is preparation for a separately authorized deployment, not proof
+of an actual production cutover or of untested Banked Reset consumption.
+
+`cpa-cutover prepare|state|apply|rollback` is a Linux, root-owned, machine-pinned
+entrypoint separate from the isolation release switchboard. Its manifest pins
+all four service executables and the supervisor itself. Preparation captures
+service-definition hashes, legacy PID/start generations, active timers and the
+Docker restart policy before stopping anything. Apply requires an explicit
+production opt-in, CAS revision and acknowledgement of the previously printed
+rollback command. The private journal is fsynced and locked; unknown/damaged
+state, another owner, changed plans and external journal edits fail closed.
+
+Initial conversion deliberately has a short maintenance window: the original
+Python/7.x writers do not share the new lease and must first drain/exit. Their
+stop policy is temporarily hardened to `TimeoutStopSec=infinity`,
+`SendSIGKILL=no`, and control-group termination. Docker is stopped without a
+force-kill timeout. The supervisor checks exited generations, inactive units,
+empty service cgroups and the absence of unconfirmed persistence/publication
+markers before handing ownership back. A CLI-only, credential-free gateway
+probe verifies the refresh lease has actually been released.
+
+Service drop-ins resolve through **one atomically renamed selector** to a whole
+immutable program-definition bundle; only a coherent selection is loaded by
+systemd. Business/config/auth/provider/history snapshots are never release
+artifacts. Original files are not overwritten to restore an old deployment.
+Rollback drains Go, CAS-checks the supervisor's own links/definitions, selects
+legacy code, restores the prior Docker/timer policy, and confirms the actual
+legacy model directory and GUI HTTP endpoint. External service edits are not
+silently removed. The command can also recover a partially completed journal.
+
+The root-owned runtime-ownership projection binds startup to the selected
+release and manifest. A Go unit may start only while Go owns the starting or
+committed phase; draining/legacy phases reject accidental Go re-entry even if
+an old PID-generation exit proof remains on disk. The projection does not
+expose the private supervisor journal to service users. A durable tmpfiles
+selection recreates runtime directories after reboot, and the old auth-prefix
+service/timer is conditioned off while the Go selector owns refresh.
+
+A stopped-writer GUI handoff uses a root-authorized CAS ticket to adopt valid
+**current state bytes** into recovery metadata. It never writes `state.json`,
+replays old providers, removes tombstones or bypasses pending publication fences.
+Invalid/ambiguous JSON, damaged checkpoints and changed state/metadata are
+refused. Repeated handoff after a legacy rollback is supported. GUI shutdown now
+waits for in-flight HTTP handlers before leaving its writer role.
+
+Public gateway and GUI remain distinct non-root users; helper/collector retain
+only the existing storage privileges. Generated systemd definitions constrain
+writable paths, capabilities, address families, devices, home directories and
+kernel/control-group access. Real systemd rehearsal exposed one necessary
+correction: Go's interface inventory needs `AF_NETLINK`, in addition to Unix,
+IPv4 and IPv6 sockets. No service receives `CAP_NET_ADMIN` as a result.
+
+### Evidence and limitations
+
+* The complete captured-image hosted baseline passed **71 integration checks**,
+  retaining 13 models, two fixed OAuth members, three API providers, original
+  pricing/billing, GUI/session state, catalog/apply and fault/restart behavior.
+* The final scoped Linux suites passed **30 cutover**, **8 current-state
+  adoption** and **19 hosting** cases/subcases with no failures or skips. These
+  include an actually SIGKILLed controller recovering its durable journal,
+  immutable-plan/journal CAS, partial failures and unconfirmed writer fencing.
+* The actual Go supervisor CLI ran captured **7.2.116-sg1**, legacy gateway/GUI/
+  helper processes, then real Go services under the captured UIDs. It committed
+  the initial handoff, executed the printed one-command rollback, retained
+  current provider/key/account/receipt bytes, confirmed real legacy HTTP,
+  re-adopted later legacy state without rewriting it, and rolled back again.
+  Its service-manager adapter is confined to a network-none container; it is
+  not a claim that Docker's actual host daemon or systemd ran inside that test.
+* A separate **real host systemd** rehearsal passed **14 checks** using uniquely
+  named temporary services and a shared private loopback-only namespace. It
+  verified effective sandbox properties, non-root gateway, GUI/session/helper
+  readiness and a real one-shot quota collector. Captured UID 995 belonged to an
+  unrelated hyvps service, so this rehearsal used unused test UIDs; the exact
+  production UIDs were separately verified by the captured-container test.
+  The unrelated user/service was not changed. Temporary units/users/groups were
+  drained and cleaned; copied/pristine OAuth files remained unchanged and RO.
+* The existing real Codex/Muse tool-call validation described earlier remains
+  protocol evidence: this handoff change does not alter request conversion.
+  It does not imply a fresh paid inference for every configured model.
+
+All copied-token runs were isolated from external networks with credential
+refresh disabled. The production-policy process test used newly created inert
+credentials, not original tokens. No original credential refresh, Reset action
+(including mock consumption), production restart or production replacement was
+performed. Production tracked data and service PID checks passed separately.
+The final release contains programs and a host-pinned manifest only. Installation
+and an actual ciyun invocation remain intentionally unperformed at this checkpoint.

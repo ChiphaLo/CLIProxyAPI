@@ -22,6 +22,9 @@ func serveHosted(ctx context.Context, path string) error {
 	if err := hosting.ConfirmLegacyExit(m); err != nil {
 		return err
 	}
+	if err := hosting.ConfirmRuntimeOwner(m); err != nil {
+		return err
+	}
 	paths := adminhelper.Paths{Keys: filepath.Join(m.BusinessRoot, "data/api-keys.json"), Vault: filepath.Join(m.AdminRoot, "provider-secrets.json"), Lock: filepath.Join(m.AdminRoot, "apply.lock"), Audit: filepath.Join(m.AdminRoot, "audit.jsonl")}
 	for _, p := range []string{m.BusinessRoot, filepath.Join(m.BusinessRoot, "config"), m.AdminRoot, filepath.Join(m.AdminRoot, "transactions"), filepath.Dir(m.Helper())} {
 		if !controlledDirectory(p) {

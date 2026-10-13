@@ -9,6 +9,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/hosting"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/refreshowner"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 )
 
@@ -20,6 +21,9 @@ func runHosted(path string) error {
 		return err
 	}
 	if err := hosting.ConfirmLegacyExit(m); err != nil {
+		return err
+	}
+	if err := hosting.ConfirmRuntimeOwner(m); err != nil {
 		return err
 	}
 	options := candidateOptions{Root: m.StateRoot, Listen: m.GatewayListen, Config: m.Config(), Receipts: filepath.Join(m.BusinessRoot, "data/usage.jsonl"), Audit: filepath.Join(m.BusinessRoot, "data/audit.jsonl"), ControlSocket: m.Control(), ControlUID: 0, Hosted: m,
@@ -54,3 +58,18 @@ func hostedTransform(options candidateOptions) (func(*config.Config) error, erro
 }
 
 func hostedDrainContext() context.Context { return context.Background() }
+
+func checkHostedDrain(path string) error {
+	m, err := hosting.Load(path, "cpa-gateway")
+	if err != nil {
+		return err
+	}
+	if err := hosting.ConfirmLegacyExit(m); err != nil {
+		return err
+	}
+	lease, err := refreshowner.Open(m.OAuthHealth())
+	if err != nil {
+		return err
+	}
+	return lease.Close(context.Background())
+}

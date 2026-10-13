@@ -44,6 +44,8 @@ type Manifest struct {
 	ObserveGID    uint32            `json:"observe_gid"`
 	TrustedPeers  []string          `json:"trusted_peers"`
 	Artifacts     map[string]string `json:"artifacts"`
+	SupervisorSHA string            `json:"supervisor_sha256,omitempty"`
+	sourceSHA     string
 }
 
 func (m *Manifest) Production() bool    { return m.Mode == "production" }
@@ -102,6 +104,20 @@ func loopback(raw string) bool {
 // have no non-loopback interfaces and cannot name known production data roots.
 // The old shadow flags still refuse production paths; they are not bypassed.
 func Load(path, role string) (*Manifest, error) {
+	return load(path, role, false)
+}
+
+// LoadSupervisor verifies the complete immutable service bundle without
+// pretending that the deployment controller is one of its service binaries.
+// Only the two new runtime/state roots may be absent before first handoff.
+func LoadSupervisor(path string) (*Manifest, error) {
+	if os.Geteuid() != 0 {
+		return nil, errors.New("deployment owner required")
+	}
+	return load(path, "cpa-admin-helper", true)
+}
+
+func load(path, role string, supervisor bool) (*Manifest, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return nil, errors.New("explicit hosting manifest required")
 	}
@@ -110,6 +126,8 @@ func Load(path, role string) (*Manifest, error) {
 		return nil, errors.New("hosting manifest unavailable")
 	}
 	var m Manifest
+	hash := sha256.Sum256(raw)
+	m.sourceSHA = hex.EncodeToString(hash[:])
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if configbundle.DecodeDraft(raw, &m) != nil || d.Decode(&m) != nil || m.Version != 1 || !releaseID.MatchString(m.ReleaseID) || m.Mode != "production" && m.Mode != "rehearsal" || m.GatewayUID == 0 || m.GatewayGID == 0 || m.GUIUID == 0 || m.GatewayUID == m.GUIUID || m.GUIGID <= 0 || m.ObserveGID == 0 || !loopback(m.GatewayListen) || !loopback(m.GUIListen) || m.GatewayListen == m.GUIListen {
@@ -145,6 +163,11 @@ func Load(path, role string) (*Manifest, error) {
 		roots = append(roots, m.AdminRoot)
 	}
 	for _, p := range roots {
+		if supervisor && (p == m.StateRoot || p == m.RuntimeRoot) {
+			if _, err := os.Lstat(p); os.IsNotExist(err) && controlledPath(filepath.Dir(p)) && deploymentParents(p) {
+				continue
+			}
+		}
 		if !controlledPath(p) {
 			return nil, errors.New("hosting roots must exist without writable parents or symlinks")
 		}
@@ -199,6 +222,25 @@ func Load(path, role string) (*Manifest, error) {
 		if err != nil || actual != want {
 			return nil, errors.New("hosting executable digest mismatch")
 		}
+	}
+	if supervisor {
+		p := filepath.Join(m.ProgramRoot, "cpa-cutover")
+		if !adoptionDigest.MatchString(m.SupervisorSHA) || !deploymentOwned(p) || !deploymentParents(p) {
+			return nil, errors.New("pinned supervisor required")
+		}
+		actual, err := fileHash(p)
+		if err != nil || actual != m.SupervisorSHA {
+			return nil, errors.New("supervisor digest mismatch")
+		}
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		actual, err = fileHash(exe)
+		if err != nil || actual != m.SupervisorSHA {
+			return nil, errors.New("running supervisor differs from manifest")
+		}
+		return &m, nil
 	}
 	exe, err := os.Executable()
 	if err != nil {
