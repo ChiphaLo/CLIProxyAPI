@@ -93,12 +93,13 @@ type Options struct {
 	Resolve                             configbundle.Resolver
 }
 type Server struct {
-	options  Options
-	auth     authStore
-	mu       sync.Mutex
-	trusted  map[netip.Addr]bool
-	slots    chan struct{}
-	fitCache quotaFitCache
+	options    Options
+	auth       authStore
+	mu         sync.Mutex
+	trusted    map[netip.Addr]bool
+	slots      chan struct{}
+	fitCache   quotaFitCache
+	resetCache resetCreditCache
 }
 
 func New(options Options) (*Server, error) {

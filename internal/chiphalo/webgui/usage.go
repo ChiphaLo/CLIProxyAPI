@@ -296,11 +296,18 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sums := acc.Summaries()
+	var resets map[string]map[string]any
+	if r.URL.Query().Get("include_reset") != "0" && len(accounts) > 0 {
+		resets = s.resetReports(accounts, public, r.URL.Query().Get("fresh") == "1")
+	}
 	for i, account := range accounts {
 		public[i]["billing"] = sums[account.ID]
 		updated := int64(number(public[i]["updated_at"]))
 		public[i]["stale"] = public[i]["status"] != "ok" || now-updated > 300
-		public[i]["banked_reset"] = map[string]any{"status": "unavailable", "error": "Go reset management migration pending", "available_count": nil, "credits": []any{}}
+		public[i]["banked_reset"] = resetUnavailable("loading")
+		if reset, ok := resets[account.Prefix]; ok {
+			public[i]["banked_reset"] = reset
+		}
 	}
 	respond(w, 200, map[string]any{"accounts": public, "unattributed_oauth_requests": unknown, "billing_available": true, "billing_basis": "CPA token usage × currently configured USD / 1M token rates; not official charges", "billing_as_of_ts": now, "updated_at": now})
 }

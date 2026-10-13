@@ -30,6 +30,7 @@ type Service struct {
 	inventory  *HTTPBackend
 	probe      *providerprobe.Fetcher
 	probeSlots chan struct{}
+	resetSlots chan struct{}
 }
 
 func New(paths Paths) (*Service, error) {
@@ -40,7 +41,7 @@ func New(paths Paths) (*Service, error) {
 		}
 		seen[path] = true
 	}
-	return &Service{paths: paths, now: time.Now, gate: make(chan struct{}, 1), probeSlots: make(chan struct{}, 2)}, nil
+	return &Service{paths: paths, now: time.Now, gate: make(chan struct{}, 1), probeSlots: make(chan struct{}, 2), resetSlots: make(chan struct{}, 1)}, nil
 }
 
 func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result {
@@ -51,6 +52,22 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
 	if op == "probe_provider_models" {
 		return s.probeModels(ctx, payload)
+	}
+	if op == "oauth_reset_credits" {
+		if len(payload) != 0 || s.inventory == nil {
+			return failure("reset credit lookup unavailable or unexpected payload")
+		}
+		select {
+		case s.resetSlots <- struct{}{}:
+			defer func() { <-s.resetSlots }()
+		default:
+			return failure("reset credit lookup busy")
+		}
+		value, err := s.inventory.Read(ctx, "/reset-credits")
+		if err != nil || value["ok"] != true {
+			return failure("official reset credit lookup unavailable")
+		}
+		return value
 	}
 	switch op {
 	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed":

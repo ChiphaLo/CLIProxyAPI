@@ -877,3 +877,53 @@ claim of a live successful provider catalog query. The container used
 refresh or Banked Reset was performed. Official account model synchronization,
 safe automatic subscription recovery, Reset management, production hosting,
 refresh-owner handoff and verified code/routes-only rollback remain pending.
+
+## Read-only Banked Reset metadata in Go
+
+The SDK-bound private `/reset-credits` GET now retrieves the fixed official
+`https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` endpoint. It uses
+the same exact member identity/prefix/workspace validation as quota collection,
+not auth-file ranking or a shared-workspace fallback. Disabled or mismatched
+members remain unavailable with nullable counts. Two account workers share the
+existing bounded official-read admission; redirects, caller-selected URLs and
+query-based account selection are rejected. No credential refresh is performed.
+
+The helper's `oauth_reset_credits` operation uses the authenticated private Unix
+channel and a separate single read slot, outside its mutation gate. The GUI reads
+it asynchronously with a 30-second, account-ID/prefix/workspace-bound cache.
+Cold reads report loading, slow official reads do not block the account page,
+and `include_reset=0` performs no reset lookup. API price billing remains an
+independent scan of the current cycle's timestamped request records.
+
+Credit responses are allowlisted twice, capped at 256 KiB and 50 credit entries.
+Only ID/status/type/granted/expiry/count/update fields reach the GUI. Invalid or
+missing official availability is nullable/unavailable rather than an invented
+zero balance; error bodies, auth indexes, OAuth files and raw transport errors
+are not exposed. Exact IDs are retained, not silently truncated for later use.
+
+### GET evidence and remaining consumption wiring
+
+Twenty Linux quota tests, 54 gateway tests, 26 helper tests and 29 GUI tests passed
+without failures/skips. Added tests assert fixed GET-only endpoint/headers, bounded
+schema, redaction, no redirect/retry, cancellation, two independent members sharing
+a workspace, disabled-member rejection, private IPC admission, async single-flight,
+cache identity/TTL and the no-lookup fast path. Scoped Windows race/vet and the
+required server build passed. The first replica startup used the general upstream
+`cmd/server` binary instead of the specialized `cmd/cpa-gateway`; that harness
+artifact error was corrected, not treated as a product pass.
+
+The corrected copied-environment run passed 82 integration checks. Actual Go GUI
+HTTP requests first returned loading, then unavailable/null credits in the
+offline environment while preserving current-cycle price billing. Public reset
+metadata remained 404. Exact auth/history/key/vault/subscription bytes and all
+production tracked files/service PIDs were preserved. Existing full-history fit,
+provider probe and transaction/fault/recovery checks remained green.
+
+Successful credit metadata is verified with synthetic GET responses, not a live
+official credit query. Containers used `--network none` and read-only original
+OAuth mounts. **No consume endpoint, Reset action, OAuth refresh or real inference
+was exercised.** Consumption/GUI confirmation/billing-mark wiring remains a
+separate pending implementation; read-only metadata is not claimed to complete
+that irreversible path. Subscription recovery, official model synchronization,
+production hosting/refresh ownership and verified code/routes-only rollback also
+remain before cutover. Shadow and `production_ready:false` gates stay closed.

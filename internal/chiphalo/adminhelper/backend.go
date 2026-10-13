@@ -40,8 +40,11 @@ func NewHTTPBackend(origin, env string) (*HTTPBackend, error) {
 }
 func (b *HTTPBackend) get(ctx context.Context, path string, authorized bool, target any) error {
 	// This is a bounded local control-plane read, not an upstream provider call.
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
+	if path != "/reset-credits" {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+	}
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, b.origin+path, nil)
 	if err != nil {
 		return errors.New("local candidate request unavailable")
@@ -69,7 +72,7 @@ func (b *HTTPBackend) get(ctx context.Context, path string, authorized bool, tar
 }
 
 func (b *HTTPBackend) Read(ctx context.Context, path string) (Result, error) {
-	if !b.private || path != "/seed" && path != "/accounts" && path != "/__cpa_release/ready" {
+	if !b.private || path != "/seed" && path != "/accounts" && path != "/__cpa_release/ready" && path != "/reset-credits" {
 		return nil, errors.New("private inventory unavailable")
 	}
 	var value Result

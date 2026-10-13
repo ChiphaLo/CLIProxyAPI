@@ -83,7 +83,7 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 				rows = append(rows, map[string]any{"id": b.ID, "prefix": b.Prefix, "label": b.Label, "enabled": b.Enabled()})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "accounts": rows})
-		case "/quota":
+		case "/quota", "/reset-credits":
 			if r.URL.RawQuery != "" || manager == nil {
 				fail(400)
 				return
@@ -118,8 +118,11 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 				}
 				return quota.Credential{Token: token, Workspace: b.Workspace, Proxy: proxy}, nil
 			}
-			snapshot := quota.Collect(r.Context(), bindings, lookup, fetcher, time.Now)
-			_ = json.NewEncoder(w).Encode(snapshot)
+			if r.URL.Path == "/reset-credits" {
+				_ = json.NewEncoder(w).Encode(quota.CollectResetCredits(r.Context(), bindings, lookup, fetcher, time.Now))
+			} else {
+				_ = json.NewEncoder(w).Encode(quota.Collect(r.Context(), bindings, lookup, fetcher, time.Now))
+			}
 		default:
 			fail(404)
 		}
