@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/traffic"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	"github.com/tidwall/gjson"
 )
 
@@ -29,9 +32,18 @@ func run() error {
 	budget := flag.Int64("request-budget", 8, "Hard cap on real inference requests (1..12)")
 	responsesBackend := flag.String("responses-backend", "", "Optional private test gateway for transparent downstream shape observation")
 	upstreamCompression := flag.String("upstream-request-compression", "", "Explicit real-provider capability probe (empty, gzip, br, zstd); never retries as identity")
+	nativeMuse := flag.Bool("native-muse", false, "Explicit opencode Muse Responses-only test; no Chat endpoint fallback")
+	useSourceProxy := flag.Bool("source-proxy", false, "Explicitly use the frozen source egress proxy when reachable on the test host")
 	flag.Parse()
 	if !*ack || *source == "" || *budget < 1 || *budget > 12 {
 		return fmt.Errorf("a private source, explicit live acknowledgment and request budget are required")
+	}
+	if *nativeMuse && (*prefix != "opencode" || !strings.HasPrefix(*model, "muse-spark-")) {
+		return fmt.Errorf("native Muse probe requires explicit opencode Muse model")
+	}
+	upstreamPath := "/chat/completions"
+	if *nativeMuse {
+		upstreamPath = "/responses"
 	}
 	switch *upstreamCompression {
 	case "", "gzip", "br", "zstd":
@@ -96,10 +108,14 @@ func run() error {
 			},
 		}
 	}
+	var upstreamTransport http.RoundTripper = &http.Transport{Proxy: nil}
+	if *useSourceProxy {
+		upstreamTransport = helps.NewProxyAwareHTTPClient(context.Background(), cfg, &coreauth.Auth{ProxyURL: selected.APIKeyEntries[0].ProxyURL}, 0).Transport
+	}
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(req *httputil.ProxyRequest) {
 			req.SetURL(endpoint)
-			req.Out.URL.Path = strings.TrimRight(endpoint.Path, "/") + "/chat/completions"
+			req.Out.URL.Path = strings.TrimRight(endpoint.Path, "/") + upstreamPath
 			req.Out.URL.RawPath = ""
 			req.Out.Header = make(http.Header)
 			req.Out.Header.Set("Content-Type", "application/json")
@@ -110,10 +126,17 @@ func run() error {
 				req.Out.Header.Set("x-opencode-session", "cpa-live-protocol-20261012")
 			}
 		},
-		Transport:     traffic.UpstreamRequestCompression(&http.Transport{Proxy: nil}, *upstreamCompression),
+		Transport:     traffic.UpstreamRequestCompression(upstreamTransport, *upstreamCompression),
 		FlushInterval: -1,
 		ModifyResponse: func(response *http.Response) error {
-			response.Body = observeResponse(response.Body, response.StatusCode, response.Header.Get("Content-Type"))
+			if *nativeMuse {
+				response.Body = newResponseObserver(response.Body, response.StatusCode, strings.Contains(response.Header.Get("Content-Type"), "text/event-stream"), func(meta map[string]any) {
+					meta["event"] = "live_upstream_response"
+					_ = json.NewEncoder(os.Stdout).Encode(meta)
+				})
+			} else {
+				response.Body = observeResponse(response.Body, response.StatusCode, response.Header.Get("Content-Type"))
+			}
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
@@ -140,7 +163,7 @@ func run() error {
 			downstream.ServeHTTP(w, r)
 			return
 		}
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/completions" || r.Header.Get("Authorization") != "Bearer wire-upstream-test-only" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1"+upstreamPath || r.Header.Get("Authorization") != "Bearer wire-upstream-test-only" {
 			http.Error(w, "test request rejected", http.StatusForbidden)
 			return
 		}
@@ -156,9 +179,27 @@ func run() error {
 		// Metadata only: no secret, request text, tool arguments or model output.
 		names := []string{}
 		for _, tool := range gjson.GetBytes(raw, "tools").Array() {
-			names = append(names, tool.Get("function.name").String())
+			name := tool.Get("function.name").String()
+			if name == "" {
+				name = tool.Get("name").String()
+			}
+			names = append(names, name)
 		}
 		meta := requestMetadata(raw)
+		if *nativeMuse {
+			meta = responsesRequestMetadata(raw)
+			calls, outputs := 0, 0
+			for _, item := range gjson.GetBytes(raw, "input").Array() {
+				switch item.Get("type").String() {
+				case "function_call":
+					calls++
+				case "function_call_output":
+					outputs++
+				}
+			}
+			meta["history_tool_calls"], meta["history_tool_results"] = calls, outputs
+			meta["endpoint"] = "responses"
+		}
 		meta["event"] = "live_upstream_request"
 		meta["request"] = admitted.Load()
 		meta["model"] = *model

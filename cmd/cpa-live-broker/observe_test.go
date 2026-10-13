@@ -8,6 +8,24 @@ import (
 	"testing"
 )
 
+func TestNativeResponsesJSONUsageIsObservedWithoutContent(t *testing.T) {
+	wire := `{"object":"response","model":"muse-spark-1.3-contributor","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"PRIVATE-RESPONSE"}]}],"usage":{"input_tokens":9,"output_tokens":17,"total_tokens":26,"output_tokens_details":{"reasoning_tokens":12}}}`
+	var meta map[string]any
+	o := newResponseObserver(io.NopCloser(strings.NewReader(wire)), 200, false, func(m map[string]any) { meta = m })
+	data, err := io.ReadAll(o)
+	if err != nil || string(data) != wire {
+		t.Fatal("native body changed")
+	}
+	usage, ok := meta["usage"].(map[string]int64)
+	if !ok || usage["input_tokens"] != 9 || usage["output_tokens"] != 17 || usage["output_tokens_details.reasoning_tokens"] != 12 {
+		t.Fatal("native usage missing")
+	}
+	raw, _ := json.Marshal(meta)
+	if strings.Contains(string(raw), "PRIVATE-RESPONSE") {
+		t.Fatal("content leaked into probe metadata")
+	}
+}
+
 func TestResponseObserverPreservesWireAndRedactsValues(t *testing.T) {
 	wire := "data: {\"model\":\"deepseek-v4.1-flash\",\"choices\":[{\"delta\":{\"reasoning_content\":\"PRIVATE-THOUGHT\",\"tool_calls\":[{\"id\":\"call_test\",\"function\":{\"name\":\"exec\",\"arguments\":\"PRIVATE-CODE\"}}]}}]}\r\n\r\n" +
 		"data: {\"choices\":[{\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5,\"completion_tokens_details\":{\"reasoning_tokens\":3}}}\n\n" +

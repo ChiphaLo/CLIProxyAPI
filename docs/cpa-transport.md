@@ -175,3 +175,56 @@ assertion also failed on the unmodified baseline in repeated runs. No unrelated
 interrupt behavior was changed, and the scoped WS regression suite passed;
 these results must not be represented as a completely green full-repository run.
 No production service or stored OAuth credential was replaced by this validation.
+
+## OpenCode Muse native Responses
+
+The selected credential's configured `opencode` prefix and a `muse-spark-*`
+upstream model enable the dedicated `/responses` path. A caller-supplied model
+prefix alone cannot enable it. Other compatible providers retain their Chat
+Completions path; the upstream Meta executor is unchanged.
+
+The Go adapter promotes trusted developer/system `additional_tools` to top-level
+declarations and removes those records from `input`. Namespace/custom tools are
+represented as native functions upstream, then restored on JSON responses and
+SSE events, including tool history and raw custom input. All ordinary protocol
+conversion still uses the upstream SDK. Native argument/schema errors,
+undeclared calls, conflicting identities and truncated SSE fail explicitly.
+The gateway itself never evaluates or executes a tool.
+
+Muse accepts only `auto` tool selection. Client `none` is implemented by removing
+the tools before the final payload rules, not by silently permitting calls.
+`required` and named choices are rejected explicitly. Final payload overrides
+remain authoritative: unsupported final choices/declarations are rejected, never
+rewritten after the final rules. This adapter supports function/custom/namespace
+tools, not built-in provider tools or `/responses/compact`.
+
+Portable summaries from another model retain their contents but lose an unknown
+reasoning item ID that Muse cannot resolve. Known successful native reasoning IDs
+remain intact and are scoped by source credential, downstream caller, exact model
+and session. The volatile provenance store contains at most 4,096 IDs for 15
+minutes, not reasoning content. Foreign opaque encrypted reasoning is rejected;
+the adapter does not decrypt it or silently discard it. HTTP continuation uses
+the existing account-pinned CPA context replay, not an unscoped provider ID.
+
+### Real Muse validation
+
+On 2026-10-13 the isolated Go candidate passed four actual
+`opencode/muse-spark-1.3-contributor` requests: JSON, SSE text, namespace/custom
+`lookup` and its incremental tool-result continuation. All returned 200 and the
+tool result was verified as `42`. Raw usage matched all four CPA receipts.
+The tool request's 258 output tokens already included 190 reasoning tokens;
+they were not added a second time.
+
+A separate real **Codex CLI 0.162.1** run executed `exec_command`, the custom
+`apply_patch` tool and `exec_command` again inside a read-only, network-isolated
+container with a sole scratch-directory write mount. The output file exactly
+matched a random challenge plus `CODEX_TOOL_ROUNDTRIP_OK`. Its four requests
+completed successfully, and CPA receipt totals matched Codex: 13,793 input,
+9,811 cached input and 350 output tokens (including 72 reasoning tokens).
+
+Direct test-host egress was rejected by Muse's regional policy. Validation used
+the existing approved CPA SOCKS egress through a temporary pinned SSH tunnel;
+no production gateway, proxy, SSH or firewall configuration was changed. A
+separate initial 256-token probe correctly returned `response.incomplete` when
+its output budget was exhausted; the successful probe supplied an adequate
+explicit budget. These are test limits, not new production defaults.

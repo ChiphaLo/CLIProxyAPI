@@ -58,7 +58,11 @@ func responsesRequestMetadata(raw []byte) map[string]any {
 	collect(gjson.GetBytes(raw, "tools"), "")
 	types := map[string]bool{}
 	for _, item := range gjson.GetBytes(raw, "input").Array() {
-		if kind := item.Get("type").String(); safeLabel(kind) {
+		kind := item.Get("type").String()
+		if kind == "" && item.Get("role").Exists() {
+			kind = "message"
+		}
+		if safeLabel(kind) {
 			types[kind] = true
 		}
 	}
@@ -201,7 +205,11 @@ func (o *responseObserver) frame(raw []byte) {
 	}
 	if usage := data.Get("usage"); usage.IsObject() {
 		o.usage = map[string]int64{}
-		for _, name := range []string{"prompt_tokens", "completion_tokens", "total_tokens", "prompt_tokens_details.cached_tokens", "completion_tokens_details.reasoning_tokens"} {
+		fields := []string{"prompt_tokens", "completion_tokens", "total_tokens", "prompt_tokens_details.cached_tokens", "completion_tokens_details.reasoning_tokens"}
+		if data.Get("object").String() == "response" {
+			fields = []string{"input_tokens", "output_tokens", "total_tokens", "input_tokens_details.cached_tokens", "output_tokens_details.reasoning_tokens"}
+		}
+		for _, name := range fields {
 			if value := usage.Get(name); value.Type == gjson.Number {
 				o.usage[name] = value.Int()
 			}

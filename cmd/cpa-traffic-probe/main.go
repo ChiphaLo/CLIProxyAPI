@@ -109,6 +109,9 @@ func run() error {
 		return fmt.Errorf("isolated test gateway required")
 	}
 	if *model != "1x/gpt-6.1-sol" {
+		if *model == "opencode/muse-spark-1.3-contributor" {
+			return runMuseProbe(*base)
+		}
 		return fmt.Errorf("unapproved test model")
 	}
 	tools := []any{map[string]any{"type": "function", "name": "lookup", "description": "Returns value multiplied by six", "parameters": map[string]any{"type": "object", "properties": map[string]any{"value": map[string]any{"type": "integer"}}, "required": []string{"value"}, "additionalProperties": false}}}
