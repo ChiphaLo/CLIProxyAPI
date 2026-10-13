@@ -1,0 +1,197 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
+	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
+	sdkauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/auth"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
+)
+
+type candidateOptions struct {
+	Root, Listen, Config, Receipts, Audit string
+	Paths                                 gateway.LivePaths
+}
+
+// shadowStore locks the watcher's auth root to the explicit private copy even
+// when GUI YAML still contains the old container-internal auth-dir value.
+type shadowStore struct {
+	*sdkauth.FileTokenStore
+	root string
+}
+
+func (s *shadowStore) AuthDir() string { return s.root }
+
+func withinCandidate(root, path string) error {
+	if path == "" || !filepath.IsAbs(path) {
+		return fmt.Errorf("candidate paths must be explicit and absolute")
+	}
+	for _, production := range []string{"/opt/unified-ai-gateway", "/opt/cpa-gui-shadow", "/var/lib/cpa-admin"} {
+		if path == production || strings.HasPrefix(path, production+"/") {
+			return fmt.Errorf("shadow runtime refuses known live production data paths")
+		}
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("candidate input/output must stay inside its dedicated root")
+	}
+	current := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("candidate paths must already exist without symlinks")
+		}
+	}
+	return nil
+}
+
+func candidateTransform(options candidateOptions) (func(*config.Config) error, error) {
+	root, err := filepath.Abs(options.Root)
+	if err != nil || options.Root == "" {
+		return nil, fmt.Errorf("candidate root must be explicit")
+	}
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil || resolved != root || root == filepath.VolumeName(root)+string(filepath.Separator) {
+		return nil, fmt.Errorf("candidate root must be a dedicated real directory")
+	}
+	info, err := os.Lstat(root)
+	if err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("candidate root is not a directory")
+	}
+	marker, err := privatefile.Read(filepath.Join(root, ".cpa-shadow-root"), 4096, true)
+	if err != nil || strings.TrimSpace(string(marker)) != "cpa-shadow-validation-v1" {
+		return nil, fmt.Errorf("candidate root requires a private shadow-validation marker")
+	}
+	for _, path := range []string{options.Config, options.Receipts, options.Audit, options.Paths.ConfigDir, options.Paths.AuthDir, options.Paths.KeyStore, options.Paths.AdminEnv} {
+		if err := withinCandidate(root, path); err != nil {
+			return nil, err
+		}
+	}
+	host, portText, err := net.SplitHostPort(options.Listen)
+	port, errPort := strconv.Atoi(portText)
+	if err != nil || errPort != nil || host != "127.0.0.1" && host != "::1" || port < 1024 || port > 65535 {
+		return nil, fmt.Errorf("candidate listener must be explicit unprivileged loopback")
+	}
+	return func(cfg *config.Config) error {
+		// These are runtime-only hosting constraints, not provider payload rules.
+		// Existing GUI-owned YAML, providers, keys and account prefixes stay intact.
+		cfg.Host, cfg.Port, cfg.AuthDir = host, port, options.Paths.AuthDir
+		cfg.TrustedProxies = nil
+		cfg.TLS.Enable = false
+		cfg.RemoteManagement.SecretKey = ""
+		cfg.RemoteManagement.AllowRemote = false
+		cfg.RemoteManagement.DisableControlPanel = true
+		cfg.Pprof.Enable = false
+		cfg.Discovery.Enabled = false
+		cfg.Plugins.Enabled = false
+		cfg.Debug = false
+		cfg.RequestLog = false
+		cfg.LoggingToFile = false
+		cfg.CommercialMode = true
+		cfg.UsageStatisticsEnabled = false
+		cfg.SaveCooldownStatus = false
+		cfg.WebsocketAuth = true
+		return nil
+	}, nil
+}
+
+func runLegacyCandidate(options candidateOptions) error {
+	transform, err := candidateTransform(options)
+	if err != nil {
+		return err
+	}
+	raw, err := privatefile.Read(options.Config, 4*1024*1024, true)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(raw)
+	live, err := gateway.OpenLiveProfile(options.Paths)
+	if err != nil {
+		return err
+	}
+	cfg, err := config.ParseConfigBytes(raw)
+	if err != nil {
+		return fmt.Errorf("cannot load private legacy candidate YAML")
+	}
+	sink, err := gateway.OpenReceiptSink(options.Receipts, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = sink.Close() }()
+	audit, err := gateway.OpenAuditSink(options.Audit)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = audit.Close() }()
+	store := &shadowStore{FileTokenStore: sdkauth.NewFileTokenStore(), root: options.Paths.AuthDir}
+	store.SetBaseDir(options.Paths.AuthDir)
+	sdkauth.RegisterTokenStore(store)
+	manager := coreauth.NewManager(store, nil, nil)
+	// A copied refresh token is still the same upstream secret. No shadow
+	// runtime may rotate it or race the live production token owner.
+	manager.DisableCredentialRefresh()
+	live.RegisterAccess()
+	accessManager := sdkaccess.NewManager()
+	if err := accessManager.PinProvider(live); err != nil {
+		return err
+	}
+	usage.RegisterNamedPlugin("chiphalo-legacy-receipts", sink)
+	usage.RegisterNamedPlugin("chiphalo-legacy-audit", audit)
+	registry.SetLocalModelCatalogs(true)
+	serverOptions := []api.ServerOption{api.WithMiddleware(audit.Middleware(), func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/__cpa_release/ready" {
+			_, identityErr := live.Refresh()
+			ok := identityErr == nil && sink.Err() == nil && audit.Err() == nil
+			// Deliberately incompatible with the production release controller.
+			c.AbortWithStatusJSON(200, gin.H{"ready": ok, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false})
+			return
+		}
+		c.Next()
+	})}
+	serverOptions = append(serverOptions, live.ServerOptions()...)
+	service, err := cliproxy.NewBuilder().WithConfig(cfg).WithConfigPath(options.Config).WithCoreAuthManager(manager).WithRequestAccessManager(accessManager).
+		WithConfigTransform(transform).WithServerOptions(serverOptions...).Build()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+	errRun := service.Run(ctx)
+	drain, cancelDrain := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelDrain()
+	if err := usage.DefaultManager().StopAndWait(drain); err != nil {
+		return err
+	}
+	if err := sink.Err(); err != nil {
+		return err
+	}
+	if err := audit.Err(); err != nil {
+		return err
+	}
+	if errRun != nil && !errors.Is(errRun, context.Canceled) {
+		return errRun
+	}
+	return nil
+}

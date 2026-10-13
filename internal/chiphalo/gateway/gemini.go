@@ -81,6 +81,13 @@ func (p *LegacyProfile) decorateAdmission(ctx context.Context, expectedAuthID st
 			return fmt.Errorf("native Gemini model is not registered for the selected credential")
 		})
 	}
+	if expectedAuthID != "" {
+		if binding, err := p.Accounts.BindingForAuth(expectedAuthID); err == nil {
+			meta.AccountAuthID = expectedAuthID
+			meta.Account = AccountBinding{ID: binding.ID, Prefix: binding.Prefix}
+			ctx = context.WithValue(ctx, metadataKey{}, meta)
+		}
+	}
 	return p.Accounts.Decorate(ctx, expectedAuthID)
 }
 

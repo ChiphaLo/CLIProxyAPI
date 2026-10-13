@@ -44,6 +44,9 @@ const (
 // every few seconds and triggers refresh operations when required.
 // Only one loop is kept alive; starting a new one cancels the previous run.
 func (m *Manager) StartAutoRefresh(parent context.Context, interval time.Duration) {
+	if m.credentialRefreshDisabled.Load() {
+		return
+	}
 	if interval <= 0 {
 		interval = refreshCheckInterval
 	}
@@ -568,6 +571,9 @@ func (m *Manager) tryRefreshAfterUnauthorized(ctx context.Context, auth *Auth, e
 	if m == nil || auth == nil || alreadyTried || execErr == nil {
 		return auth, false
 	}
+	if m.credentialRefreshDisabled.Load() {
+		return auth, false
+	}
 	// Request-scoped failures describe this request, not stale credentials.
 	// Refreshing would turn a direct error response into an implicit retry.
 	if isRequestScopedError(execErr) {
@@ -665,6 +671,9 @@ func (m *Manager) markRejectedAccessToken(id, failedAccessToken string) {
 func (m *Manager) refreshAuthForRequestAtEpoch(ctx context.Context, id, failedAccessToken string, registrationEpoch uint64) (*Auth, error) {
 	if m == nil {
 		return nil, errors.New("auth manager is nil")
+	}
+	if m.credentialRefreshDisabled.Load() {
+		return nil, errors.New("credential refresh is disabled for this runtime")
 	}
 	forceRefresh := isForceRefreshContext(ctx)
 	ctx = cliproxyexecutor.WithoutRequestProxyURL(ctx)

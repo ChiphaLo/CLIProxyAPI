@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/appendlog"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 )
@@ -21,26 +21,15 @@ type AccountBinding struct {
 
 type ReceiptSink struct {
 	mu       sync.Mutex
-	file     *os.File
+	file     *appendlog.Log
 	accounts map[string]AccountBinding
 	lastErr  error
 	now      func() time.Time
 }
 
 func OpenReceiptSink(path string, accounts map[string]AccountBinding) (*ReceiptSink, error) {
-	info, err := os.Lstat(path)
-	if err == nil && !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("receipt destination must be a regular file")
-	}
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	file, err := appendlog.Open(path)
 	if err != nil {
-		return nil, err
-	}
-	if err := file.Chmod(0600); err != nil {
-		_ = file.Close()
 		return nil, err
 	}
 	bindings := make(map[string]AccountBinding, len(accounts))
@@ -89,14 +78,22 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 		s.lastErr = fmt.Errorf("CPA receipt %s: invalid raw upstream usage", record.RequestID)
 		return
 	}
-	if account, exists := s.accounts[record.AuthID]; exists {
+	account, exists := s.accounts[record.AuthID]
+	if meta.AccountAuthID != "" {
+		if meta.AccountAuthID != record.AuthID {
+			s.lastErr = fmt.Errorf("CPA receipt credential does not match admitted account")
+			return
+		}
+		account, exists = meta.Account, true
+	}
+	if exists {
 		row.OAuthAccountID, row.OAuthPrefix = account.ID, account.Prefix
 		row.RoutedModel = account.Prefix + "/" + terminalName(routed)
 	}
 	row.ModelMismatch = row.UpstreamReportedModel != "" && terminalName(row.Model) != terminalName(row.UpstreamReportedModel)
 	data, err := json.Marshal(row)
 	if err == nil {
-		_, err = s.file.Write(append(data, '\n'))
+		err = s.file.Append(append(data, '\n'))
 	}
 	if err != nil {
 		s.lastErr = err
@@ -118,9 +115,5 @@ func (s *ReceiptSink) Err() error {
 func (s *ReceiptSink) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.file.Sync(); err != nil {
-		_ = s.file.Close()
-		return err
-	}
 	return s.file.Close()
 }

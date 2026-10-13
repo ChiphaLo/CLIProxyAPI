@@ -218,6 +218,20 @@ func (p *Provider) KeyID(principal string) string {
 
 func (p *Provider) Count() int { return len(p.state.Load().byID) }
 
+// Limits returns the existing per-key policy without retaining any bearer key.
+// Admission must call it for each new request/turn, not cache a semaphore sized
+// at startup, because the GUI can lower limits while calls are still in flight.
+func (p *Provider) Limits(id string) (rpm, concurrent int, ok bool) {
+	if id == "admin" {
+		return 120, 8, true
+	}
+	candidate := p.state.Load().byID[id]
+	if !p.active(candidate) {
+		return 0, 0, false
+	}
+	return candidate.entry.RPM, candidate.entry.MaxConcurrent, true
+}
+
 // compileGlob follows Python fnmatchcase's whole-string, slash-insensitive
 // wildcards, rather than Go path.Match's slash-sensitive filesystem semantics.
 func compileGlob(pattern string) (*regexp.Regexp, error) {

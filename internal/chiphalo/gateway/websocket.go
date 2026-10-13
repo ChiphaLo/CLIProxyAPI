@@ -111,13 +111,20 @@ func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
 		if err != nil {
 			return deny(400, "invalid websocket tools")
 		}
+		if options.ChargeTurn != nil && !options.ChargeTurn(id) {
+			return deny(429, "CPA websocket turn rate limit reached")
+		}
 		meta := requestMetadata{Model: model, KeyID: id, IP: ip, Path: path, Started: time.Now()}
+		decorateSnapshot := options.Decorate
+		if options.SnapshotDecorator != nil {
+			decorateSnapshot = options.SnapshotDecorator()
+		}
 		decorate := func(ctx context.Context) context.Context {
 			ctx = context.WithValue(ctx, metadataKey{}, meta)
 			ctx = usage.WithRawUsageCapture(ctx)
 			ctx = handlers.WithPinnedAuthID(ctx, authID)
-			if options.Decorate != nil {
-				ctx = options.Decorate(ctx, authID)
+			if decorateSnapshot != nil {
+				ctx = decorateSnapshot(ctx, authID)
 			}
 			if strings.HasPrefix(model, "opencode/") {
 				ctx = opencode.WithRecovery(ctx)

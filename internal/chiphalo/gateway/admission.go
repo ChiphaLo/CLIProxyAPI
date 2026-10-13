@@ -31,6 +31,8 @@ const MaxBodyBytes int64 = 64 * 1024 * 1024
 type requestMetadata struct {
 	Model, KeyID, IP, Path string
 	Started                time.Time
+	AccountAuthID          string
+	Account                AccountBinding
 }
 type metadataKey struct{}
 
@@ -41,19 +43,23 @@ func Admission(keyID func(string) string) gin.HandlerFunc {
 }
 
 type AdmissionOptions struct {
-	KeyID          func(string) string
-	Authorize      func(keyID, model string) error
-	Resolve        func(model, path string) (routedModel, authID string, err error)
-	Decorate       func(context.Context, string) context.Context
-	Continuations  *ConversationStore
-	websocketSlots chan struct{}
+	KeyID             func(string) string
+	Authorize         func(keyID, model string) error
+	Resolve           func(model, path string) (routedModel, authID string, err error)
+	Decorate          func(context.Context, string) context.Context
+	SnapshotDecorator func() func(context.Context, string) context.Context
+	Continuations     *ConversationStore
+	ChargeTurn        func(keyID string) bool
+	websocketSlots    chan struct{}
 }
 
 func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 	if options.Continuations == nil {
 		options.Continuations = NewConversationStore()
 	}
-	options.websocketSlots = make(chan struct{}, 8)
+	if options.websocketSlots == nil {
+		options.websocketSlots = make(chan struct{}, 8)
+	}
 	return func(c *gin.Context) {
 		if websocketAdmission(c, options) {
 			return
@@ -154,8 +160,12 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 		ctx = usage.WithRawUsageCapture(ctx)
 		ctx = handlers.WithPinnedAuthID(ctx, pinnedAuthID)
 		ctx = handlers.WithSelectedAuthIDCallback(ctx, func(id string) { selected.Store(id) })
-		if options.Decorate != nil {
-			ctx = options.Decorate(ctx, registeredAuthID)
+		decorate := options.Decorate
+		if options.SnapshotDecorator != nil {
+			decorate = options.SnapshotDecorator()
+		}
+		if decorate != nil {
+			ctx = decorate(ctx, registeredAuthID)
 		}
 		if strings.HasPrefix(model, "opencode/") {
 			ctx = opencode.WithRecovery(ctx)
@@ -164,8 +174,8 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 			decorated := usage.WithRawUsageCapture(context.WithValue(parent, metadataKey{}, metadata))
 			decorated = handlers.WithPinnedAuthID(decorated, pinnedAuthID)
 			decorated = handlers.WithSelectedAuthIDCallback(decorated, func(id string) { selected.Store(id) })
-			if options.Decorate != nil {
-				decorated = options.Decorate(decorated, registeredAuthID)
+			if decorate != nil {
+				decorated = decorate(decorated, registeredAuthID)
 			}
 			if strings.HasPrefix(model, "opencode/") {
 				decorated = opencode.WithRecovery(decorated)

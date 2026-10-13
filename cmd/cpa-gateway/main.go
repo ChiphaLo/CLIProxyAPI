@@ -32,12 +32,23 @@ func run() error {
 	receiptsPath := flag.String("receipts", "", "Private usage.jsonl output (required)")
 	localModel := flag.Bool("local-model", false, "Use embedded model catalogs")
 	isolationTest := flag.Bool("isolation-test", false, "Enable the restricted synthetic-credential integration runtime")
+	legacyCandidate := flag.Bool("legacy-candidate", false, "Validate real legacy identity/config wiring using private copies; not a production launch")
+	candidateRoot := flag.String("candidate-root", "", "Dedicated real directory containing every candidate input and output")
+	candidateListen := flag.String("candidate-listen", "127.0.0.1:18317", "Loopback-only candidate listener")
+	auditPath := flag.String("audit", "", "Private legacy audit.jsonl output for candidate validation")
 	checkProfile := flag.Bool("check-legacy-profile", false, "Read-only identity preflight; opens no listener and refreshes no tokens")
 	configDir := flag.String("legacy-config-dir", "", "Private frozen CPA config directory for preflight")
 	authDir := flag.String("legacy-auth-dir", "", "Private frozen OAuth directory for preflight")
 	keyStore := flag.String("legacy-key-store", "", "Existing SHA-256 issued-key database for preflight")
 	legacyEnv := flag.String("legacy-env", "", "Private literal gateway.env for read-only preflight")
 	flag.Parse()
+	if *legacyCandidate {
+		if *checkProfile || *isolationTest {
+			return fmt.Errorf("candidate, identity check and synthetic modes are mutually exclusive")
+		}
+		return runLegacyCandidate(candidateOptions{Root: *candidateRoot, Listen: *candidateListen, Config: *configPath, Receipts: *receiptsPath, Audit: *auditPath,
+			Paths: gateway.LivePaths{ConfigDir: *configDir, AuthDir: *authDir, KeyStore: *keyStore, AdminEnv: *legacyEnv}})
+	}
 	if *checkProfile {
 		if *configDir == "" || *authDir == "" || *keyStore == "" {
 			return fmt.Errorf("identity preflight requires explicit private legacy input paths")

@@ -3,7 +3,52 @@
 This is the Go **candidate**, based on CLIProxyAPI v8.0.25. It does not replace
 the running production Python gateway/GUI. `cmd/cpa-gateway` still refuses
 general production startup: the remaining migration/security gates are not
-removed by these transport features. Do not deploy it over the production service.
+removed by these transport features. The `--legacy-candidate` path runs only
+against an explicitly marked private snapshot root on a loopback listener,
+with credential refresh disabled. Its readiness contract deliberately cannot
+activate a production release. Do not deploy it over the production service.
+
+## Live-state compatibility validation
+
+The candidate now connects the legacy identity and receipt adapters to the real
+SDK lifecycle, rather than accepting only synthetic upstream credentials:
+
+- Existing admin and SHA-256 issued-key identities are retained. The host pins
+  its access provider on the manager itself, so plugin/config reconciliation
+  cannot introduce a config-inline fallback around a disabled issued key.
+- Fully validated key, account and exposed-model snapshots reload on new
+  admissions. Malformed edits fail closed, and in-flight receipts retain the
+  exact account identity selected at admission.
+- Existing JSONL bytes and permissions are preserved. Appends reopen replaced
+  files rather than retaining an obsolete inode; incomplete historical lines
+  and unsafe destinations are rejected instead of being repaired or truncated.
+- Global, per-IP and dynamically lowered per-key limits share bounded counters
+  across identity reloads. Key limits run before compressed-body decoding.
+- SDK watchers subscribe to the config parent directory and filter the exact
+  filename, preserving repeated atomic GUI publication. Embedded config
+  transforms constrain runtime hosting paths without writing source YAML or
+  hashing a GUI-owned management secret back into that file.
+- Admission and upstream-attempt failures append to the existing audit schema.
+  Provider error bodies, authorization headers and query parameters are not
+  copied into the shared audit log.
+- Shadow validation disables scheduled, forced and 401-triggered OAuth refresh;
+  a copied refresh token must not compete with the production token owner.
+
+On 2026-10-13 the scoped Linux retention suites passed 97 test cases, including
+a real candidate process against a 63-file private production snapshot on
+hyvps. That process exposed the three current providers and 13 public models;
+the running ciyun gateway independently exposed the same model set. The tests
+exercised issue/disable/revoke behavior, both fixed OAuth catalogs, model-filter
+edits, repeated provider removal/restoration and unchanged historical receipts.
+They ran with no external network, production mounts, inference requests or
+credential refresh. Windows focused tests, gateway/access race checks, scoped
+vet and the required `cmd/server` build also passed. This is not a full-product
+or full-repository certification.
+
+The production GUI/helper management contract, token-owner handoff and stable
+blue/green listener bootstrap remain deployment gates. A production rollback
+must reselect code/routing only, never overwrite shared business state with an
+older snapshot. No production activation or Banked Reset was performed.
 
 ## Reference implementation review
 

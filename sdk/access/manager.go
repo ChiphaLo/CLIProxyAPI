@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 )
@@ -10,6 +11,9 @@ import (
 type Manager struct {
 	mu        sync.RWMutex
 	providers []Provider
+	// pinnedProvider is a host-owned authentication boundary. Plugin/config
+	// registry reconciliation cannot add fallback providers around this policy.
+	pinnedProvider Provider
 }
 
 // NewManager constructs an empty manager.
@@ -25,8 +29,25 @@ func (m *Manager) SetProviders(providers []Provider) {
 	cloned := make([]Provider, len(providers))
 	copy(cloned, providers)
 	m.mu.Lock()
+	if m.pinnedProvider != nil {
+		cloned = []Provider{m.pinnedProvider}
+	}
 	m.providers = cloned
 	m.mu.Unlock()
+}
+
+// PinProvider selects one host-owned provider for all future reconciliations.
+// Normal managers remain registry-driven. This opt-in must be configured by
+// the embedding host, never by client headers, bodies or provider YAML.
+func (m *Manager) PinProvider(provider Provider) error {
+	if m == nil || provider == nil {
+		return fmt.Errorf("a host authentication provider is required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pinnedProvider = provider
+	m.providers = []Provider{provider}
+	return nil
 }
 
 // Providers returns a snapshot of the active providers.

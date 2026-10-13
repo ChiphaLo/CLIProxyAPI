@@ -89,10 +89,28 @@ func (w *Watcher) reloadConfig() bool {
 	log.Debug("=========================== CONFIG RELOAD ============================")
 	log.Debugf("starting config reload from: %s", w.configPath)
 
-	newConfig, errLoadConfig := config.LoadConfig(w.configPath)
+	var newConfig *config.Config
+	var errLoadConfig error
+	if w.configTransform != nil {
+		// Embedded hosts own the YAML. In-memory parsing must not replace their
+		// management secret or persist an otherwise rejected configuration.
+		var raw []byte
+		raw, errLoadConfig = os.ReadFile(w.configPath)
+		if errLoadConfig == nil {
+			newConfig, errLoadConfig = config.ParseConfigBytes(raw)
+		}
+	} else {
+		newConfig, errLoadConfig = config.LoadConfig(w.configPath)
+	}
 	if errLoadConfig != nil {
 		log.Errorf("failed to reload config: %v", errLoadConfig)
 		return false
+	}
+	if w.configTransform != nil {
+		if err := w.configTransform(newConfig); err != nil {
+			log.Warn("host configuration policy rejected the reload")
+			return false
+		}
 	}
 
 	if w.mirroredAuthDir != "" {

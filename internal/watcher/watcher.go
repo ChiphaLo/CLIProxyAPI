@@ -44,6 +44,7 @@ type Watcher struct {
 	serverUpdatePend  bool
 	stopped           atomic.Bool
 	reloadCallback    func(*config.Config)
+	configTransform   func(*config.Config) error
 	watcher           *fsnotify.Watcher
 	lastAuthHashes    map[string]string
 	lastAuthContents  map[string]*coreauth.Auth
@@ -155,6 +156,12 @@ func (w *Watcher) SetConfig(cfg *config.Config) {
 	defer w.clientsMutex.Unlock()
 	w.config = cfg
 	w.oldConfigYaml, _ = yaml.Marshal(cfg)
+}
+
+// SetConfigTransform installs a host-side runtime constraint before Start.
+// It must not mutate the source file. Rejected edits never reach synthesis.
+func (w *Watcher) SetConfigTransform(transform func(*config.Config) error) {
+	w.configTransform = transform
 }
 
 // SetPluginAuthParser updates the plugin auth parser used for file auth synthesis.

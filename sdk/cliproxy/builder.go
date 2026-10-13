@@ -34,7 +34,8 @@ type Builder struct {
 	apiKeyProvider APIKeyClientProvider
 
 	// watcherFactory creates file watcher instances.
-	watcherFactory WatcherFactory
+	watcherFactory  WatcherFactory
+	configTransform func(*config.Config) error
 
 	// hooks provides lifecycle callbacks.
 	hooks Hooks
@@ -128,6 +129,15 @@ func (b *Builder) WithWatcherFactory(factory WatcherFactory) *Builder {
 	return b
 }
 
+// WithConfigTransform constrains embedded runtime paths and listener settings
+// at startup and on file reload, without rewriting the GUI-owned source YAML.
+// Use the default watcher with this option; custom watchers must apply their
+// own equivalent policy. Nil leaves the stock SDK behavior unchanged.
+func (b *Builder) WithConfigTransform(transform func(*config.Config) error) *Builder {
+	b.configTransform = transform
+	return b
+}
+
 // WithHooks registers lifecycle hooks executed around service startup.
 func (b *Builder) WithHooks(h Hooks) *Builder {
 	b.hooks = h
@@ -203,6 +213,14 @@ func (b *Builder) Build() (*Service, error) {
 	if b.configPath == "" {
 		return nil, fmt.Errorf("cliproxy: configuration path is required")
 	}
+	if b.configTransform != nil {
+		if b.watcherFactory != nil {
+			return nil, fmt.Errorf("cliproxy: config transform requires the default watcher")
+		}
+		if err := b.configTransform(b.cfg); err != nil {
+			return nil, fmt.Errorf("cliproxy: host configuration policy rejected startup: %w", err)
+		}
+	}
 	if errValidate := b.cfg.ValidateCredentialWeights(); errValidate != nil {
 		return nil, fmt.Errorf("cliproxy: validate credential weights: %w", errValidate)
 	}
@@ -223,7 +241,7 @@ func (b *Builder) Build() (*Service, error) {
 
 	watcherFactory := b.watcherFactory
 	if watcherFactory == nil {
-		watcherFactory = defaultWatcherFactory
+		watcherFactory = newWatcherFactory(b.configTransform)
 	}
 
 	authManager := b.authManager
