@@ -2,10 +2,13 @@ package gateway
 
 import (
 	"maps"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/modelconfig"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/watcher/synthesizer"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
@@ -85,15 +88,43 @@ func configCatalogLoaded(cfg *config.Config, auth *coreauth.Auth, models *regist
 			if provider.Name != name || provider.Disabled {
 				continue
 			}
+			registered := map[string]*registry.ModelInfo{}
+			for _, info := range models.GetModelsForClient(auth.ID) {
+				if info != nil {
+					registered[info.ID] = info
+				}
+			}
 			for _, model := range provider.Models {
 				alias := strings.TrimSpace(model.Alias)
 				if alias == "" {
 					alias = strings.TrimSpace(model.Name)
 				}
+				metadataID := strings.TrimSpace(model.Name)
+				if metadataID == "" {
+					metadataID = alias
+				}
 				if auth.Prefix != "" {
 					alias = auth.Prefix + "/" + alias
 				}
-				if !models.ClientSupportsModel(auth.ID, alias) {
+				info := registered[alias]
+				if !models.ClientSupportsModel(auth.ID, alias) || info == nil || info.MetadataModelID != metadataID {
+					return false
+				}
+				// An unchanged alias is insufficient: context, reasoning, image
+				// capabilities and display metadata also reload asynchronously.
+				if model.MaxContextLength > 0 && info.MaxContextLength != model.MaxContextLength {
+					return false
+				}
+				if model.DisplayName != "" && info.DisplayName != strings.TrimSpace(model.DisplayName) {
+					return false
+				}
+				if model.Thinking != nil && !reflect.DeepEqual(info.Thinking, modelconfig.NormalizeThinkingSupport(model.Thinking)) {
+					return false
+				}
+				if len(model.InputModalities) > 0 && !slices.Equal(info.SupportedInputModalities, readinessModalities(model.InputModalities)) {
+					return false
+				}
+				if len(model.OutputModalities) > 0 && !slices.Equal(info.SupportedOutputModalities, readinessModalities(model.OutputModalities)) {
 					return false
 				}
 			}
@@ -103,4 +134,18 @@ func configCatalogLoaded(cfg *config.Config, auth *coreauth.Auth, models *regist
 		return false
 	}
 	return len(models.GetModelsForClient(auth.ID)) > 0
+}
+
+// Match upstream's trim/lowercase/dedup serialization without changing config.
+func readinessModalities(raw []string) []string {
+	out := []string{}
+	seen := map[string]bool{}
+	for _, item := range raw {
+		item = strings.ToLower(strings.TrimSpace(item))
+		if item != "" && !seen[item] {
+			out = append(out, item)
+			seen[item] = true
+		}
+	}
+	return out
 }

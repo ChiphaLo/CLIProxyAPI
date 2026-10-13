@@ -155,11 +155,22 @@ func (s *Service) handle(conn *net.UnixConn, allowedUID uint32) {
 		_, _ = conn.Write(encode(failure(err.Error())))
 		return
 	}
+	if op == "apply_bundle" {
+		// Only this bounded local management operation needs a longer reply
+		// window; slow/unframed reads still retain the ten-second limit.
+		_ = conn.SetWriteDeadline(time.Now().Add(85 * time.Second))
+	}
+	budget := 10 * time.Second
+	if op == "apply_bundle" {
+		budget = 70 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
 	if s.audit(id, op, "started", false, uid) != nil {
 		_, _ = conn.Write(encode(failure("audit unavailable; operation not started")))
 		return
 	}
-	result := s.dispatch(op, payload)
+	result := s.dispatchContext(ctx, op, payload)
 	// Audit metadata only: payloads, keys and provider secrets never enter logs.
 	if s.audit(id, op, "completed", result["ok"] == true, uid) != nil {
 		result = failure("audit unavailable; operation outcome must be checked")

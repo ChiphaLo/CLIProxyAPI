@@ -59,7 +59,7 @@ func TestReadinessDetectsStaleConfigKeysPoliciesMappingsAndRemoval(t *testing.T)
 	}
 	models := registry.GetGlobalRegistry()
 	t.Cleanup(func() { models.UnregisterClient(auth.ID) })
-	models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{{ID: "ready/one"}})
+	models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{{ID: "ready/one", MetadataModelID: "upstream-fixture"}})
 	if result := f.profile.CheckCatalogReadiness(cfg, f.manager); !result.Ready {
 		t.Fatal(result)
 	}
@@ -81,7 +81,7 @@ func TestReadinessDetectsStaleConfigKeysPoliciesMappingsAndRemoval(t *testing.T)
 	if result := f.profile.CheckCatalogReadiness(cfg, f.manager); result.Ready || result.MissingCatalogs != 1 {
 		t.Fatal("new credential metadata accepted while old model mapping remained", result)
 	}
-	models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{{ID: "ready/two"}})
+	models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{{ID: "ready/two", MetadataModelID: "upstream-fixture"}})
 	if result := f.profile.CheckCatalogReadiness(cfg, f.manager); !result.Ready {
 		t.Fatal(result)
 	}
@@ -89,6 +89,43 @@ func TestReadinessDetectsStaleConfigKeysPoliciesMappingsAndRemoval(t *testing.T)
 	if result := f.profile.CheckCatalogReadiness(cfg, f.manager); result.Ready || result.UnexpectedCredentials != 1 {
 		t.Fatal("removed provider still loaded in SDK", result)
 	}
+}
+
+func TestReadinessRejectsStaleCapabilitiesWithUnchangedAlias(t *testing.T) {
+	f := newProfileFixture(t, false)
+	cfg := &config.Config{OpenAICompatibility: []config.OpenAICompatibility{{Name: "capability-ready", Prefix: "cap", BaseURL: "https://example.invalid/v1", APIKeyEntries: []config.OpenAICompatibilityAPIKey{{APIKey: "synthetic-capability-key"}}, Models: []config.OpenAICompatibilityModel{{Name: "upstream", Alias: "same", DisplayName: "Configured", MaxContextLength: 300000, InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"}, Thinking: &registry.ThinkingSupport{Levels: []string{"high", "ultra"}}}}}}}
+	auths, err := synthesizer.NewConfigSynthesizer().Synthesize(&synthesizer.SynthesisContext{Config: cfg, IDGenerator: synthesizer.NewStableIDGenerator()})
+	if err != nil || len(auths) != 1 {
+		t.Fatal("synthetic capability synthesis failed")
+	}
+	auth := auths[0]
+	if _, err := f.manager.Register(context.Background(), auth); err != nil {
+		t.Fatal(err)
+	}
+	models := registry.GetGlobalRegistry()
+	t.Cleanup(func() { models.UnregisterClient(auth.ID) })
+	good := &registry.ModelInfo{ID: "cap/same", MetadataModelID: "upstream", DisplayName: "Configured", MaxContextLength: 300000, SupportedInputModalities: []string{"text", "image"}, SupportedOutputModalities: []string{"text"}, Thinking: &registry.ThinkingSupport{Levels: []string{"high", "ultra"}}}
+	models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{good})
+	if !f.profile.CheckCatalogReadiness(cfg, f.manager).Ready {
+		t.Fatal("current capability metadata rejected")
+	}
+	for name, mutate := range map[string]func(*registry.ModelInfo){"upstream": func(m *registry.ModelInfo) { m.MetadataModelID = "old-upstream" }, "context": func(m *registry.ModelInfo) { m.MaxContextLength = 200000 }, "thinking": func(m *registry.ModelInfo) { m.Thinking = &registry.ThinkingSupport{Levels: []string{"low"}} }, "image": func(m *registry.ModelInfo) { m.SupportedInputModalities = []string{"text"} }, "display": func(m *registry.ModelInfo) { m.DisplayName = "old-display" }} {
+		t.Run(name, func(t *testing.T) {
+			stale := *good
+			mutate(&stale)
+			models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{&stale})
+			if f.profile.CheckCatalogReadiness(cfg, f.manager).Ready {
+				t.Fatal("stale same-alias capability accepted")
+			}
+		})
+	}
+	t.Run("canonical modality metadata", func(t *testing.T) {
+		cfg.OpenAICompatibility[0].Models[0].InputModalities = []string{" Text ", "IMAGE", "image"}
+		models.RegisterClient(auth.ID, auth.Provider, []*registry.ModelInfo{good})
+		if !f.profile.CheckCatalogReadiness(cfg, f.manager).Ready {
+			t.Fatal("canonicalized capability metadata rejected")
+		}
+	})
 }
 
 func TestReadinessDoesNotRequireAnIntentionallyDisabledOAuthAccount(t *testing.T) {

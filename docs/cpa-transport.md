@@ -432,13 +432,13 @@ than being replaced with an empty database. Clearing a scope also removes its
 legacy alias, preventing the backwards-compatible reader from restoring an old
 restriction after an explicit clear. Readers still preserve existing aliases.
 
-Mutations serialize with a local mutex and the existing inter-process apply lock,
+Mutations serialize with a bounded local admission gate and the existing inter-process apply lock,
 then fsync and atomically rename a complete document while preserving ownership.
 This deliberately requires consumers to reopen paths: **single-file Docker bind
 mounts and non-participating legacy in-place writers are not compatible**. The
 increment must not be enabled alongside such writers in production. The helper
-also does not yet provide durable request-ID deduplication or a cross-file apply
-transaction. Configuration publication, model probing/sync, service status,
+does not yet provide durable request-ID deduplication. The opt-in configuration
+transaction below adds cross-file recovery. Model probing/sync, service status,
 private v8 management and quota/Reset operations remain to be migrated before
 cutover. No Reset operation is used as a test.
 
@@ -461,3 +461,83 @@ real inference test. Historical usage, quota history, OAuth files and account
 configuration were unchanged; read-only production checks also confirmed stable
 tracked files and service PIDs. All test containers used `--network none` and
 were stopped; no real inference, refresh or Reset request was made.
+
+## Go configuration compilation and recoverable application
+
+The isolated helper supports `apply_bundle` when launched with an explicit
+`--candidate-origin`. Compilation, static verification, publication and recovery
+are Go code; no legacy Python builder or verification script is invoked. Both
+the legacy YAML layout and v8's `api-keys.openai-compatibility` / `keys` groups
+are supported. The original layout, comments and unrelated configuration nodes
+are retained rather than serializing a typed config that would drop extensions.
+
+The builder preserves non-GUI provider credentials, unknown provider/key/model
+fields, unrelated context/generated records, global transport/access settings,
+and all registered OAuth prefix boundaries. It refuses collisions with account
+prefixes or preserved provider scopes, duplicate JSON/YAML fields, unsafe URLs,
+missing vault keys and ambiguous multi-key managed providers. The existing
+published connection tuple alone may survive DNS unavailability; a new URL or
+proxy cannot authorize itself through draft state. Non-public DNS answers are
+never accepted by that exception. This is apply-time origin validation, not a
+claim of DNS pinning in every upstream executor. OpenCode Muse keeps its native
+Responses routing. Pricing, issued keys, OAuth credentials and usage/quota history
+are not configuration transaction targets.
+
+Three independent renames are **not** simultaneous filesystem atomicity. The
+transaction instead fsyncs private old/new backups and a journal, then arms a
+shared configuration fence before publishing the three files. New inference
+admissions return 503 while fenced. Authenticated `/v1/models` reads remain
+available for control-plane validation. Readiness exposes the current file hash,
+actual SDK credential/catalog registration, configuration readiness and admission
+fence state separately; a listening port or a previous catalog cannot certify
+the new bundle. Unchanged aliases also require matching upstream identity,
+context window, explicit reasoning/image/output capabilities and display metadata
+in the SDK registry, preventing a same-name stale catalog from passing. Confirmation requires the exact expected public catalog, keeping
+unchanged OAuth and foreign routes and removing superseded managed routes.
+
+Only after file durability and actual catalog verification does the journal
+become committed and the fence clear. Failure restores only the three affected
+configuration files and verifies the old SDK/public catalog before reopening
+admissions. A failed catalog recovery retains the fence. On helper restart,
+uncommitted or partially published journals restore verified old configuration;
+committed journals verify the new configuration instead of restoring an old
+snapshot. Corrupt backups or external edits cause a closed recovery failure,
+never silent overwrite. A pending transaction prevents another apply. Queued
+management requests and cross-process lock acquisition are cancelable, preventing
+an expired queued key request from creating a key after an apply finishes.
+
+This rollback is for a **failed user configuration edit**, not release rollback.
+The eventual production deployment rollback must still switch only code/routes
+and must not restore these configuration backups over newer business data.
+Single-file bind mounts and legacy writers that do not participate in the lock
+and fence protocol remain unsupported. The HTTP control adapter validates only
+the private shadow contract; production hosting still needs its trusted private
+control-plane identity and refresh-owner handoff. Neither executable gains a
+production mode from this increment.
+
+### Scoped verification
+
+The copied ciyun environment passed 32 integration checks on hyvps. The original
+GUI's actual apply HTTP route succeeded through the Go helper. Adding a fixture
+alias changed the real SDK/public catalog from 13 to 14 models; removing it
+restored the original 13 without losing either account. Static rejection left
+published bytes unchanged. Pausing only the isolated Go candidate after the
+durable fence tested a real local control-plane outage: old configuration bytes
+were restored, rollback remained unconfirmed/fenced until the candidate returned,
+and helper restart verified the catalog and completed recovery.
+
+Linux helper tests passed 22 cases with zero failures/skips, including an actual
+SIGKILL after publication before commit, partial three-file publication, corrupt
+backup rejection, external-edit protection, committed-state recovery and canceled
+queued mutations. Builder tests passed 16 cases/subcases; the final gateway
+regression passed 52 cases/subcases, including canonical modality metadata and
+stale same-alias capabilities as well as identity/catalog readiness. In total,
+90 Linux tests/subcases passed with zero failures or skips. Windows focused race
+checks, scoped vet and the required server build passed. The fault harness's
+subprocess timeout was corrected to cover the complete apply/rollback window;
+earlier harness failures were retained rather than counted as product passes.
+All containers used isolated networks and private derivatives. No external
+inference, OAuth refresh or Reset was performed; one local inference admission
+probe was rejected by the fence. Production tracked files and service PIDs were
+unchanged. The GUI/quota collector themselves remain Python, and remaining
+management operations and production bootstrap/cutover are not complete.

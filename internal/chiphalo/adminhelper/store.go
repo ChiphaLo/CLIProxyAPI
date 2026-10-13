@@ -1,6 +1,7 @@
 package adminhelper
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -22,7 +23,9 @@ type Paths struct{ Keys, Vault, Lock, Audit string }
 type Service struct {
 	paths Paths
 	mu    sync.Mutex
+	gate  chan struct{}
 	now   func() time.Time
+	apply *Applier
 }
 
 func New(paths Paths) (*Service, error) {
@@ -33,26 +36,47 @@ func New(paths Paths) (*Service, error) {
 		}
 		seen[path] = true
 	}
-	return &Service{paths: paths, now: time.Now}, nil
+	return &Service{paths: paths, now: time.Now, gate: make(chan struct{}, 1)}, nil
 }
 
 func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result {
+	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+	defer cancel()
+	return s.dispatchContext(ctx, op, payload)
+}
+func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
 	switch op {
-	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret":
+	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle":
 	default:
 		return failure("operation not migrated to Go helper")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	select {
+	case s.gate <- struct{}{}:
+		defer func() { <-s.gate }()
+	case <-ctx.Done():
+		return failure("control operation canceled before dispatch")
+	}
 	f, err := openPrivate(s.paths.Lock)
 	if err != nil {
 		return failure("control lock unavailable")
 	}
 	defer func() { _ = f.Close() }()
-	if lock(f) != nil {
+	if lockContext(ctx, f) != nil {
 		return failure("control lock unavailable")
 	}
 	defer unlock(f)
+	if op == "apply_bundle" {
+		if s.apply == nil {
+			return failure("Go configuration apply is not enabled")
+		}
+		if err := allowed(payload, "state"); err != nil {
+			return failure(err.Error())
+		}
+		return s.apply.Apply(ctx, payload["state"])
+	}
+	if ctx.Err() != nil {
+		return failure("control operation canceled before mutation")
+	}
 	if op == "set_provider_secret" || op == "delete_provider_secret" {
 		return s.secret(op, payload)
 	}

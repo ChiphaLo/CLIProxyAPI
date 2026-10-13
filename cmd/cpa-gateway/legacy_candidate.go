@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/durableauth"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
@@ -127,7 +128,6 @@ func runLegacyCandidate(options candidateOptions) error {
 	if err != nil {
 		return err
 	}
-	digest := sha256.Sum256(raw)
 	live, err := gateway.OpenLiveProfile(options.Paths)
 	if err != nil {
 		return err
@@ -175,12 +175,22 @@ func runLegacyCandidate(options candidateOptions) error {
 				readiness = profile.CheckCatalogReadiness(currentCfg, manager)
 			}
 			ok := identityErr == nil && errRead == nil && errParse == nil && readiness.Ready && sink.Err() == nil && audit.Err() == nil && guardedStore.Err() == nil && !guardedStore.Pending()
+			configurationReady := ok
+			_, errFence := os.Lstat(filepath.Join(options.Paths.ConfigDir, configbundle.FenceName))
+			pending := !os.IsNotExist(errFence)
+			ok = ok && !pending
+			digest := sha256.Sum256(currentRaw)
 			status := http.StatusServiceUnavailable
 			if ok {
 				status = http.StatusOK
 			}
 			// Deliberately incompatible with the production release controller.
-			c.AbortWithStatusJSON(status, gin.H{"ready": ok, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false, "catalog": readiness})
+			c.AbortWithStatusJSON(status, gin.H{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false, "catalog": readiness})
+			return
+		}
+		_, errFence := os.Lstat(filepath.Join(options.Paths.ConfigDir, configbundle.FenceName))
+		if !os.IsNotExist(errFence) && !(c.Request.Method == http.MethodGet && c.Request.URL.Path == "/v1/models") {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "gateway_error", "message": "CPA configuration transaction is pending recovery"}})
 			return
 		}
 		if guardedStore.Err() != nil {

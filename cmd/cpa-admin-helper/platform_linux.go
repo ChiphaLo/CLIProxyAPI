@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/adminhelper"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
@@ -37,7 +38,7 @@ func controlledDirectory(path string, owners ...uint32) bool {
 	return false
 }
 
-func serve(ctx context.Context, root, socket string, uid uint32, gid int) error {
+func serve(ctx context.Context, root, socket string, uid uint32, gid int, origin string) error {
 	resolved, err := filepath.EvalSymlinks(root)
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root || root == "/" || !controlledDirectory(root) {
 		return fmt.Errorf("a controlled private shadow root is required; production is unsupported")
@@ -86,6 +87,25 @@ func serve(ctx context.Context, root, socket string, uid uint32, gid int) error 
 	service, err := adminhelper.New(paths)
 	if err != nil {
 		return err
+	}
+	if origin != "" {
+		configDir := filepath.Join(root, "opt/unified-ai-gateway/config")
+		transactions := filepath.Join(root, "var/lib/cpa-admin/transactions")
+		for _, dir := range []string{configDir, transactions} {
+			if !controlledDirectory(dir) {
+				return fmt.Errorf("controlled configuration and transaction directories required")
+			}
+		}
+		backend, err := adminhelper.NewHTTPBackend(origin, filepath.Join(root, "opt/unified-ai-gateway/gateway.env"))
+		if err != nil {
+			return err
+		}
+		recoveryCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		err = service.EnableApply(recoveryCtx, adminhelper.ApplyOptions{ConfigDir: configDir, Transactions: transactions, Backend: backend})
+		cancel()
+		if err != nil {
+			return err
+		}
 	}
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socket, Net: "unix"})
 	if err != nil {

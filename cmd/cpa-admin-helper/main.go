@@ -21,11 +21,12 @@ func run() error {
 	socket := flag.String("socket", "", "Isolated Unix control socket")
 	uid := flag.Uint("gui-uid", 995, "Authorized GUI peer UID")
 	gid := flag.Int("gui-gid", 986, "Authorized GUI socket group")
+	origin := flag.String("candidate-origin", "", "Optional isolated Go candidate origin for configuration transactions")
 	flag.Parse()
 	if *uid > 4294967295 || *gid < 0 {
 		return fmt.Errorf("invalid GUI identity")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
-	return serve(ctx, *root, *socket, uint32(*uid), *gid)
+	return serve(ctx, *root, *socket, uint32(*uid), *gid, *origin)
 }

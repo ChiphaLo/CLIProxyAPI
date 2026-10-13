@@ -3,10 +3,12 @@
 package adminhelper
 
 import (
+	"context"
 	"errors"
 	"net"
 	"os"
 	"syscall"
+	"time"
 )
 
 func peerUID(conn *net.UnixConn) (uint32, error) {
@@ -25,8 +27,33 @@ func peerUID(conn *net.UnixConn) (uint32, error) {
 	return peer.Uid, nil
 }
 
-func lock(file *os.File) error { return syscall.Flock(int(file.Fd()), syscall.LOCK_EX) }
-func unlock(file *os.File)     { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }
+func lock(file *os.File) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return lockContext(ctx, file)
+}
+func lockContext(ctx context.Context, file *os.File) error {
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if ctx.Err() != nil {
+			return errors.New("control lock acquisition canceled")
+		}
+		err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return errors.New("control lock acquisition canceled")
+		case <-ticker.C:
+		}
+	}
+}
+func unlock(file *os.File) { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN) }
 
 func preserveOwner(file *os.File, info os.FileInfo) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)
