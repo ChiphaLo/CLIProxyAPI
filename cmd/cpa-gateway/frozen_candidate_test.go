@@ -137,6 +137,10 @@ func TestFrozenCandidateCatalogKeysProvidersAndHistoricalRetention(t *testing.T)
 		}
 	}
 	waitFor(func() bool { status, _ := request("", "/health"); return status == 200 })
+	waitFor(func() bool {
+		status, body := request("", "/__cpa_release/ready")
+		return status == 200 && bytes.Contains(body, []byte(`"ready":true`))
+	})
 	if status, body := request("", "/__cpa_release/ready"); status != 200 || !bytes.Contains(body, []byte(`"production_ready":false`)) || !bytes.Contains(body, []byte(`"credential_refresh":false`)) {
 		t.Fatal("shadow advertised production activation or refresh ownership")
 	}

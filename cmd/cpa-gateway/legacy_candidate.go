@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/durableauth"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
@@ -147,8 +148,12 @@ func runLegacyCandidate(options candidateOptions) error {
 	defer func() { _ = audit.Close() }()
 	store := &shadowStore{FileTokenStore: sdkauth.NewFileTokenStore(), root: options.Paths.AuthDir}
 	store.SetBaseDir(options.Paths.AuthDir)
-	sdkauth.RegisterTokenStore(store)
-	manager := coreauth.NewManager(store, nil, nil)
+	guardedStore, err := durableauth.Open(options.Paths.AuthDir, options.Root, store, true)
+	if err != nil {
+		return err
+	}
+	sdkauth.RegisterTokenStore(guardedStore)
+	manager := coreauth.NewManager(guardedStore, nil, nil)
 	// A copied refresh token is still the same upstream secret. No shadow
 	// runtime may rotate it or race the live production token owner.
 	manager.DisableCredentialRefresh()
@@ -162,10 +167,24 @@ func runLegacyCandidate(options candidateOptions) error {
 	registry.SetLocalModelCatalogs(true)
 	serverOptions := []api.ServerOption{api.WithMiddleware(audit.Middleware(), func(c *gin.Context) {
 		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/__cpa_release/ready" {
-			_, identityErr := live.Refresh()
-			ok := identityErr == nil && sink.Err() == nil && audit.Err() == nil
+			profile, identityErr := live.Refresh()
+			readiness := gateway.CatalogReadiness{}
+			currentRaw, errRead := privatefile.Read(options.Config, 4*1024*1024, true)
+			currentCfg, errParse := config.ParseConfigBytes(currentRaw)
+			if identityErr == nil && errRead == nil && errParse == nil {
+				readiness = profile.CheckCatalogReadiness(currentCfg, manager)
+			}
+			ok := identityErr == nil && errRead == nil && errParse == nil && readiness.Ready && sink.Err() == nil && audit.Err() == nil && guardedStore.Err() == nil && !guardedStore.Pending()
+			status := http.StatusServiceUnavailable
+			if ok {
+				status = http.StatusOK
+			}
 			// Deliberately incompatible with the production release controller.
-			c.AbortWithStatusJSON(200, gin.H{"ready": ok, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false})
+			c.AbortWithStatusJSON(status, gin.H{"ready": ok, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false, "catalog": readiness})
+			return
+		}
+		if guardedStore.Err() != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "gateway_error", "message": "OAuth credential persistence is unconfirmed"}})
 			return
 		}
 		c.Next()

@@ -37,6 +37,9 @@ type Binding struct {
 	identity [32]byte
 }
 
+// Enabled reflects the registered file's disabled flag without exposing tokens.
+func (b Binding) Enabled() bool { return !b.disabled }
+
 // Registry is immutable after loading. Credentials stay in private auth files;
 // only identity fingerprints and the established public account IDs are kept.
 type Registry struct {

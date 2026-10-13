@@ -337,3 +337,69 @@ application and final Go GUI/helper/quota hosting are outstanding production
 integration work. Both candidate and switchboard retain their isolation-only
 gates. Passing these tests is not authorization to label the complete product
 production-ready or to replace ciyun's live CPA.
+
+## Catalog readiness and durable OAuth persistence
+
+Shadow readiness now returns HTTP 503 until the actual SDK has registered the
+enabled OAuth members and their catalogs, and the current config-synthesized
+credentials and declared OpenAI-compatible routes. It uses upstream's stable ID
+synthesizer, not a second hashing algorithm. A rotated config key, changed model
+mapping/policy, or removed-but-still-loaded config credential cannot reuse the
+previous readiness. Disabled OAuth accounts do not block unrelated providers.
+An invalid current YAML also cannot advertise readiness while the SDK retains
+its previous valid runtime config. Responses expose counts, not auth IDs or keys.
+
+`internal/chiphalo/durableauth` is an opt-in host wrapper for Codex persistence.
+It delegates the JSON merge and refresh-patch semantics to the upstream store.
+Before mutation it arms and syncs a private marker shared across releases; after
+the store returns it validates the resulting credential fields, restores the
+existing owner/group/mode, and syncs the file and parent directory under the
+upstream Codex inter-process file lock. Only confirmed persistence clears and
+syncs the marker. Save failures, mismatched read-back or unexpected returned
+paths leave sticky failure state and a restart fence; backend errors are not
+echoed with credential material. A fence must not be automatically deleted by
+deployment or rollback scripts. Failed marker-directory sync is an uncertain
+filesystem state, not permission to force a handoff.
+
+The upstream SDK's default non-fatal save-error contract remains unchanged.
+A regression exercises that exact behavior: the manager returns success after
+a failed save, but the wrapper reports unconfirmed health and refuses restart.
+This protects persistence attempts, **not** a crash after upstream token rotation
+but before `Save` begins. Full production hosting still needs the refresh-owner
+transaction/drain protocol and must coordinate non-participating legacy writers.
+The wrapper does not claim protection against arbitrary external writers that
+ignore the shared ownership and Codex file-lock contracts.
+
+The candidate wires this wrapper in **read-only** mode and continues to disable
+all credential refresh. It cannot save, delete or redirect copied credentials.
+An unconfirmed marker blocks readiness and new admissions. The writable wrapper
+is tested with synthetic credentials and native Codex storage, not production
+OAuth refresh. Account import/deletion transactions and non-Codex writable stores
+are outside this wrapper's contract; it does not expose a generic file writer.
+
+### Verification against the copied ciyun environment
+
+The hyvps private CPA environment copy contains 12,912 files and a separate
+pristine, working and shadow layout. Docker image identity was checked by the
+portable config digest and all eight layer diff IDs: daemon manifest/config ID
+differences alone do not establish a different image. The old binary's offline
+embedded OAuth catalog differs from the running production catalog; the Go
+candidate is compared to a captured live `/v1/models` reference instead.
+
+After these changes, the copied HTTPS GUI/helper/legacy baseline plus Go candidate
+passed 22 application checks, including real login/session handling, unchanged
+provider application, bad-origin rejection, invalid-config readiness, persistence
+fencing, and the 13-model production match. The Go/Linux focused suites passed
+56 tests/subcases (durability 9, gateway 45, command 1, frozen real-command 1),
+with no failures or skips. Windows focused race checks, scoped vet and the
+required server build passed. Readiness cold-registration tests use deterministic
+missing SDK registrations; they do not rely on observing a timing race in every
+real process startup.
+
+All runs used isolated networks and private data derivatives. No real inference,
+OAuth refresh or Banked Reset request was sent, and production service PIDs and
+tracked historical/config/key files were unchanged. The baseline's systemd and
+Docker status reads were adapted to the isolated processes; these checks do not
+establish host-level systemd sandbox equivalence. The Go runtime still has no
+production launch mode. The private management/GUI/helper/quota integration and
+actual refresh-owner handoff remain necessary before atomic production cutover.
