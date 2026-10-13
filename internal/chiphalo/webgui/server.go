@@ -86,17 +86,19 @@ func (h UnixHelper) Call(ctx context.Context, op string, payload map[string]any)
 
 type Options struct {
 	Data, Usage, Quota, Exposed, Origin string
+	History                             string
 	Helper                              Helper
 	TrustedPeers                        []string
 	Now                                 func() time.Time
 	Resolve                             configbundle.Resolver
 }
 type Server struct {
-	options Options
-	auth    authStore
-	mu      sync.Mutex
-	trusted map[netip.Addr]bool
-	slots   chan struct{}
+	options  Options
+	auth     authStore
+	mu       sync.Mutex
+	trusted  map[netip.Addr]bool
+	slots    chan struct{}
+	fitCache quotaFitCache
 }
 
 func New(options Options) (*Server, error) {
@@ -117,6 +119,7 @@ func New(options Options) (*Server, error) {
 	}
 	s := &Server{options: options, trusted: map[netip.Addr]bool{}, slots: make(chan struct{}, 8)}
 	s.auth = authStore{config: filepath.Join(options.Data, "gui.json"), sessions: filepath.Join(options.Data, "sessions.json"), now: options.Now, failures: map[string][]int64{}}
+	s.fitCache.compute = s.computeQuotaFit
 	if _, err := s.auth.load(); err != nil {
 		return nil, err
 	}
@@ -311,6 +314,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.usageResponse(w, r)
 	case path == "/api/oauth-accounts" && r.Method == "GET":
 		s.accountResponse(w, r)
+	case path == "/api/quota-model" && r.Method == "GET":
+		window := "recent"
+		if r.URL.Query().Get("window") == "all" {
+			window = "all"
+		}
+		cycles := int(max(1, min(integerQuery(r.URL.Query(), "cycles", 6), 24)))
+		respond(w, 200, s.quotaFitReport(window, cycles, r.URL.Query().Get("fresh") == "1"))
 	default:
 		reject(w, 503, "Go migration for this operation is not complete")
 	}

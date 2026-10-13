@@ -761,3 +761,64 @@ its account/time/exclusion selection, report union/compaction, async single-flig
 cache and copied-production-history differential validation. No live official
 quota, OAuth refresh or Reset was performed, no production host was modified,
 and the production hosting/cutover gates remain closed.
+
+## Go GUI empirical fit integration
+
+The authenticated `/api/quota-model` route now exposes the Go engine through the
+existing recent/all and 1..24-cycle selectors. The wrapper preserves account-local
+token attribution, the historical tail convention, observations, pooled reports,
+weakest-confidence model unions, metrics/regime diagnostics, compact points and
+notes. The independently preserved billing accumulator supplies the side-by-side
+API-equivalent cost only; configured prices never become quota-fit features,
+targets, weights or calibration inputs. Existing fit-exclusion history semantics
+remain owned by the collector, not redefined by this wrapper.
+
+The history reader captures a fixed file extent and reads at most the last 8 MiB.
+Discarding a partial first line does not allocate an unbounded buffer; complete
+lines are capped at 1 MiB while being accumulated. Appending traffic cannot extend
+the same scan forever. Missing history is an explicit insufficient-data report,
+while unsafe/unreadable inputs and excessive fit configuration are unavailable,
+not fabricated successful zero fits.
+
+A single asynchronous worker prevents overlapping CPU fits. Cache keys include
+the selected view and source size/mtime/mode; Linux also includes device/inode to
+detect equal-size atomic replacement. The cache has a 300-second TTL, explicit
+refresh and a 10-second failure backoff. A completed as-of result is published even
+if usage appended during computation; a later poll refreshes it instead of
+starving the UI. Different views never receive each other's cached reports, and
+underlying private exceptions are not disclosed.
+
+### Wrapper and copied-history evidence
+
+Seven synthetic complete-wrapper differential cases and deterministic cache/tail
+tests passed, including missing/malformed history, large partial lines, complete
+line bounds, concurrency, view isolation, invalidation, TTL and failures. The
+Linux GUI run passed 25 tests/subcases without failures/skips. Scoped Windows
+race/vet, independent billing tests and the required server build passed.
+
+The final copied-environment run passed 71 integration checks. Actual Go GUI HTTP
+responses were compared recursively against the captured Python implementation
+using the same copied history, account snapshot, usage, exposed catalog, prices
+and billing marks, with the reference clock frozen at each Go report's epoch.
+Recent-one, recent-six and all-history views selected respectively 196, 1,777 and
+15,530 snapshots, producing 1, 5 and 44 observations. Every report had identical
+structure/flags and zero numerical differences outside the documented 2e-7
+absolute/relative tolerance. Both fixed OAuth partitions remained separate. Cold
+fit requests and concurrent subscription reads stayed responsive in the final
+run; appending a harmless fixture line invalidated the cache without hiding its
+as-of report. Session, price billing, configuration transaction and fault/recovery
+checks remained green.
+
+Earlier copied runs exposed a full verification disk (session persistence could
+not succeed) and transient response-latency failures. Only disposable verification
+copies were pruned, retaining private evidence, pristine and the successful
+collector fixture; tests were rerun rather than bypassing security checks or
+claiming those attempts passed. Actual historical reports stay in private hyvps
+evidence, outside Git. All tests used `--network none` and read-only original OAuth
+mounts. No real inference, official quota fetch, OAuth refresh or Banked Reset was
+performed. Production tracked files and service PIDs remained unchanged.
+
+Provider probes/model synchronization, safe automatic subscription recovery,
+Reset wiring, production hosting identities, actual refresh-owner handoff and the
+verified code/routes-only rollback gate still remain before production cutover.
+The shadow guards and `production_ready:false` remain intact.
