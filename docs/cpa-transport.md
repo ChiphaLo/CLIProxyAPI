@@ -273,3 +273,67 @@ no production gateway, proxy, SSH or firewall configuration was changed. A
 separate initial 256-token probe correctly returned `response.incomplete` when
 its output budget was exhausted; the successful probe supplied an adequate
 explicit budget. These are test limits, not new production defaults.
+
+## Release ingress and OAuth ownership primitives
+
+The isolation switchboard accepts an explicit `--trusted-ingress` list of exact
+loopback IP addresses. The default trusts no forwarding metadata. This opt-in
+is for a stable local ingress such as Caddy, not a public proxy allowlist.
+It validates a bounded `X-Forwarded-For` chain and uses the nearest untrusted
+hop, preventing a spoofed value to its left from becoming the client identity.
+It forwards only the canonical address, preserves an ingress-reported HTTP/HTTPS
+scheme, and drops alternate client-IP headers. Malformed trusted metadata is
+rejected before reaching a selected release. A downstream Go listener must
+independently configure its trust in the switchboard's exact loopback peer;
+canonical headers alone do not make `gin.ClientIP()` trust them.
+
+`internal/chiphalo/refreshowner` supplies a Linux process-lifetime, private flock
+lease. Acquire it **before** loading shared OAuth files. Install its `Begin`
+method using `Manager.SetCredentialRefreshGuard` before registering credentials.
+The guard spans the complete refresh and persistence attempt, including a
+successful rotation whose request context was canceled. Ordinary SDK runtimes
+without a guard retain upstream behavior, and shadow refresh remains disabled.
+
+Draining refuses new refreshes and waits for admitted refresh-and-persist
+transactions before releasing ownership. Canceling that wait keeps the lease
+held; a new owner cannot proceed. The lock inode is never removed on handoff.
+Replacement or unsafe permission changes fail closed. A drained process cannot
+resume with its old in-memory credentials: the next owner must restart and read
+the current shared files, never a release-local auth snapshot.
+
+These are **not yet a production token-owner handoff**. The legacy Docker
+runtime does not participate in this flock protocol and must be explicitly
+quiesced and verified exited before a new owner may refresh the same tokens.
+The upstream SDK also intentionally treats ordinary OAuth persistence failures
+as non-fatal warnings. A successful refresh return therefore does not prove
+durability. Production hosting still needs a persistence-health gate and must
+not hand off, restart or restore stale credentials after an unconfirmed save.
+The guard does not change that upstream persistence policy.
+
+### Scoped Linux verification
+
+On 2026-10-13 the hyvps network-isolated runner passed **99 tests/subcases with
+0 failures and 0 skips**: refresh lease 4, release 41, and SDK refresh/persistence
+regressions 54. It ran as UID 65534 with all capabilities dropped. An initial
+UID-0 run skipped the permission-fault test; the unprivileged rerun exercised it
+successfully rather than weakening or deleting the test.
+
+The actual `cpa-release` executable was tested for trusted ingress, activation,
+one-command rollback, restart, and committed state after SIGKILL. Lease tests
+covered competing processes, kernel lock release after process exit, canceled
+drain, idempotent transaction release, and replaced/unsafe lock paths. SDK tests
+covered scheduled, forced and 401-triggered ownership denial and holding the
+guard across persistence after cancellation, including upstream's non-fatal
+save-error behavior. Windows focused race checks, scoped vet and the required
+`cmd/server` build passed. No production data was mounted, and no inference,
+OAuth refresh or Banked Reset request was sent.
+
+Read-only production checks confirmed unchanged gateway, GUI and helper PIDs.
+The current helper still targets legacy port 8318 and `/v0/management`; v8's
+equivalent private routes are `/v8/management/credentials` and
+`/v8/management/requests/api-call`, not `/v1/management`. The old status and
+management assumptions, shared-file save health, persistent configuration
+application and final Go GUI/helper/quota hosting are outstanding production
+integration work. Both candidate and switchboard retain their isolation-only
+gates. Passing these tests is not authorization to label the complete product
+production-ready or to replace ciyun's live CPA.

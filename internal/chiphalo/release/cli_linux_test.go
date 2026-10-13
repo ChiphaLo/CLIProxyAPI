@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
@@ -77,6 +79,61 @@ func TestRealCLIActivateOneCommandRollbackAndRestart(t *testing.T) {
 		t.Fatal("restart lost rollback", s)
 	}
 	stop(command)
+}
+
+func TestRealCLITrustedIngress(t *testing.T) {
+	bin := os.Getenv("CPA_RELEASE_BINARY")
+	if bin == "" {
+		t.Skip("set CPA_RELEASE_BINARY to exercise the actual ingress CLI")
+	}
+	root := releaseRoot(t)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/__cpa_release/ready" {
+			readyReply(w, "old")
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"ip": r.Header.Get("X-Forwarded-For"), "proto": r.Header.Get("X-Forwarded-Proto")})
+	}))
+	defer upstream.Close()
+	stage(t, root, "old", upstream.URL)
+	command := exec.Command(bin, "serve", "--root", root, "--isolation-test", "--listen", "127.0.0.1:0", "--trusted-ingress", "127.0.0.1")
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Stderr = os.Stderr
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = command.Process.Kill() })
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	_, address, found := strings.Cut(strings.TrimSpace(line), "switchboard listening: ")
+	if err != nil || !found {
+		t.Fatalf("CLI startup: %q %v", line, err)
+	}
+	args := []string{"activate", "--root", root, "--isolation-test", "--id", "old", "--expected-revision", "0"}
+	if raw, err := exec.Command(bin, args...).CombinedOutput(); err != nil {
+		t.Fatalf("activation: %s %v", raw, err)
+	}
+	req, _ := http.NewRequest("GET", "http://"+address+"/v1/models", nil)
+	req.Header.Set("X-Forwarded-For", "203.0.113.99, 198.51.100.8")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, errRead := io.ReadAll(response.Body)
+	_ = response.Body.Close()
+	var result map[string]string
+	if errRead != nil || json.Unmarshal(raw, &result) != nil || result["ip"] != "198.51.100.8" || result["proto"] != "https" {
+		t.Fatalf("CLI lost the Caddy client identity: %s %v", raw, errRead)
+	}
+	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRealCLICommittedSwitchSurvivesSIGKILL(t *testing.T) {

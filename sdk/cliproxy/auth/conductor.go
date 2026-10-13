@@ -215,6 +215,7 @@ type Manager struct {
 	// credentialRefreshDisabled is opt-in for read-only shadow runtimes that
 	// must not consume a refresh token owned by a separate production process.
 	credentialRefreshDisabled atomic.Bool
+	credentialRefreshGuard    func(context.Context) (func(), error)
 	// persistLocks serializes disk persistence per auth ID and guards against out-of-order writes.
 	persistLocks sync.Map
 	// authMutationLocks coordinate credential mutations without blocking unrelated readers.

@@ -687,10 +687,13 @@ func (m *Manager) refreshAuthForRequestAtEpoch(ctx context.Context, id, failedAc
 	if id == "" {
 		return nil, errors.New("auth id is empty")
 	}
-	if failedAccessToken != "" {
+	m.mu.RLock()
+	guard := m.credentialRefreshGuard
+	m.mu.RUnlock()
+	// Preserve upstream's rejection timing for ordinary, unguarded runtimes.
+	if guard == nil && failedAccessToken != "" {
 		m.markRejectedAccessToken(id, failedAccessToken)
 	}
-
 	lockValue, _ := m.refreshLocks.LoadOrStore(id, &authRefreshLock{})
 	lock, _ := lockValue.(*authRefreshLock)
 	if lock == nil {
@@ -699,6 +702,19 @@ func (m *Manager) refreshAuthForRequestAtEpoch(ctx context.Context, id, failedAc
 	}
 	lock.mu.Lock()
 	defer lock.mu.Unlock()
+	if guard != nil {
+		release, errGuard := guard(ctx)
+		if errGuard != nil {
+			return nil, errors.New("credential refresh ownership unavailable")
+		}
+		if release == nil {
+			return nil, errors.New("credential refresh ownership barrier invalid")
+		}
+		defer release()
+	}
+	if guard != nil && failedAccessToken != "" {
+		m.markRejectedAccessToken(id, failedAccessToken)
+	}
 
 	m.mu.RLock()
 	auth := m.auths[id].Clone()

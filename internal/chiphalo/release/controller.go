@@ -60,11 +60,23 @@ type Controller struct {
 	client         *http.Client
 	proxyTransport *http.Transport
 	closed         bool
+	ingress        ingressPolicy
 }
 
 // Open requires a dedicated, private release root. It refuses concurrent
 // controllers; the OS lock is held for the entire process lifetime.
 func Open(root string) (*Controller, error) {
+	return OpenWithTrustedIngress(root, nil)
+}
+
+// OpenWithTrustedIngress accepts forwarding metadata only from explicitly
+// configured loopback peers. The policy is fixed for the controller lifetime.
+// Without this opt-in all client-supplied forwarding headers remain untrusted.
+func OpenWithTrustedIngress(root string, peers []string) (*Controller, error) {
+	ingress, err := parseIngress(peers)
+	if err != nil {
+		return nil, err
+	}
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -80,7 +92,7 @@ func Open(root string) (*Controller, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &Controller{root: absolute, lock: lock, proxyTransport: &http.Transport{Proxy: nil}, client: &http.Client{
+	c := &Controller{root: absolute, lock: lock, ingress: ingress, proxyTransport: &http.Transport{Proxy: nil}, client: &http.Client{
 		Transport:     &http.Transport{Proxy: nil},
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
 	}}
@@ -174,7 +186,7 @@ func (c *Controller) load(id string) (*selection, error) {
 		}
 	}
 	digest := sha256.Sum256(raw)
-	return &selection{manifest: manifest, state: State{Current: Reference{ID: id, Digest: hex.EncodeToString(digest[:])}}, handler: newProxy(endpoint, c.proxyTransport)}, nil
+	return &selection{manifest: manifest, state: State{Current: Reference{ID: id, Digest: hex.EncodeToString(digest[:])}}, handler: newProxy(endpoint, c.proxyTransport, c.ingress)}, nil
 }
 
 // Activate commits exactly one coherent route/config identity. An old request

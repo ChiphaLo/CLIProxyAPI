@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/release"
@@ -31,6 +32,7 @@ func run() error {
 	revision := flags.Uint64("expected-revision", 0, "Compare-and-swap revision (required for changing an active release)")
 	listen := flags.String("listen", "127.0.0.1:0", "Explicit loopback data-plane listener")
 	isolation := flags.Bool("isolation-test", false, "Acknowledge that this controller is not production-ready")
+	trustedIngress := flags.String("trusted-ingress", "", "Comma-separated exact loopback ingress IPs; empty distrusts all forwarding headers")
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
 	}
@@ -88,7 +90,11 @@ func run() error {
 	if err != nil || host != "127.0.0.1" && host != "::1" {
 		return fmt.Errorf("data-plane listener must be explicit loopback")
 	}
-	controller, err := release.Open(absolute)
+	var peers []string
+	if *trustedIngress != "" {
+		peers = strings.Split(*trustedIngress, ",")
+	}
+	controller, err := release.OpenWithTrustedIngress(absolute, peers)
 	if err != nil {
 		return err
 	}
