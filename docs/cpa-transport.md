@@ -1150,3 +1150,13 @@ The initial cutover/rollback supervisor, final deployment sandbox review and
 end-to-end one-command rollback rehearsal still need completion before the
 production-replacement checkpoint. No ciyun service was restarted or replaced,
 no original OAuth credential was refreshed, and no Reset action was tested.
+
+The shared-business rollback gate has additionally passed an **actual Go release
+CLI** rehearsal, not just an in-process controller call. In a network-none
+unprivileged container, the CLI activated old/new code manifests, the fixture
+then changed provider/receipt/account data, and one `rollback` command reselected
+the old program at the next CAS revision without changing a byte of that current
+data. The private readiness servers were authenticated using SO_PEERCRED.
+The Linux shared-release suite now has three passing cases with no skips.
+This verifies the release-control command, not yet the initial ciyun legacy
+process supervisor or a production rollback invocation.
