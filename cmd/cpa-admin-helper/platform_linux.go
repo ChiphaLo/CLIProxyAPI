@@ -38,7 +38,7 @@ func controlledDirectory(path string, owners ...uint32) bool {
 	return false
 }
 
-func serve(ctx context.Context, root, socket string, uid uint32, gid int, origin string) error {
+func serve(ctx context.Context, root, socket string, uid uint32, gid int, origin, controlSocket string, controlUID uint32) error {
 	resolved, err := filepath.EvalSymlinks(root)
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root || root == "/" || !controlledDirectory(root) {
 		return fmt.Errorf("a controlled private shadow root is required; production is unsupported")
@@ -88,7 +88,7 @@ func serve(ctx context.Context, root, socket string, uid uint32, gid int, origin
 	if err != nil {
 		return err
 	}
-	if origin != "" {
+	if origin != "" || controlSocket != "" {
 		configDir := filepath.Join(root, "opt/unified-ai-gateway/config")
 		transactions := filepath.Join(root, "var/lib/cpa-admin/transactions")
 		for _, dir := range []string{configDir, transactions} {
@@ -96,9 +96,20 @@ func serve(ctx context.Context, root, socket string, uid uint32, gid int, origin
 				return fmt.Errorf("controlled configuration and transaction directories required")
 			}
 		}
-		backend, err := adminhelper.NewHTTPBackend(origin, filepath.Join(root, "opt/unified-ai-gateway/gateway.env"))
-		if err != nil {
-			return err
+		var backend *adminhelper.HTTPBackend
+		if controlSocket != "" {
+			if !filepath.IsAbs(controlSocket) || filepath.Clean(controlSocket) != controlSocket || !strings.HasPrefix(controlSocket, root+string(filepath.Separator)) {
+				return fmt.Errorf("private candidate control must remain inside shadow root")
+			}
+			backend = adminhelper.NewUnixBackend(controlSocket, controlUID)
+			if err := service.EnableInventory(backend); err != nil {
+				return err
+			}
+		} else {
+			backend, err = adminhelper.NewHTTPBackend(origin, filepath.Join(root, "opt/unified-ai-gateway/gateway.env"))
+			if err != nil {
+				return err
+			}
 		}
 		recoveryCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 		err = service.EnableApply(recoveryCtx, adminhelper.ApplyOptions{ConfigDir: configDir, Transactions: transactions, Backend: backend})

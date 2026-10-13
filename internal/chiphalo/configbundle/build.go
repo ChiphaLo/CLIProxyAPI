@@ -114,6 +114,10 @@ func decodeJSON(raw []byte, target any) error {
 	return nil
 }
 
+// DecodeDraft rejects duplicate fields at every depth before management input
+// is normalized or rewritten. It does not deserialize any credential files.
+func DecodeDraft(raw []byte, target any) error { return decodeJSON(raw, target) }
+
 func parseYAML(raw []byte) (*yaml.Node, error) {
 	if len(raw) > 4*1024*1024 {
 		return nil, invalid()
@@ -276,6 +280,20 @@ func normalize(m *model) error {
 	}
 	m.Input = inputs
 	return nil
+}
+
+// NormalizeModelDraft shares model validation between GUI draft persistence and
+// the final trusted compiler. Unknown JSON fields are not authorization inputs.
+func NormalizeModelDraft(raw []byte) ([]byte, error) {
+	var value model
+	if decodeJSON(raw, &value) != nil {
+		return nil, invalid()
+	}
+	if err := normalize(&value); err != nil {
+		return nil, err
+	}
+	value.Enabled = new(enabled(value.Enabled))
+	return json.Marshal(value)
 }
 
 func Build(ctx context.Context, in Input) (*Output, error) {

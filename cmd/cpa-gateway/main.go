@@ -35,6 +35,8 @@ func run() error {
 	legacyCandidate := flag.Bool("legacy-candidate", false, "Validate real legacy identity/config wiring using private copies; not a production launch")
 	candidateRoot := flag.String("candidate-root", "", "Dedicated real directory containing every candidate input and output")
 	candidateListen := flag.String("candidate-listen", "127.0.0.1:18317", "Loopback-only candidate listener")
+	controlSocket := flag.String("candidate-control", "", "Optional mutually authenticated private Unix management socket")
+	controlUID := flag.Uint("candidate-control-uid", 0, "Explicit authorized private management peer UID")
 	auditPath := flag.String("audit", "", "Private legacy audit.jsonl output for candidate validation")
 	checkProfile := flag.Bool("check-legacy-profile", false, "Read-only identity preflight; opens no listener and refreshes no tokens")
 	configDir := flag.String("legacy-config-dir", "", "Private frozen CPA config directory for preflight")
@@ -42,11 +44,14 @@ func run() error {
 	keyStore := flag.String("legacy-key-store", "", "Existing SHA-256 issued-key database for preflight")
 	legacyEnv := flag.String("legacy-env", "", "Private literal gateway.env for read-only preflight")
 	flag.Parse()
+	if *controlUID > 4294967295 {
+		return fmt.Errorf("invalid private management peer UID")
+	}
 	if *legacyCandidate {
 		if *checkProfile || *isolationTest {
 			return fmt.Errorf("candidate, identity check and synthetic modes are mutually exclusive")
 		}
-		return runLegacyCandidate(candidateOptions{Root: *candidateRoot, Listen: *candidateListen, Config: *configPath, Receipts: *receiptsPath, Audit: *auditPath,
+		return runLegacyCandidate(candidateOptions{Root: *candidateRoot, Listen: *candidateListen, Config: *configPath, Receipts: *receiptsPath, Audit: *auditPath, ControlSocket: *controlSocket, ControlUID: uint32(*controlUID),
 			Paths: gateway.LivePaths{ConfigDir: *configDir, AuthDir: *authDir, KeyStore: *keyStore, AdminEnv: *legacyEnv}})
 	}
 	if *checkProfile {

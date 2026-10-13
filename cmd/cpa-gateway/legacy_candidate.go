@@ -21,6 +21,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/durableauth"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatecontrol"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
@@ -33,6 +34,8 @@ import (
 
 type candidateOptions struct {
 	Root, Listen, Config, Receipts, Audit string
+	ControlSocket                         string
+	ControlUID                            uint32
 	Paths                                 gateway.LivePaths
 }
 
@@ -165,27 +168,31 @@ func runLegacyCandidate(options candidateOptions) error {
 	usage.RegisterNamedPlugin("chiphalo-legacy-receipts", sink)
 	usage.RegisterNamedPlugin("chiphalo-legacy-audit", audit)
 	registry.SetLocalModelCatalogs(true)
+	ready := func() (int, map[string]any) {
+		profile, identityErr := live.Refresh()
+		readiness := gateway.CatalogReadiness{}
+		currentRaw, errRead := privatefile.Read(options.Config, 4*1024*1024, true)
+		currentCfg, errParse := config.ParseConfigBytes(currentRaw)
+		if identityErr == nil && errRead == nil && errParse == nil {
+			readiness = profile.CheckCatalogReadiness(currentCfg, manager)
+		}
+		ok := identityErr == nil && errRead == nil && errParse == nil && readiness.Ready && sink.Err() == nil && audit.Err() == nil && guardedStore.Err() == nil && !guardedStore.Pending()
+		configurationReady := ok
+		_, errFence := os.Lstat(filepath.Join(options.Paths.ConfigDir, configbundle.FenceName))
+		pending := !os.IsNotExist(errFence)
+		ok = ok && !pending
+		digest := sha256.Sum256(currentRaw)
+		status := http.StatusServiceUnavailable
+		if ok {
+			status = http.StatusOK
+		}
+		// Deliberately incompatible with the production release controller.
+		return status, map[string]any{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false, "catalog": readiness}
+	}
 	serverOptions := []api.ServerOption{api.WithMiddleware(audit.Middleware(), func(c *gin.Context) {
 		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/__cpa_release/ready" {
-			profile, identityErr := live.Refresh()
-			readiness := gateway.CatalogReadiness{}
-			currentRaw, errRead := privatefile.Read(options.Config, 4*1024*1024, true)
-			currentCfg, errParse := config.ParseConfigBytes(currentRaw)
-			if identityErr == nil && errRead == nil && errParse == nil {
-				readiness = profile.CheckCatalogReadiness(currentCfg, manager)
-			}
-			ok := identityErr == nil && errRead == nil && errParse == nil && readiness.Ready && sink.Err() == nil && audit.Err() == nil && guardedStore.Err() == nil && !guardedStore.Pending()
-			configurationReady := ok
-			_, errFence := os.Lstat(filepath.Join(options.Paths.ConfigDir, configbundle.FenceName))
-			pending := !os.IsNotExist(errFence)
-			ok = ok && !pending
-			digest := sha256.Sum256(currentRaw)
-			status := http.StatusServiceUnavailable
-			if ok {
-				status = http.StatusOK
-			}
-			// Deliberately incompatible with the production release controller.
-			c.AbortWithStatusJSON(status, gin.H{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": false, "state_contract": "cpa-shadow-validation-v1", "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": false, "catalog": readiness})
+			status, value := ready()
+			c.AbortWithStatusJSON(status, value)
 			return
 		}
 		_, errFence := os.Lstat(filepath.Join(options.Paths.ConfigDir, configbundle.FenceName))
@@ -207,6 +214,22 @@ func runLegacyCandidate(options candidateOptions) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
+	if options.ControlSocket != "" {
+		if err := withinCandidate(options.Root, filepath.Dir(options.ControlSocket)); err != nil {
+			return err
+		}
+		listener, err := privatecontrol.Listen(options.ControlSocket, options.ControlUID)
+		if err != nil {
+			return err
+		}
+		server := &http.Server{Handler: live.PrivateManagement(options.Config, manager, ready), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
+		defer func() { _ = server.Close() }()
+		go func() {
+			if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				cancel()
+			}
+		}()
+	}
 	errRun := service.Run(ctx)
 	drain, cancelDrain := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelDrain()

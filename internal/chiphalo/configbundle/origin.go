@@ -105,3 +105,12 @@ func validateOrigin(ctx context.Context, p provider, previous *yaml.Node, resolv
 	}
 	return nil
 }
+
+// ValidateProviderOrigin validates a new management URL without trusting GUI drafts.
+func ValidateProviderOrigin(ctx context.Context, base, proxy string) error {
+	return validateOrigin(ctx, provider{Base: base, Proxy: proxy}, nil, nil)
+}
+
+func ValidateProviderOriginWithResolver(ctx context.Context, base, proxy string, resolve Resolver) error {
+	return validateOrigin(ctx, provider{Base: base, Proxy: proxy}, nil, resolve)
+}

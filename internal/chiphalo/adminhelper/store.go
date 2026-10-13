@@ -21,11 +21,12 @@ import (
 type Paths struct{ Keys, Vault, Lock, Audit string }
 
 type Service struct {
-	paths Paths
-	mu    sync.Mutex
-	gate  chan struct{}
-	now   func() time.Time
-	apply *Applier
+	paths     Paths
+	mu        sync.Mutex
+	gate      chan struct{}
+	now       func() time.Time
+	apply     *Applier
+	inventory *HTTPBackend
 }
 
 func New(paths Paths) (*Service, error) {
@@ -46,7 +47,7 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 }
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
 	switch op {
-	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle":
+	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed":
 	default:
 		return failure("operation not migrated to Go helper")
 	}
@@ -65,6 +66,12 @@ func (s *Service) dispatchContext(ctx context.Context, op string, payload map[st
 		return failure("control lock unavailable")
 	}
 	defer unlock(f)
+	if op == "status" || op == "gateway_models" || op == "gui_provider_seed" {
+		if len(payload) != 0 {
+			return failure("unknown request fields")
+		}
+		return s.readInventory(ctx, op)
+	}
 	if op == "apply_bundle" {
 		if s.apply == nil {
 			return failure("Go configuration apply is not enabled")

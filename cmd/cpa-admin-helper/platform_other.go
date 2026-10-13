@@ -7,6 +7,6 @@ import (
 	"fmt"
 )
 
-func serve(context.Context, string, string, uint32, int, string) error {
+func serve(context.Context, string, string, uint32, int, string, string, uint32) error {
 	return fmt.Errorf("Linux shadow environment required")
 }

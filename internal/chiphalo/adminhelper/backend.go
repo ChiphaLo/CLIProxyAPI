@@ -12,11 +12,17 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/clientkeys"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatecontrol"
 )
 
 type HTTPBackend struct {
 	origin, env string
 	client      *http.Client
+	private     bool
+}
+
+func NewUnixBackend(path string, uid uint32) *HTTPBackend {
+	return &HTTPBackend{origin: "http://cpa-control", client: privatecontrol.Client(path, uid), private: true}
 }
 
 func NewHTTPBackend(origin, env string) (*HTTPBackend, error) {
@@ -40,7 +46,7 @@ func (b *HTTPBackend) get(ctx context.Context, path string, authorized bool, tar
 	if err != nil {
 		return errors.New("local candidate request unavailable")
 	}
-	if authorized {
+	if authorized && !b.private {
 		key, err := clientkeys.ReadLegacyAdminKey(b.env)
 		if err != nil {
 			return errors.New("local candidate key unavailable")
@@ -60,6 +66,17 @@ func (b *HTTPBackend) get(ctx context.Context, path string, authorized bool, tar
 		return errors.New("local candidate returned an invalid bounded response")
 	}
 	return nil
+}
+
+func (b *HTTPBackend) Read(ctx context.Context, path string) (Result, error) {
+	if !b.private || path != "/seed" && path != "/accounts" && path != "/__cpa_release/ready" {
+		return nil, errors.New("private inventory unavailable")
+	}
+	var value Result
+	if err := b.get(ctx, path, false, &value); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 func (b *HTTPBackend) Catalog(ctx context.Context) ([]string, error) {
 	var value struct {

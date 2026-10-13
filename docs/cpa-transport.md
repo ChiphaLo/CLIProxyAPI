@@ -541,3 +541,103 @@ inference, OAuth refresh or Reset was performed; one local inference admission
 probe was rejected by the fence. Production tracked files and service PIDs were
 unchanged. The GUI/quota collector themselves remain Python, and remaining
 management operations and production bootstrap/cutover are not complete.
+
+## Authenticated private inventory and incremental Go GUI
+
+The candidate now optionally exposes its management projection on a separate Unix
+socket (`--candidate-control`, with an explicit peer UID). Both ends check Linux
+`SO_PEERCRED`; a substituted socket owned by a different service UID is rejected.
+The gateway socket is owner-private, in an owner-private real directory, and an
+existing path is never blindly unlinked. Production supervision must provide a
+fresh private runtime directory per gateway generation. The private handler is
+not mounted on the public router and does not proxy arbitrary deprecated
+management requests. It exposes readiness, the same authenticated SDK model
+catalog, allowlisted provider/context inventory and account labels only.
+Credential files, authentication indexes, bearer keys and arbitrary headers are
+not inventory fields.
+
+The helper's `status`, `gateway_models` and `gui_provider_seed` operations now use
+that authenticated channel. Provider inventory supports both YAML layouts and
+retains reasoning/image metadata. Status distinguishes the embedded Go SDK from
+a separate Docker process; the embedded GUI understands this distinction rather
+than incorrectly showing a healthy SDK as a stopped CLIProxyAPI container. The
+older loopback adapter remains restricted to shadow validation and cannot enable
+trusted inventory.
+
+`cmd/cpa-gui` is an incremental, shadow-only Go GUI host. It embeds the existing
+Chinese HTML/JavaScript interface rather than replacing its charts or preference
+logic. The implemented HTTP routes cover login/logout/CSRF/password changes,
+issued keys, current subscription inventory and draft CRUD, configuration apply,
+model reads, prices, usage trends and current-cycle token-price billing. No Python
+process is launched by this Go service. Remaining operations fail explicitly;
+this command is **not yet a complete production GUI replacement**.
+
+Authentication verifies the existing PBKDF2 or Argon2id password and persistent
+signed session format. Process restart does not discard sessions. Logout revokes
+the persisted entry; password change preserves pricing and unknown root fields
+while incrementing the session epoch. New passwords require at least sixteen
+characters. Argon2 parameters, session/request sizes, failed-login IP/global
+buckets and GUI concurrency are bounded. Forwarded client addresses are accepted
+only from explicitly configured loopback ingress peers. Mutations require the
+exact HTTPS origin and a session-bound CSRF token. Session touches are batched at
+one-minute intervals; across restart this can expire an idle session up to a
+minute early, never extend its lifetime. Missing/corrupt auth or session documents
+fail closed rather than silently generating a new password or database.
+
+Draft edits keep existing unknown state fields, historical managed prefixes,
+tombstones and durable pre-edit backups. The GUI does not store provider keys.
+Model normalization is shared with the trusted compiler. Published configuration
+is changed only by an explicit helper apply transaction, not by draft edits.
+A draft-state persistence failure after a vault edit is reported as an uncertain
+**draft** outcome, never a successful apply; cross-file draft/vault editing is not
+claimed to be atomic. Automatic legacy backup/seed recovery is still pending.
+
+Usage processing streams the existing JSONL with bounded line buffers and keeps
+only bounded recent rows, aggregates and time buckets, not all historical raw
+records. Explicit range queries retain zero-request wall-clock buckets and
+preserve failed call metadata. Pricing continues to use the CPA Go port of the
+original token-price calculation, not upstream billing normalization. The weekly
+account projection uses the existing account attribution and cycle accumulator,
+including manual reset markers. Additional snapshot fields are allowlisted again
+at the GUI boundary. Official quota collection, reset management and empirical
+quota fitting are still separate pending migrations; unavailable reset/fit data
+is not represented as successful zero-valued data. The GUI does not claim to read
+live official quota merely because a cached snapshot can be displayed.
+
+Static HTML is precompressed with gzip and served with an ETag and short cache
+lifetime. Dynamic authenticated responses remain `no-store`. No TLS/public network
+performance improvement is inferred from these local checks.
+
+### Copied-environment checks
+
+The private inventory stage passed 38 isolated integration checks. The subsequent
+Go GUI stage passed 45: the actual Go GUI login/key/apply HTTP routes, retained
+three subscriptions, the original 13 models and both accounts, session refresh and
+GUI process restart, real SDK model add/remove, and outage/journal recovery.
+Usage totals, billing, model selection and wall-clock buckets matched the captured
+Python implementation **when both read the same copied usage file**. The original
+baseline path was absent in the isolated container; that harness input error was
+fixed instead of treating an empty baseline as correct production statistics.
+
+The first GUI layout attempt also exposed that making the gateway's private root
+group-readable would violate its durable-auth ownership boundary. The final
+fixture uses separate GUI and gateway hosting compartments, leaving the gateway
+root private and the original OAuth mount read-only. This is a hosting test, not
+proof of production systemd sandbox equivalence. Earlier failures remain private
+host evidence and are not counted as passing checks.
+
+Linux runs passed 22 helper, 20 builder, 52 catalog/readiness and 3 private-socket
+tests/subcases. The final GUI-only regression passed 9 Linux tests, including draft
+backups, rejection without state changes, secret projection, session revocation,
+CSRF, time gaps and concurrency admission. Windows scoped race/vet and the required
+server build passed. Test drivers can use Python to compare the old implementation;
+the new GUI/helper/gateway service processes themselves are Go. All runs used
+`--network none`, no real inference, OAuth refresh or Banked Reset was performed,
+and production tracked files and service PIDs remained unchanged.
+
+Still required before production cutover: provider probes and model synchronization,
+automatic subscription recovery parity, official quota collection/reset wiring,
+the empirical fit port, production host identities/private IPC wiring and actual
+OAuth refresh-owner handoff. The isolation markers and `production_ready:false`
+gates remain in place. Release rollback remains code/routes only and must not
+restore older business snapshots.
