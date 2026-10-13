@@ -66,8 +66,15 @@ func decodeJSON(raw []byte, target any) error {
 		return invalid()
 	}
 	d := json.NewDecoder(bytes.NewReader(raw))
+	depth, nodes := 0, 0
 	var walk func() error
 	walk = func() error {
+		depth++
+		defer func() { depth-- }()
+		nodes++
+		if depth > 64 || nodes > 200000 {
+			return invalid()
+		}
 		token, err := d.Token()
 		if err != nil {
 			return invalid()

@@ -33,13 +33,16 @@ type Applier struct {
 	options ApplyOptions
 }
 type journal struct {
-	Version   int               `json:"version"`
-	ID        string            `json:"id"`
-	Phase     string            `json:"phase"`
-	OldHashes map[string]string `json:"old_hashes"`
-	NewHashes map[string]string `json:"new_hashes"`
-	OldModels []string          `json:"old_models"`
-	NewModels []string          `json:"new_models"`
+	Version       int               `json:"version"`
+	ID            string            `json:"id"`
+	Phase         string            `json:"phase"`
+	OldHashes     map[string]string `json:"old_hashes"`
+	NewHashes     map[string]string `json:"new_hashes"`
+	OldModels     []string          `json:"old_models"`
+	NewModels     []string          `json:"new_models"`
+	Files         []string          `json:"files,omitempty"`
+	ConfigDigest  string            `json:"config_digest,omitempty"`
+	AccountDigest string            `json:"accounts_digest,omitempty"`
 }
 
 func hash(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToString(sum[:]) }
@@ -199,17 +202,21 @@ func (p *Applier) Apply(parent context.Context, state []byte) Result {
 	}
 	sort.Strings(oldModels)
 	sort.Strings(newModels)
+	next := map[string][]byte{configFiles[0]: out.Config, configFiles[1]: out.Generated, configFiles[2]: out.Context}
+	return p.publish(ctx, old, next, oldModels, newModels, configFiles, "", "", Result{"models": len(out.Models), "providers": out.Providers})
+}
+
+func (p *Applier) publish(ctx context.Context, old, next map[string][]byte, oldModels, newModels, files []string, configDigest, accountDigest string, extra Result) Result {
 	token, err := randomHex(16)
 	if err != nil {
 		return failure("transaction identity unavailable")
 	}
-	j := &journal{Version: 1, ID: "tx-" + token, Phase: "prepared", OldHashes: map[string]string{}, NewHashes: map[string]string{}, OldModels: oldModels, NewModels: newModels}
+	j := &journal{Version: 1, ID: "tx-" + token, Phase: "prepared", OldHashes: map[string]string{}, NewHashes: map[string]string{}, OldModels: oldModels, NewModels: newModels, Files: files, ConfigDigest: configDigest, AccountDigest: accountDigest}
 	dir := filepath.Join(p.options.Transactions, j.ID)
 	if os.Mkdir(dir, 0700) != nil || syncDirectory(p.options.Transactions) != nil {
 		return failure("cannot create durable configuration transaction")
 	}
-	next := map[string][]byte{configFiles[0]: out.Config, configFiles[1]: out.Generated, configFiles[2]: out.Context}
-	for _, name := range configFiles {
+	for _, name := range files {
 		j.OldHashes[name] = hash(old[name])
 		j.NewHashes[name] = hash(next[name])
 		if writePrivate(filepath.Join(dir, name+".old"), old[name]) != nil || writePrivate(filepath.Join(dir, name+".new"), next[name]) != nil {
@@ -224,13 +231,16 @@ func (p *Applier) Apply(parent context.Context, state []byte) Result {
 		return failure("configuration fence durability is unconfirmed; recovery may be required")
 	}
 	steps := []string{"static verification passed", "durable configuration journal prepared"}
-	for _, name := range configFiles {
+	if p.validateFiles(j) != nil {
+		return p.abort(j, steps, "transaction fixed inputs changed before publication")
+	}
+	for _, name := range files {
 		current, errRead := privatefile.Read(filepath.Join(p.options.ConfigDir, name), 4*1024*1024, name == configFiles[0])
 		if errRead != nil || hash(current) != j.OldHashes[name] {
 			return p.abort(j, steps, "published configuration changed before publication")
 		}
 	}
-	for _, name := range configFiles {
+	for _, name := range files {
 		if err = replaceConfig(filepath.Join(p.options.ConfigDir, name), next[name]); err != nil {
 			return p.abort(j, steps, "configuration publication failed")
 		}
@@ -240,7 +250,7 @@ func (p *Applier) Apply(parent context.Context, state []byte) Result {
 		return p.abort(j, steps, "configuration journal update failed")
 	}
 	steps = append(steps, "configuration files published")
-	if err = p.options.Backend.Await(ctx, j.NewHashes[configFiles[0]], newModels); err != nil {
+	if err = p.awaitJournal(ctx, j, false); err != nil {
 		return p.abort(j, steps, "new configuration did not reach actual catalog readiness")
 	}
 	steps = append(steps, "actual SDK and public catalog verification passed")
@@ -251,7 +261,11 @@ func (p *Applier) Apply(parent context.Context, state []byte) Result {
 	if p.clearFence() != nil {
 		return Result{"ok": false, "uncertain": true, "error": "configuration committed but fence finalization is unconfirmed", "txid": j.ID, "steps": steps}
 	}
-	return Result{"ok": true, "txid": j.ID, "models": len(out.Models), "providers": out.Providers, "localStatus": 200, "steps": steps}
+	result := Result{"ok": true, "txid": j.ID, "localStatus": 200, "steps": steps}
+	for k, v := range extra {
+		result[k] = v
+	}
+	return result
 }
 
 func (p *Applier) abort(j *journal, steps []string, message string) Result {
@@ -265,7 +279,20 @@ func (p *Applier) abort(j *journal, steps []string, message string) Result {
 	return Result{"ok": false, "rollback": true, "error": message, "txid": j.ID, "steps": append(steps, "previous configuration and actual catalog restored")}
 }
 func (p *Applier) validateFiles(j *journal) error {
-	for _, name := range configFiles {
+	if !validJournalFiles(j) {
+		return errors.New("transaction file inventory invalid")
+	}
+	if j.ConfigDigest != "" {
+		raw, err := privatefile.Read(filepath.Join(p.options.ConfigDir, configFiles[0]), 4*1024*1024, true)
+		if err != nil || hash(raw) != j.ConfigDigest {
+			return errors.New("catalog transaction YAML changed externally")
+		}
+		raw, err = privatefile.Read(filepath.Join(p.options.ConfigDir, "oauth-accounts.json"), 1024*1024, false)
+		if err != nil || hash(raw) != j.AccountDigest {
+			return errors.New("catalog transaction account registry changed externally")
+		}
+	}
+	for _, name := range journalFiles(j) {
 		for _, suffix := range []string{"old", "new"} {
 			raw, err := privatefile.Read(filepath.Join(p.options.Transactions, j.ID, name+"."+suffix), 4*1024*1024, true)
 			want := j.OldHashes[name]
@@ -291,7 +318,7 @@ func (p *Applier) rollback(ctx context.Context, j *journal) error {
 	if err := p.save(j); err != nil {
 		return err
 	}
-	for _, name := range configFiles {
+	for _, name := range journalFiles(j) {
 		raw, err := privatefile.Read(filepath.Join(p.options.Transactions, j.ID, name+".old"), 4*1024*1024, true)
 		if err != nil {
 			return err
@@ -300,7 +327,7 @@ func (p *Applier) rollback(ctx context.Context, j *journal) error {
 			return err
 		}
 	}
-	if err := p.options.Backend.Await(ctx, j.OldHashes[configFiles[0]], j.OldModels); err != nil {
+	if err := p.awaitJournal(ctx, j, true); err != nil {
 		return err
 	}
 	j.Phase = "rolled_back"
@@ -329,20 +356,20 @@ func (p *Applier) recover(ctx context.Context) error {
 		return errors.New("pending configuration journal unavailable")
 	}
 	var j journal
-	if privatefile.Decode(journalRaw, &j) != nil || j.Version != 1 || j.ID != marker.ID {
+	if privatefile.Decode(journalRaw, &j) != nil || j.Version != 1 || j.ID != marker.ID || !validJournalFiles(&j) {
 		return errors.New("pending configuration journal invalid")
 	}
 	if err = p.validateFiles(&j); err != nil {
 		return err
 	}
 	if j.Phase == "committed" {
-		for _, name := range configFiles {
+		for _, name := range journalFiles(&j) {
 			raw, err := privatefile.Read(filepath.Join(p.options.ConfigDir, name), 4*1024*1024, name == configFiles[0])
 			if err != nil || hash(raw) != j.NewHashes[name] {
 				return errors.New("committed configuration differs from journal")
 			}
 		}
-		if err = p.options.Backend.Await(ctx, j.NewHashes[configFiles[0]], j.NewModels); err != nil {
+		if err = p.awaitJournal(ctx, &j, false); err != nil {
 			return errors.New("committed catalog recovery is unconfirmed")
 		}
 		return p.clearFence()

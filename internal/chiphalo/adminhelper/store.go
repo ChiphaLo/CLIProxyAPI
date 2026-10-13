@@ -22,15 +22,18 @@ import (
 type Paths struct{ Keys, Vault, Lock, Audit string }
 
 type Service struct {
-	paths      Paths
-	mu         sync.Mutex
-	gate       chan struct{}
-	now        func() time.Time
-	apply      *Applier
-	inventory  *HTTPBackend
-	probe      *providerprobe.Fetcher
-	probeSlots chan struct{}
-	resetSlots chan struct{}
+	paths          Paths
+	mu             sync.Mutex
+	gate           chan struct{}
+	now            func() time.Time
+	apply          *Applier
+	inventory      *HTTPBackend
+	probe          *providerprobe.Fetcher
+	probeSlots     chan struct{}
+	resetSlots     chan struct{}
+	catalogMu      sync.Mutex
+	catalogJob     *catalogJob
+	catalogWorkers sync.WaitGroup
 }
 
 func New(paths Paths) (*Service, error) {
@@ -50,6 +53,9 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 	return s.dispatchContext(ctx, op, payload)
 }
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
+	if op == "sync_codex" {
+		return s.syncCatalog(payload)
+	}
 	if op == "probe_provider_models" {
 		return s.probeModels(ctx, payload)
 	}

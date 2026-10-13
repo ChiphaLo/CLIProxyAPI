@@ -75,6 +75,43 @@ func TestDifferentMembersSharingWorkspaceRemainSeparate(t *testing.T) {
 	}
 }
 
+func TestReviewedAccountModelsDoNotLeakBetweenSharedWorkspaceMembers(t *testing.T) {
+	dir, rows, _ := fixture(t)
+	raw, _ := json.Marshal(map[string]any{"accounts": rows})
+	modelRaw := []byte(`{"models":["gpt-6-astra","gpt-6-luna"],"account_models":{"primary-member":["gpt-6-astra"],"second-member":["gpt-6-luna"]}}`)
+	r, err := Parse(raw, dir, modelRaw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(r.PublicModelIDs(), []string{"codex2/gpt-6-luna", "gpt-6-astra"}) {
+		t.Fatal("reviewed availability crossed account ownership")
+	}
+	for _, model := range []string{"gpt-6-luna", "codex/gpt-6-luna", "codex2/gpt-6-astra"} {
+		if _, _, err := r.Resolve(model, "/v1/responses"); err == nil {
+			t.Fatal("a different account's model was implicitly authorized")
+		}
+	}
+	if !reflect.DeepEqual(r.ModelNamesForAuth("primary.json"), []string{"gpt-6-astra"}) || r.ModelNamesForAuth("unknown.json") != nil {
+		t.Fatal("registered model ownership projection changed")
+	}
+}
+func TestReviewedAccountCatalogRejectsIncompleteOrUnexpectedIdentity(t *testing.T) {
+	for _, models := range []string{
+		`null`, `{}`, `{"primary-member":["gpt-6-astra"]}`,
+		`{"primary-member":["gpt-6-astra"],"unknown-member":["gpt-6-luna"]}`,
+		`{"primary-member":["unpublished"],"second-member":[]}`,
+		`{"primary-member":["gpt-6-astra","gpt-6-astra"],"second-member":[]}`,
+		`{"primary-member":["gpt-6-astra"],"second-member":null}`,
+		`{"primary-member":["gpt-6-astra"],"primary-member":[],"second-member":[]}`,
+	} {
+		dir, rows, _ := fixture(t)
+		raw, _ := json.Marshal(map[string]any{"accounts": rows})
+		if _, err := Parse(raw, dir, []byte(`{"models":["gpt-6-astra","gpt-6-luna"],"account_models":`+models+`}`)); err == nil {
+			t.Fatal("an ambiguous or incomplete account catalog was accepted")
+		}
+	}
+}
+
 func TestRegistryRejectsAmbiguousAndMisboundCredentials(t *testing.T) {
 	for _, name := range []string{"duplicate-id", "duplicate-prefix", "shared-file", "wrong-workspace", "wrong-prefix", "same-member", "unregistered", "traversal", "missing-file", "missing-primary"} {
 		t.Run(name, func(t *testing.T) {

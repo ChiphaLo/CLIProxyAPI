@@ -23,6 +23,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/gateway"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatecontrol"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	sdkaccess "github.com/router-for-me/CLIProxyAPI/v8/sdk/access"
@@ -169,12 +170,12 @@ func runLegacyCandidate(options candidateOptions) error {
 	usage.RegisterNamedPlugin("chiphalo-legacy-audit", audit)
 	registry.SetLocalModelCatalogs(true)
 	ready := func() (int, map[string]any) {
-		profile, identityErr := live.Refresh()
+		_, identityErr := live.Refresh()
 		readiness := gateway.CatalogReadiness{}
 		currentRaw, errRead := privatefile.Read(options.Config, 4*1024*1024, true)
 		currentCfg, errParse := config.ParseConfigBytes(currentRaw)
 		if identityErr == nil && errRead == nil && errParse == nil {
-			readiness = profile.CheckCatalogReadiness(currentCfg, manager)
+			readiness = live.ReviewedReadiness(context.Background(), currentCfg, manager)
 		}
 		ok := identityErr == nil && errRead == nil && errParse == nil && readiness.Ready && sink.Err() == nil && audit.Err() == nil && guardedStore.Err() == nil && !guardedStore.Pending()
 		configurationReady := ok
@@ -208,7 +209,7 @@ func runLegacyCandidate(options candidateOptions) error {
 	})}
 	serverOptions = append(serverOptions, live.ServerOptions()...)
 	service, err := cliproxy.NewBuilder().WithConfig(cfg).WithConfigPath(options.Config).WithCoreAuthManager(manager).WithRequestAccessManager(accessManager).
-		WithConfigTransform(transform).WithServerOptions(serverOptions...).Build()
+		WithConfigTransform(transform).WithModelCatalogTransform(live.ModelHints).WithServerOptions(serverOptions...).Build()
 	if err != nil {
 		return err
 	}
@@ -222,7 +223,7 @@ func runLegacyCandidate(options candidateOptions) error {
 		if err != nil {
 			return err
 		}
-		server := &http.Server{Handler: live.PrivateManagement(options.Config, manager, ready), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
+		server := &http.Server{Handler: live.PrivateManagementWithActions(options.Config, manager, ready, quota.Fetcher{}, gateway.CatalogActions{Reload: service.ReloadReviewedModelCatalog}), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second, MaxHeaderBytes: 8192}
 		defer func() { _ = server.Close() }()
 		go func() {
 			if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {

@@ -139,6 +139,7 @@ func buildCodexClientModelsWithToolCapabilities(models []map[string]any, provide
 			applyCodexClientProviderCapabilities(entry, id, providersForModel)
 			applyCodexClientSearchToolSupport(entry, id, true, searchToolProvidersForModel, toolSearchCapabilityForModel)
 			applyCPAWebSearchCapability(entry, id, webSearchCapabilityForModel, clientVersion)
+			applyReviewedClientHints(entry, model)
 			sanitizeCodexClientReasoningMetadata(entry, clientVersion)
 			applyCodexClientVisibilityOverride(entry, id)
 			if optimizeMultiAgentV2 {
@@ -155,6 +156,7 @@ func buildCodexClientModelsWithToolCapabilities(models []map[string]any, provide
 		applyCodexClientMaxTokens(entry, model)
 		applyCodexClientSearchToolSupport(entry, id, false, searchToolProvidersForModel, toolSearchCapabilityForModel)
 		applyCPAWebSearchCapability(entry, id, webSearchCapabilityForModel, clientVersion)
+		applyReviewedClientHints(entry, model)
 		sanitizeCodexClientReasoningMetadata(entry, clientVersion)
 		applyCodexClientVisibilityOverride(entry, id)
 		applyCodexClientDevinDisplayName(entry, id, model, providersForModel)
@@ -538,6 +540,30 @@ func applyCodexClientMaxContextLengthOverride(entry map[string]any, model map[st
 	if maxContextLength := intModelValue(model, "max_context_length"); maxContextLength > 0 {
 		entry["context_window"] = maxContextLength
 		entry["max_context_window"] = maxContextLength
+	}
+}
+
+// Unset hints preserve the upstream templates. A reviewed default must exist in
+// the already projected reasoning levels and still passes client-version guards.
+func applyReviewedClientHints(entry map[string]any, model map[string]any) {
+	if window := intModelValue(model, "client_context_window"); window > 0 {
+		maximum := intModelValue(model, "client_max_context_window")
+		if maximum < window {
+			maximum = window
+		}
+		entry["context_window"], entry["max_context_window"] = window, maximum
+	}
+	level := stringModelValue(model, "client_default_reasoning_level")
+	if level == "" {
+		return
+	}
+	levels, _ := entry["supported_reasoning_levels"].([]any)
+	for _, value := range levels {
+		item, _ := value.(map[string]any)
+		if item["effort"] == level {
+			entry["default_reasoning_level"] = level
+			return
+		}
 	}
 }
 

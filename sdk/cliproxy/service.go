@@ -46,7 +46,8 @@ type Service struct {
 	appliedRoutingState    *routingRuntimeState
 
 	// configPath is the path to the configuration file.
-	configPath string
+	configPath            string
+	modelCatalogTransform ModelCatalogTransform
 
 	// tokenProvider handles loading token-based clients.
 	tokenProvider TokenClientProvider

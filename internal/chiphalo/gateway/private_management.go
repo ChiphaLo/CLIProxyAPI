@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/catalogsync"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
@@ -25,7 +27,12 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 	if len(fetchers) > 0 {
 		fetcher = fetchers[0]
 	}
+	return l.PrivateManagementWithActions(configPath, manager, ready, fetcher, CatalogActions{})
+}
+
+func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *coreauth.Manager, ready func() (int, map[string]any), fetcher quota.Fetcher, actions CatalogActions) http.Handler {
 	quotaSlot := make(chan struct{}, 1)
+	catalogSlot := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -34,6 +41,39 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "private management unavailable"})
 		}
 		if r.Method != http.MethodGet {
+			if r.Method == http.MethodPost && (r.URL.Path == "/catalog-review" || r.URL.Path == "/reload-reviewed-models") && r.URL.RawQuery == "" && actions.Reload != nil {
+				body, err := io.ReadAll(io.LimitReader(r.Body, 3))
+				if err != nil || len(body) != 0 {
+					fail(400)
+					return
+				}
+				if r.URL.Path == "/reload-reviewed-models" {
+					if err := actions.Reload(r.Context()); err != nil {
+						fail(503)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+					return
+				}
+				select {
+				case catalogSlot <- struct{}{}:
+					defer func() { <-catalogSlot }()
+				default:
+					fail(429)
+					return
+				}
+				if _, err := os.Lstat(filepath.Join(l.paths.ConfigDir, configbundle.FenceName)); !os.IsNotExist(err) {
+					fail(503)
+					return
+				}
+				publication, err := l.ReviewCatalog(r.Context(), configPath, manager, fetcher)
+				if err != nil {
+					fail(503)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(publication)
+				return
+			}
 			fail(405)
 			return
 		}
@@ -83,7 +123,7 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 				rows = append(rows, map[string]any{"id": b.ID, "prefix": b.Prefix, "label": b.Label, "enabled": b.Enabled()})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "accounts": rows})
-		case "/quota", "/reset-credits":
+		case "/quota", "/reset-credits", "/codex-models":
 			if r.URL.RawQuery != "" || manager == nil {
 				fail(400)
 				return
@@ -118,7 +158,10 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 				}
 				return quota.Credential{Token: token, Workspace: b.Workspace, Proxy: proxy}, nil
 			}
-			if r.URL.Path == "/reset-credits" {
+			if r.URL.Path == "/codex-models" {
+				models := catalogsync.Fetcher{Transport: fetcher.Transport, ClientVersion: catalogsync.ClientVersion(cfg.CodexHeaderDefaults.UserAgent)}
+				_ = json.NewEncoder(w).Encode(catalogsync.Discover(r.Context(), bindings, lookup, models, time.Now))
+			} else if r.URL.Path == "/reset-credits" {
 				_ = json.NewEncoder(w).Encode(quota.CollectResetCredits(r.Context(), bindings, lookup, fetcher, time.Now))
 			} else {
 				_ = json.NewEncoder(w).Encode(quota.Collect(r.Context(), bindings, lookup, fetcher, time.Now))

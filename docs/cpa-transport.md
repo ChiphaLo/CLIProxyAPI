@@ -980,3 +980,74 @@ OAuth mounts stayed read-only. No live inference, OAuth refresh or Reset consume
 was tested. Official model synchronization, consumption wiring, production host
 identities/refresh ownership and verified code/routes-only rollback still remain
 before cutover; shadow guards and `production_ready:false` are unchanged.
+
+## Explicit fixed-member OAuth catalog synchronization
+
+The Go GUI's explicit **Sync Codex catalog** action now starts a single
+background helper job. Polling its opaque job ID does not start additional
+probes, and key reads/edits do not wait on connected upstream review calls.
+Shutdown cancels the job; an interrupted publication is recovered through the
+existing durable apply fence/journal. Ordinary `/v1/models` reads remain read-only.
+
+Official discovery uses the fixed ChatGPT Codex model endpoint and the trusted
+configured Codex client version. Each registered member is read separately using
+its currently loaded SDK credential and configured proxy. It does not rotate
+tokens, scan for a replacement account, or use a shared workspace ID as member
+identity. Discovery rejects redirects and ambiguous/oversized JSON, projects only
+public capabilities, and an unavailable discovery cannot erase a working catalog.
+
+New or invalid capabilities are reviewed using the stock Codex HTTP executor.
+Each tiny `Reply with OK.` request uses exactly the selected member, without
+scheduling, fallback or retry. A read-only transport guard checks the final wire
+origin, credential headers, model, input, tools and explicit reasoning effort
+**after** translation and configured payload rules. A model/effort override is
+not evidence that the original capability worked. Response bodies are bounded;
+no connected-upstream read/write deadline is added. Probe usage is attributed to
+the fixed member under `/internal/catalog-probe`, preserving normal token billing.
+The returned model is an upstream assertion, not cryptographic attestation.
+
+Each explicit run reviews at most 16 models. Default success alone never becomes
+invented `medium` support. Existing valid metadata, API-provider capabilities,
+root extensions, pricing and historical records are preserved. A legacy union is
+seeded from the actual per-member registered intersection: stale allowlist names
+are not activated, and one missing historical name does not hide all working
+OAuth models. New publications contain a complete stable-ID-keyed
+`account_models` map. Unknown SDK models require an exact-member live review,
+valid verification timestamp, reviewed context and nonempty reasoning levels.
+
+An optional SDK catalog transform is enabled only by the CPA entrypoint, before
+stock alias/prefix handling. Reviewed context windows/default reasoning are
+carried through upstream client serialization; normal SDK behavior is unchanged
+when the adapter is absent. Readiness compares the actual registrations with
+reviewed capabilities, not merely the number of names. A rejected adapter does
+not leave a stale registration available or log private diagnostics.
+
+The private review produces a CAS proposal tied to the current YAML, account
+registry, exposure and context hashes. Publication changes only
+`exposed-codex-models.json` and `context-windows.json` under the same helper lock,
+durable pre/postimages and admission fence as provider application. It explicitly
+reloads SDK registrations and scheduler entries and confirms exact public model
+IDs and capabilities before committing. External edits cause refusal rather than
+old-snapshot replay. Rollback/restart reload the restored catalog before clearing
+the fence. Legacy three-file apply journals remain readable. Neither private
+review nor reload is mounted on a public route.
+
+### Synchronization evidence and remaining gates
+
+The isolated captured-environment run passed 67 integration checks, including
+the original 13 models, GUI async sync failure without data changes while offline,
+actual SDK registration of a synthetic primary-only reviewed model (13 → 14),
+metadata readiness, explicit restoration (14 → 13), provider add/remove and
+fault/restart recovery. The synthetic model is registration evidence only, not
+an assertion of official upstream availability. Linux helper suites also passed
+the two-file commit, stale-input CAS, failed-registration rollback/restart, and
+single-worker/nonblocking-read cases. Scoped Windows race/vet and the required
+server build passed. Production files and service PIDs were unchanged.
+
+All copied environment checks remained `--network none` with original auth
+mounts read-only. No real model probe, OAuth refresh or Banked Reset was executed.
+The stricter timestamp check is additionally covered by scoped unit checks.
+Real provider/Codex tool validation, Reset consumption wiring/static review,
+production hosting identities and refresh ownership, and verified code/routes-only
+rollback still remain before cutover. Shadow guards and `production_ready:false`
+remain in place; this work is not authorization to deploy to ciyun hk.

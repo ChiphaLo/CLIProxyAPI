@@ -43,7 +43,25 @@ func (p *LegacyProfile) CheckCatalogReadiness(cfg *config.Config, manager *corea
 			result.MissingCredentials++
 			continue
 		}
-		if len(models.GetModelsForClient(binding.AuthID)) == 0 {
+		missing := false
+		legacyNames := map[string]bool{}
+		if !p.Accounts.HasAccountCatalog() {
+			for _, info := range stockCodexCatalog(auth) {
+				legacyNames[info.ID] = true
+			}
+		}
+		for _, name := range p.Accounts.ModelNamesForAuth(binding.AuthID) {
+			if !p.Accounts.HasAccountCatalog() && !legacyNames[name] {
+				continue
+			}
+			if !models.ClientSupportsModel(binding.AuthID, binding.Prefix+"/"+name) {
+				missing = true
+			}
+		}
+		if !p.Accounts.HasAccountCatalog() && len(p.Accounts.ModelNamesForAuth(binding.AuthID)) > 0 && len(models.GetModelsForClient(binding.AuthID)) == 0 {
+			missing = true
+		}
+		if missing {
 			result.MissingCatalogs++
 		}
 	}

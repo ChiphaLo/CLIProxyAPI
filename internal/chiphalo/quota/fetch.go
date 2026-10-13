@@ -20,6 +20,12 @@ type Credential struct{ Token, Workspace, Proxy string }
 type TransportFactory func(string) (http.RoundTripper, error)
 type Fetcher struct{ Transport TransportFactory }
 
+// OfficialTransport shares the existing explicit, cancelable SDK transport
+// policy with other fixed official read endpoints, never environment proxies.
+func OfficialTransport(setting string) (http.RoundTripper, error) {
+	return defaultTransport(setting)
+}
+
 func defaultTransport(setting string) (http.RoundTripper, error) {
 	transport, _, err := proxyutil.BuildHTTPTransport(setting)
 	if err != nil {

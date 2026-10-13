@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
@@ -43,9 +44,10 @@ func (b Binding) Enabled() bool { return !b.disabled }
 // Registry is immutable after loading. Credentials stay in private auth files;
 // only identity fingerprints and the established public account IDs are kept.
 type Registry struct {
-	byPrefix map[string]Binding
-	byAuth   map[string]Binding
-	models   map[string]bool
+	byPrefix      map[string]Binding
+	byAuth        map[string]Binding
+	models        map[string]bool
+	accountModels map[string]map[string]bool
 }
 
 func Load(registryPath, authDir, modelsPath string) (*Registry, error) {
@@ -150,7 +152,76 @@ func Parse(raw []byte, authDir string, modelRaw []byte) (*Registry, error) {
 			return nil, fmt.Errorf("bare Codex models require an explicit primary codex account")
 		}
 	}
+	if err := r.loadAccountModels(modelRaw); err != nil {
+		return nil, err
+	}
 	return r, nil
+}
+
+// The legacy union remains readable, but a reviewed account catalog never
+// grants another account access merely because a name exists in that union.
+func (r *Registry) loadAccountModels(raw []byte) error {
+	var object map[string]json.RawMessage
+	if json.Unmarshal(raw, &object) != nil {
+		return nil
+	}
+	if configbundle.DecodeDraft(raw, &object) != nil {
+		return fmt.Errorf("ambiguous OAuth model catalog")
+	}
+	value, present := object["account_models"]
+	if !present {
+		return nil
+	}
+	var rows map[string][]string
+	if privatefile.Decode(value, &rows) != nil || rows == nil || len(rows) != len(r.byAuth) {
+		return fmt.Errorf("invalid account-local OAuth model catalog")
+	}
+	r.accountModels = map[string]map[string]bool{}
+	known := map[string]bool{}
+	for authID, binding := range r.byAuth {
+		list, found := rows[binding.ID]
+		if !found || list == nil || len(list) > 512 {
+			return fmt.Errorf("account-local OAuth model catalog is incomplete")
+		}
+		known[binding.ID] = true
+		set := map[string]bool{}
+		for _, name := range list {
+			if !r.models[name] || set[name] {
+				return fmt.Errorf("invalid or duplicate account-local OAuth model name")
+			}
+			set[name] = true
+		}
+		r.accountModels[authID] = set
+	}
+	for id := range rows {
+		if !known[id] {
+			return fmt.Errorf("unregistered account in OAuth model catalog")
+		}
+	}
+	return nil
+}
+func (r *Registry) modelsForAuth(authID string) map[string]bool {
+	if r.accountModels != nil {
+		return r.accountModels[authID]
+	}
+	return r.models
+}
+
+// HasAccountCatalog distinguishes reviewed per-member publications from the
+// legacy union, which may contain obsolete names never registered by the SDK.
+func (r *Registry) HasAccountCatalog() bool { return r.accountModels != nil }
+
+// ModelNamesForAuth returns only this registered credential's reviewed names.
+func (r *Registry) ModelNamesForAuth(authID string) []string {
+	if _, known := r.byAuth[authID]; !known {
+		return nil
+	}
+	result := []string{}
+	for model := range r.modelsForAuth(authID) {
+		result = append(result, model)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func credentialIdentity(metadata map[string]any) ([32]byte, error) {
@@ -241,10 +312,10 @@ func (r *Registry) Resolve(model, path string) (string, string, error) {
 	if !strings.HasSuffix(path, "/responses") {
 		return "", "", fmt.Errorf("OAuth model is not exposed for this endpoint")
 	}
-	if !r.models[name] {
+	binding := r.byPrefix[prefix]
+	if !r.modelsForAuth(binding.AuthID)[name] {
 		return "", "", fmt.Errorf("OAuth model is not in the exposed catalog")
 	}
-	binding := r.byPrefix[prefix]
 	if binding.disabled {
 		return "", "", fmt.Errorf("requested OAuth account is disabled")
 	}
@@ -280,8 +351,8 @@ func (r *Registry) Bindings() []Binding {
 
 func (r *Registry) PublicModelIDs() []string {
 	items := []string{}
-	for prefix := range r.byPrefix {
-		for model := range r.models {
+	for prefix, binding := range r.byPrefix {
+		for model := range r.modelsForAuth(binding.AuthID) {
 			if prefix == "codex" {
 				items = append(items, model)
 			} else {

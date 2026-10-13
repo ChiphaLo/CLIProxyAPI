@@ -74,6 +74,11 @@ type ModelInfo struct {
 	// MaxContextLength is an explicit per-model context window override from configuration.
 	// It is carried internally for Codex client model catalog generation.
 	MaxContextLength int `json:"-"`
+	// Client context hints retain independently reviewed ordinary/maximum
+	// windows without changing stock model metadata when these are unset.
+	ClientContextWindow         int    `json:"-"`
+	ClientMaxContextWindow      int    `json:"-"`
+	ClientDefaultReasoningLevel string `json:"-"`
 	// MaxCompletionTokens is the maximum completion tokens
 	MaxCompletionTokens int `json:"max_completion_tokens,omitempty"`
 	// SupportedParameters lists supported parameters
@@ -1717,6 +1722,15 @@ func (r *ModelRegistry) convertModelToMap(model *ModelInfo, handlerType string) 
 		}
 		if model.MaxContextLength > 0 {
 			result["max_context_length"] = model.MaxContextLength
+		}
+		if model.ClientContextWindow > 0 {
+			result["client_context_window"] = model.ClientContextWindow
+		}
+		if model.ClientMaxContextWindow > 0 {
+			result["client_max_context_window"] = model.ClientMaxContextWindow
+		}
+		if model.ClientDefaultReasoningLevel != "" {
+			result["client_default_reasoning_level"] = model.ClientDefaultReasoningLevel
 		}
 		if model.MaxCompletionTokens > 0 {
 			result["max_completion_tokens"] = model.MaxCompletionTokens

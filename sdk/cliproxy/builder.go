@@ -34,8 +34,9 @@ type Builder struct {
 	apiKeyProvider APIKeyClientProvider
 
 	// watcherFactory creates file watcher instances.
-	watcherFactory  WatcherFactory
-	configTransform func(*config.Config) error
+	watcherFactory        WatcherFactory
+	configTransform       func(*config.Config) error
+	modelCatalogTransform ModelCatalogTransform
 
 	// hooks provides lifecycle callbacks.
 	hooks Hooks
@@ -135,6 +136,14 @@ func (b *Builder) WithWatcherFactory(factory WatcherFactory) *Builder {
 // own equivalent policy. Nil leaves the stock SDK behavior unchanged.
 func (b *Builder) WithConfigTransform(transform func(*config.Config) error) *Builder {
 	b.configTransform = transform
+	return b
+}
+
+// WithModelCatalogTransform optionally supplies reviewed account-local model
+// definitions before ordinary OAuth alias/prefix registration. Nil preserves
+// stock SDK registration and serialization behavior.
+func (b *Builder) WithModelCatalogTransform(transform ModelCatalogTransform) *Builder {
+	b.modelCatalogTransform = transform
 	return b
 }
 
@@ -295,20 +304,21 @@ func (b *Builder) Build() (*Service, error) {
 	}
 
 	service := &Service{
-		cfg:                 b.cfg,
-		configPath:          b.configPath,
-		tokenProvider:       tokenProvider,
-		apiKeyProvider:      apiKeyProvider,
-		watcherFactory:      watcherFactory,
-		hooks:               b.hooks,
-		authManager:         authManager,
-		accessManager:       accessManager,
-		coreManager:         coreManager,
-		cooldownStateStore:  cooldownStateStore,
-		pluginHost:          pluginHost,
-		discoveryManager:    newDiscoveryAdvertiserManager(),
-		appliedRoutingState: appliedRoutingState,
-		serverOptions:       append([]api.ServerOption(nil), b.serverOptions...),
+		cfg:                   b.cfg,
+		configPath:            b.configPath,
+		tokenProvider:         tokenProvider,
+		apiKeyProvider:        apiKeyProvider,
+		watcherFactory:        watcherFactory,
+		hooks:                 b.hooks,
+		authManager:           authManager,
+		accessManager:         accessManager,
+		coreManager:           coreManager,
+		cooldownStateStore:    cooldownStateStore,
+		pluginHost:            pluginHost,
+		discoveryManager:      newDiscoveryAdvertiserManager(),
+		appliedRoutingState:   appliedRoutingState,
+		serverOptions:         append([]api.ServerOption(nil), b.serverOptions...),
+		modelCatalogTransform: b.modelCatalogTransform,
 	}
 	if b.postAuthHook != nil {
 		service.serverOptions = append(service.serverOptions, api.WithPostAuthHook(b.postAuthHook))

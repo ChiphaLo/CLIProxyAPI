@@ -12,6 +12,10 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
+// ModelCatalogTransform is a trusted in-process catalog adapter. It is not
+// configurable by public HTTP requests and must not refresh credentials.
+type ModelCatalogTransform func(context.Context, *coreauth.Auth, []*ModelInfo) ([]*ModelInfo, error)
+
 // TokenClientProvider loads clients backed by stored authentication tokens.
 // It provides an interface for loading authentication tokens from various sources
 // and creating clients for AI service providers.

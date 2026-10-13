@@ -11,6 +11,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
+	log "github.com/sirupsen/logrus"
 )
 
 // registerModelsForAuth (re)binds provider models in the global registry using the core auth ID as client identifier.
@@ -299,6 +300,17 @@ func (s *Service) registerModelsForAuthWithCache(ctx context.Context, a *coreaut
 	}
 	if ctx.Err() != nil {
 		return
+	}
+	if s.modelCatalogTransform != nil {
+		var err error
+		models, err = s.modelCatalogTransform(ctx, a.Clone(), models)
+		if err != nil {
+			// An adapter error may contain private source diagnostics. Do not
+			// include credentials, filenames or the underlying error in logs.
+			log.Warn("reviewed model catalog unavailable; client registration withheld")
+			GlobalModelRegistry().UnregisterClient(a.ID)
+			return
+		}
 	}
 	models = applyOAuthModelAliasForAuth(s.cfg, provider, authKind, a.Attributes, models)
 	if ctx.Err() != nil {
