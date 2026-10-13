@@ -707,3 +707,57 @@ Linux compilation/unit execution and the required server build passed. Empirical
 quota fitting, Reset management, model sync/probes, automatic subscription recovery
 and the actual production identity/refresh-owner/cutover gates remain pending;
 `production_ready:false` and shadow guards remain intact.
+
+## Go empirical quota fitting engine
+
+`internal/chiphalo/quotafit` now ports the existing `quota_model.py` numerical
+engine. It is not a replacement by a simpler linear model and does not import
+pricing or billing packages. It has no file, credential, network or Reset access.
+The host supplies the fitting epoch and input observations.
+
+Implemented contracts include conservative model aliases, raw/integer percentage
+normalization, account-local cycle/reset segmentation, coverage and lag windows,
+the original (start,end] token boundary, observation caps and skip diagnostics.
+Model insertion order is preserved internally for tied model selection. The
+weighted Gram/Cholesky Lawson-Hanson NNLS solver keeps non-negativity, singular
+system jitter and active/passive ordering. Huber reweighting, ridge, rank/condition
+and collinearity diagnostics retain their existing thresholds.
+
+The complete engine also includes per-model and shared-ratio pooled structures,
+coordinate refinement, relative Luna reference weights, bootstrap intervals and
+stability, outlier exclusion/refit, time-ordered held-out validation, per-cycle
+billing-regime drift and optional request-overhead diagnostics. Request overhead
+is diagnosed, not silently enabled. Reports retain the existing status/flag,
+coefficient, interval, metric, point, note and summary fields; insufficient data
+is not reported as a successful zero coefficient estimate.
+
+Bootstrap uses a port of CPython's integer-seeded MT19937/getrandbits rejection
+sampler, not Go's unrelated default PRNG. This makes seeded resampling and report
+comparisons reproducible across the language-only rewrite, including negative and
+large integer seeds. The engine does not feed empirical quota coefficients into
+the independently preserved token-price cost calculation.
+
+### Numerical evidence and remaining integration
+
+Seventy-one synthetic differential fixtures were generated from the captured
+Python implementation: 25 observation/numerical cases, 31 structure/bootstrap/PRNG
+cases and 15 full-report cases. They cover empty/invalid snapshots, raw fractional
+and rounded percentage feeds, clock gaps, reset cuts, lag shifts, duplicate sample
+times, independent/singular/zero/outlier designs, pooled and mixed structures,
+tied model order, request overhead, stable/drifting/shifted cycles, manual/outlier
+exclusions, model drops and disabled diagnostics. They contain no production
+requests, credentials or account identities. Full JSON structure, flags and values
+are compared recursively; finite numerical fields use the documented test
+absolute/relative tolerance of 2e-7, rather than claiming bit-for-bit arithmetic.
+
+The Linux run passed 75 tests/subcases with no failures/skips, using the captured
+portable image, `--network none`, an unprivileged UID, dropped capabilities and
+synthetic fixtures only. Scoped Windows race/vet and the required server build
+passed; the unchanged billing package's race tests stayed green. Generating the
+reference fixtures uses Python outside the fork; the engine and its tests are Go.
+
+This engine is not yet exposed by `/api/quota-model`. The GUI wrapper still needs
+its account/time/exclusion selection, report union/compaction, async single-flight
+cache and copied-production-history differential validation. No live official
+quota, OAuth refresh or Reset was performed, no production host was modified,
+and the production hosting/cutover gates remain closed.
