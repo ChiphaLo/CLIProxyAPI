@@ -641,3 +641,69 @@ the empirical fit port, production host identities/private IPC wiring and actual
 OAuth refresh-owner handoff. The isolation markers and `production_ready:false`
 gates remain in place. Release rollback remains code/routes only and must not
 restore older business snapshots.
+
+## SDK-bound Go quota collection
+
+The private `/quota` GET endpoint now uses each registered account's exact live
+SDK credential. It checks the registry's member identity, disabled state, prefix
+and workspace before reading the SDK access token. It never reads another
+account as fallback, refreshes OAuth itself, or exposes auth indexes/token files.
+The fixed official endpoint is `https://chatgpt.com/backend-api/wham/usage`; no
+caller-selected URL/method/header is accepted. Redirects and environment proxy
+inheritance are forbidden. Each account's proxy override or the configured global
+proxy is retained, including cancelable socks5h acquisition. No connected-upstream
+read/write timeout is introduced. The original caller's cancellation propagates.
+A single quota batch is admitted at a time, with two account workers.
+
+`cmd/cpa-quota-collector` is a Go-only, shadow-only replacement for the collector
+process. It receives sanitized snapshots through the mutually authenticated Unix
+channel, not OAuth files. It can run once or at a bounded polling interval. A
+failed official query retains quota/update time only for the same account ID,
+prefix, workspace and legacy attribution boundary. Its status remains unavailable;
+unknown usage is nullable, not fabricated as zero. Current-cycle CPA price billing
+continues to be owned by the unchanged billing accumulator, independent of quota.
+
+The Linux store anchors all file operations to a directory descriptor and uses
+no-follow, descriptor-relative opens/renames, rather than trusting a mutable
+privileged path after inspection. It preserves existing public file permissions
+and ownership, fsyncs the staged snapshot, atomically replaces it and fsyncs the
+directory. Corrupt snapshots fail closed. A process-lifetime kernel lock excludes
+another participating Go collector. Legacy collector timers must be stopped by
+supervision before this becomes the production writer; the lock does not magically
+coordinate writers that ignore it.
+
+History maintains the existing sanitized JSONL schema and half-open account/time
+exclusions. Only successful official weekly-window observations enter the fit
+history. Invalid exclusions or an incomplete historical line are reported without
+erasing history or invalidating an otherwise successful snapshot. Rotation never
+overwrites `.1` or any prior archive: it uses a fresh random archive name with
+no-replace rename and preserves exact old bytes. Historical pricing, requests,
+OAuth files and providers are not store targets. The command is not yet a
+production bootstrap or refresh-owner handoff mechanism.
+
+### Verification and limits
+
+Fifteen Linux quota tests and 53 Linux gateway/catalog tests passed with no
+failures/skips. Quota tests include fixed endpoint/headers, bounded responses,
+no credential/error-body leakage, socks5h and environment proxy behavior, two
+members sharing a workspace without rotation/fallback, stale quota matching,
+permissions, corrupted snapshots, exclusions, incomplete lines, non-overwriting
+rotation, kernel ownership and directory/file symlink substitution.
+
+The copied-environment run passed 53 integration checks. It ran the actual Go
+GUI/helper/gateway and standalone Go collector processes. The container had
+`--network none`: official acquisition correctly returned unavailable, retained
+both identities and their prior quota/update epochs, left fitting history
+unchanged, and changed no OAuth token, provider secret, issued key or request log.
+The GUI consumed the collector snapshot with cycle billing intact. Public `/quota`
+returned 404; the private endpoint stayed off the public router. Existing model
+apply/add/remove/recovery and session checks also remained green. Production
+tracked files and service PIDs stayed unchanged.
+
+Successful official-response behavior is currently verified with synthetic
+RoundTripper responses, **not** a live official quota HTTP test. No real inference,
+OAuth refresh or Banked Reset operation was performed. Scoped Windows race/vet,
+Linux compilation/unit execution and the required server build passed. Empirical
+quota fitting, Reset management, model sync/probes, automatic subscription recovery
+and the actual production identity/refresh-owner/cutover gates remain pending;
+`production_ready:false` and shadow guards remain intact.
