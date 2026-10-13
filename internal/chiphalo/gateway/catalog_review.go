@@ -23,7 +23,10 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 )
 
-type CatalogActions struct{ Reload func(context.Context) error }
+type CatalogActions struct {
+	Reload            func(context.Context) error
+	AllowResetConsume bool
+}
 
 func catalogHash(raw []byte) string { value := sha256.Sum256(raw); return hex.EncodeToString(value[:]) }
 

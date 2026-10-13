@@ -33,6 +33,7 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *coreauth.Manager, ready func() (int, map[string]any), fetcher quota.Fetcher, actions CatalogActions) http.Handler {
 	quotaSlot := make(chan struct{}, 1)
 	catalogSlot := make(chan struct{}, 1)
+	consumeSlot := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
@@ -41,6 +42,27 @@ func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *c
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error": "private management unavailable"})
 		}
 		if r.Method != http.MethodGet {
+			if r.Method == http.MethodPost && r.URL.Path == "/consume-reset-credit" && r.URL.RawQuery == "" && actions.AllowResetConsume {
+				select {
+				case consumeSlot <- struct{}{}:
+					defer func() { <-consumeSlot }()
+				default:
+					fail(429)
+					return
+				}
+				body, err := io.ReadAll(io.LimitReader(r.Body, 2049))
+				if err != nil {
+					fail(400)
+					return
+				}
+				result, err := l.ConsumeReset(r.Context(), configPath, manager, fetcher, body)
+				if err != nil {
+					fail(400)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(result)
+				return
+			}
 			if r.Method == http.MethodPost && (r.URL.Path == "/catalog-review" || r.URL.Path == "/reload-reviewed-models") && r.URL.RawQuery == "" && actions.Reload != nil {
 				body, err := io.ReadAll(io.LimitReader(r.Body, 3))
 				if err != nil || len(body) != 0 {

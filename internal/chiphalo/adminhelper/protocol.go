@@ -102,6 +102,7 @@ func encode(result Result) []byte {
 // Serve consumes an already secured Unix listener. No TCP fallback is allowed.
 func (s *Service) Serve(ctx context.Context, listener *net.UnixListener, allowedUID uint32) error {
 	defer s.stopCatalogJobs()
+	defer s.stopResetJobs()
 	var workers sync.WaitGroup
 	done := make(chan struct{})
 	defer close(done)

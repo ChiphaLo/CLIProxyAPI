@@ -1973,11 +1973,14 @@ function wireOAuthResetButtons(panel){
       const oldText=button.textContent;
       button.textContent='处理中…';
       try{
-        await api('/oauth-resets/consume',{method:'POST',body:JSON.stringify({prefix,credit_id:creditId})});
+        let result=await api('/oauth-resets/consume',{method:'POST',body:JSON.stringify({prefix,credit_id:creditId})});
+        while(result.pending){
+          await new Promise(resolve=>setTimeout(resolve,1500));
+          result=await api('/oauth-resets/consume',{method:'POST',body:JSON.stringify({job_id:result.job_id})});
+        }
         toast('Reset 已提交，正在刷新状态');
         await loadOAuthAccounts(panel);
       }catch(e){
-        button.disabled=false;
         button.textContent=oldText;
         toast('结果未确认。请先刷新 Banked Reset 状态，避免重复提交。','err');
       }

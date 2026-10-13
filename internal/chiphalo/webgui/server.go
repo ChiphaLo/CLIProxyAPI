@@ -310,6 +310,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.apply(w, r)
 	case path == "/api/sync-codex" && r.Method == "POST":
 		s.forward(w, r, "sync_codex", body)
+	case path == "/api/oauth-resets/consume" && r.Method == "POST":
+		s.forward(w, r, "consume_oauth_reset_credit", body)
 	case path == "/api/providers" || strings.HasPrefix(path, "/api/providers/"):
 		s.providers(w, r, path, body)
 	case path == "/api/prices":

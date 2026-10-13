@@ -1051,3 +1051,33 @@ Real provider/Codex tool validation, Reset consumption wiring/static review,
 production hosting identities and refresh ownership, and verified code/routes-only
 rollback still remain before cutover. Shadow guards and `production_ready:false`
 remain in place; this work is not authorization to deploy to ciyun hk.
+
+## Banked Reset consumption: implementation, not execution evidence
+
+The Go GUI/helper/private SDK route now contains the explicit Reset action.
+**It has not been invoked or tested**, including against mock endpoints, in
+accordance with the operator's instruction. Validation of this addition is
+limited to compilation, static inspection and vet; no Reset test is evidence
+for consumption correctness.
+
+The GUI still requires confirmation. A single asynchronous helper job reserves
+the stable account/credit pair and a v4 redemption UUID durably before submission.
+The reservation is outside release artifacts and remains after success, failure,
+unknown transport outcome or restart. Duplicate credit use is refused rather
+than retried. Polls cannot start another submission; an uncertain result requires
+official-status/operator reconciliation. Closing the page does not set an
+upstream response timeout. Shutdown cancels the worker without resubmission.
+
+The private gateway resolves the exact enabled SDK member, obtains fresh official
+GET metadata, checks the available credit/type/expiry, and revalidates member
+ownership immediately before one POST to the fixed official consume endpoint.
+It never refreshes credentials, accepts an arbitrary URL/auth index, follows a
+redirect or selects another account. Responses are bounded and projected into
+public status fields. The GUI keeps an uncertain action disabled until a page
+refresh; neither read-only quota collection nor model sync calls consumption.
+
+The helper additionally requires verified production readiness, and the private
+gateway action requires an explicit hosting capability. Existing shadow
+entrypoints do not enable it and still report `production_ready:false`. Its
+actual hosting activation is therefore a remaining production-bootstrap gate,
+not a side effect of compiling or running the copied-environment checks.

@@ -34,6 +34,9 @@ type Service struct {
 	catalogMu      sync.Mutex
 	catalogJob     *catalogJob
 	catalogWorkers sync.WaitGroup
+	redeemMu       sync.Mutex
+	redeemJob      *catalogJob
+	redeemWorkers  sync.WaitGroup
 }
 
 func New(paths Paths) (*Service, error) {
@@ -53,6 +56,9 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 	return s.dispatchContext(ctx, op, payload)
 }
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
+	if op == "consume_oauth_reset_credit" {
+		return s.consumeReset(ctx, payload)
+	}
 	if op == "sync_codex" {
 		return s.syncCatalog(payload)
 	}
