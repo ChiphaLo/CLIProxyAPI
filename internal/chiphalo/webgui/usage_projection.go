@@ -12,8 +12,8 @@ import (
 )
 
 const usageBlockBytes = 256 * 1024
-const usageCacheBytes = 24 * 1024 * 1024
-const usageCacheRows = 65536
+const usageCacheBytes = 48 * 1024 * 1024
+const usageCacheRows = 131072
 
 type usageRecord struct {
 	Row    billing.Row
