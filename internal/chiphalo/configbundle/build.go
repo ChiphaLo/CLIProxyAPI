@@ -494,6 +494,29 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 		put(entry, "name", node(name))
 		put(entry, "prefix", node(p.Prefix))
 		put(entry, "base-url", node(p.Base))
+		// OpenCode Go requires a conversation identity on every request, not
+		// just Muse's native Responses path. The executor expands this value
+		// from the ingress session or stable request-root fallback.
+		if p.Base == "https://opencode.ai/zen/go/v1" {
+			headers := get(entry, "headers")
+			if headers == nil || headers.Tag == "!!null" {
+				headers = node(map[string]any{})
+				put(entry, "headers", headers)
+			}
+			if headers.Kind != yaml.MappingNode {
+				return nil, invalid()
+			}
+			configured := false
+			for j := 0; j < len(headers.Content); j += 2 {
+				if strings.EqualFold(headers.Content[j].Value, "x-opencode-session") {
+					configured = true
+					break
+				}
+			}
+			if !configured {
+				put(headers, "x-opencode-session", node("$CPA-SESSION-ID"))
+			}
+		}
 		if get(entry, "disable-cooling") == nil {
 			put(entry, "disable-cooling", node(true))
 		}
