@@ -77,6 +77,8 @@ func TestRawUsageRejectsUnknownFormatsAndBounds(t *testing.T) {
 		`{"type":"message","usage":{"input_tokens":55,"output_tokens":3}}`,
 		`{"usageMetadata":null}`,
 		`data: [DONE]`,
+		`{"object":"response","usage":{}}`,
+		`{"type":"response.completed","response":{"usage":{"service_tier":"default"}}}`,
 		`{"object":"response","usage":{"extra":"` + strings.Repeat("x", maxRawUsageBytes) + `"}}`,
 	} {
 		r.ObserveResponseModel([]byte(payload))

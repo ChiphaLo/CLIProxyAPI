@@ -54,6 +54,10 @@ func (r *UsageReporter) observeRawUsage(payload []byte) {
 			return
 		}
 	}
+	// Empty/metadata-only usage is not an authoritative zero-token bill.
+	if (format == "responses" || format == "chat") && !hasOpenAIStyleUsageTokenFields(value) {
+		return
+	}
 	if len(value.Raw) > maxRawUsageBytes {
 		return
 	}
