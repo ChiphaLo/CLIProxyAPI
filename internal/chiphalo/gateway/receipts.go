@@ -25,6 +25,42 @@ type ReceiptSink struct {
 	accounts map[string]AccountBinding
 	lastErr  error
 	now      func() time.Time
+	gapAudit *AuditSink
+	unpriced uint64
+}
+
+// AccountingStatus separates storage health from durable per-request gaps.
+// The counter is process-local; individual gaps persist in the audit log.
+type AccountingStatus struct {
+	StorageHealthy   bool   `json:"storage_healthy"`
+	Complete         bool   `json:"complete"`
+	UnpricedRequests uint64 `json:"unpriced_requests_since_start"`
+}
+
+// EnableGapAudit must run before registering the sink with the usage manager.
+// Without a durable audit destination, unavailable usage still fails closed.
+func (s *ReceiptSink) EnableGapAudit(audit *AuditSink) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gapAudit = audit
+}
+
+func (s *ReceiptSink) accountingGap(ctx context.Context, record usage.Record, kind string) {
+	if s.gapAudit == nil {
+		s.lastErr = fmt.Errorf("CPA receipt %s: %s", record.RequestID, kind)
+		return
+	}
+	if err := s.gapAudit.RecordAccountingGap(ctx, record, kind); err != nil {
+		s.lastErr = fmt.Errorf("CPA accounting gap audit persistence failed: %w", err)
+		return
+	}
+	s.unpriced++
+}
+
+func (s *ReceiptSink) AccountingStatus() AccountingStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return AccountingStatus{StorageHealthy: s.lastErr == nil, Complete: s.lastErr == nil && s.unpriced == 0, UnpricedRequests: s.unpriced}
 }
 
 func OpenReceiptSink(path string, accounts map[string]AccountBinding) (*ReceiptSink, error) {
@@ -60,7 +96,7 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil || len(raw) == 0 {
-		s.lastErr = fmt.Errorf("CPA receipt %s: raw upstream usage unavailable", record.RequestID)
+		s.accountingGap(ctx, record, "usage_unavailable")
 		return
 	}
 	routed := record.Model
@@ -75,7 +111,7 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 		DurationMS: completed.Sub(meta.Started).Milliseconds(), TTFTMS: record.TTFT.Milliseconds(),
 	})
 	if err != nil {
-		s.lastErr = fmt.Errorf("CPA receipt %s: invalid raw upstream usage", record.RequestID)
+		s.accountingGap(ctx, record, "usage_invalid")
 		return
 	}
 	account, exists := s.accounts[record.AuthID]
@@ -105,7 +141,8 @@ func terminalName(model string) string {
 	return model[strings.LastIndexByte(model, '/')+1:]
 }
 
-// Err reports accounting failures without inventing zero-valued receipts.
+// Err reports storage/identity failures. Audited gaps remain visible in
+// AccountingStatus without blocking unrelated inference or configuration.
 func (s *ReceiptSink) Err() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

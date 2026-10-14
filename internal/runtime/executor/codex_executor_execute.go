@@ -318,6 +318,7 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
 	upstreamData := helps.RestoreCodexMultiAgentV2Response(data, optimizeMultiAgentV2)
+	reporter.ObserveResponseModel(data)
 	var param any
 	out := sdktranslator.TranslateNonStream(ctx, to, responseFormat, req.Model, originalPayload, body, upstreamData, &param)
 	if helps.ApplyPatchTranslationError(param) != nil || len(out) == 0 {

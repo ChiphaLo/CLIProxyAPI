@@ -44,7 +44,7 @@ func (o *StreamResponseModelObserver) Feed(chunk []byte) {
 	if o == nil || o.reporter == nil || len(chunk) == 0 {
 		return
 	}
-	if o.reporter.IsResponseModelFinal() {
+	if o.reporter.IsResponseModelFinal() && !o.reporter.captureRawUsage {
 		o.buf = nil
 		o.frame = nil
 		return
@@ -100,7 +100,7 @@ func (o *StreamResponseModelObserver) Feed(chunk []byte) {
 		}
 
 		o.handleLine(line)
-		if o.reporter.IsResponseModelFinal() {
+		if o.reporter.IsResponseModelFinal() && !o.reporter.captureRawUsage {
 			o.buf = nil
 			o.frame = nil
 			return

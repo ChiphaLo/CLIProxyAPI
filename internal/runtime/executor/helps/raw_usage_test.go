@@ -31,6 +31,31 @@ func TestRawUsageCaptureIsOptIn(t *testing.T) {
 	}
 }
 
+func TestRawResponsesCompactionAndTerminalRootUsage(t *testing.T) {
+	for _, identity := range []string{`"object":"response.compaction"`, `"type":"response.completed"`, `"type":"response.done"`, `"type":"response.incomplete"`} {
+		r := NewUsageReporter(usage.WithRawUsageCapture(context.Background()), "codex", "fixture", nil)
+		raw := `{"input_tokens":51,"output_tokens":17,"input_tokens_details":{"cached_tokens":40},"output_tokens_details":{"reasoning_tokens":12}}`
+		r.ObserveResponseModel([]byte(`{` + identity + `,"usage":` + raw + `}`))
+		if got, format := r.rawUsageSnapshot(); string(got) != raw || format != "responses" {
+			t.Fatalf("known Responses envelope lost raw usage: %s / %s", got, format)
+		}
+	}
+}
+
+func TestStreamObserverKeepsLateUsageAfterFinalModelIdentity(t *testing.T) {
+	r := NewUsageReporter(usage.WithRawUsageCapture(context.Background()), "fixture", "requested", nil)
+	o := NewStreamResponseModelObserver(r)
+	o.Feed([]byte("data: {\"type\":\"response.completed\",\"response\":{\"model\":\"served\"}}\n\n"))
+	late := "data: {\"object\":\"chat.completion.chunk\",\"choices\":[],\"usage\":{\"prompt_tokens\":70,\"completion_tokens\":8}}\n\n"
+	for _, chunk := range []string{late[:31], late[31:65], late[65:]} {
+		o.Feed([]byte(chunk))
+	}
+	o.Finish()
+	if raw, format := r.rawUsageSnapshot(); string(raw) != `{"prompt_tokens":70,"completion_tokens":8}` || format != "chat" || r.ResponseModel() != "served" {
+		t.Fatalf("late usage lost or final model mutated: %s / %s", raw, format)
+	}
+}
+
 func TestRawUsageAfterModelIdentityFinal(t *testing.T) {
 	r := NewUsageReporter(usage.WithRawUsageCapture(context.Background()), "fixture", "requested", nil)
 	r.ObserveResponseModel([]byte(`{"type":"response.completed","response":{"model":"reported","usage":null}}`))

@@ -45,7 +45,9 @@ func (r *UsageReporter) observeRawUsage(payload []byte) {
 		switch {
 		case value.Get("prompt_tokens").Exists() || value.Get("completion_tokens").Exists() || root.Get("object").String() == "chat.completion" || root.Get("object").String() == "chat.completion.chunk":
 			format = "chat"
-		case root.Get("object").String() == "response":
+		case root.Get("object").String() == "response" || root.Get("object").String() == "response.compaction":
+			format = "responses"
+		case root.Get("type").String() == "response.completed" || root.Get("type").String() == "response.done" || root.Get("type").String() == "response.incomplete":
 			format = "responses"
 		default:
 			// Do not silently interpret unknown native usage as Responses usage.

@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -66,7 +67,7 @@ func auditClass(status int) string {
 	return ""
 }
 
-func (s *AuditSink) append(row AuditRow) {
+func (s *AuditSink) append(row AuditRow) error {
 	raw, err := json.Marshal(row)
 	if err == nil {
 		err = s.file.Append(append(raw, '\n'))
@@ -76,6 +77,23 @@ func (s *AuditSink) append(row AuditRow) {
 		s.lastErr = err
 		s.mu.Unlock()
 	}
+	return err
+}
+
+// RecordAccountingGap retains metadata only. The inference itself may succeed,
+// but no normalized token estimate or fabricated zero-cost receipt is written.
+func (s *AuditSink) RecordAccountingGap(ctx context.Context, record usage.Record, kind string) error {
+	meta, ok := ctx.Value(metadataKey{}).(requestMetadata)
+	if !ok || kind != "usage_unavailable" && kind != "usage_invalid" {
+		return fmt.Errorf("invalid accounting audit metadata")
+	}
+	completed := time.Now()
+	if !record.RequestedAt.IsZero() {
+		completed = record.RequestedAt.Add(record.Latency)
+	}
+	return s.append(AuditRow{TS: completed.Unix(), RequestID: record.TraceID, ClientIP: meta.IP, Method: "POST", Path: meta.Path,
+		Model: meta.Model, KeyID: meta.KeyID, ProviderID: record.Provider, Status: 200, ErrorClass: kind,
+		DurationMS: completed.Sub(meta.Started).Milliseconds(), TTFTMS: record.TTFT.Milliseconds(), Event: "accounting_gap"})
 }
 
 // Middleware records admission errors, including authentication, unsupported

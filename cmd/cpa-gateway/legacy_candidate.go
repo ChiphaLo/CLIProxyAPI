@@ -170,6 +170,7 @@ func runLegacyCandidate(options candidateOptions) error {
 		return err
 	}
 	defer func() { _ = audit.Close() }()
+	sink.EnableGapAudit(audit)
 	store := &shadowStore{FileTokenStore: sdkauth.NewFileTokenStore(), root: options.Paths.AuthDir}
 	store.SetBaseDir(options.Paths.AuthDir)
 	healthRoot := options.Root
@@ -222,7 +223,7 @@ func runLegacyCandidate(options candidateOptions) error {
 		if options.Hosted != nil {
 			contract, id = options.Hosted.HealthContract(), options.Hosted.ReleaseID
 		}
-		return status, map[string]any{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": production, "release_id": id, "state_contract": contract, "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": production, "catalog": readiness}
+		return status, map[string]any{"ready": ok, "configuration_ready": configurationReady, "config_apply_pending": pending, "production_ready": production, "release_id": id, "state_contract": contract, "config_sha256": hex.EncodeToString(digest[:]), "credential_refresh": production, "catalog": readiness, "accounting": sink.AccountingStatus()}
 	}
 	serverOptions := []api.ServerOption{api.WithMiddleware(audit.Middleware(), func(c *gin.Context) {
 		if c.Request.Method == http.MethodGet && c.Request.URL.Path == "/__cpa_release/ready" {

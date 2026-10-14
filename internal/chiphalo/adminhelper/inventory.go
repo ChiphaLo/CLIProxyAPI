@@ -66,5 +66,5 @@ func (s *Service) readInventory(ctx context.Context, op string) Result {
 	if ready["ready"] == true {
 		state = "active"
 	}
-	return Result{"ok": true, "status": map[string]any{"gateway": state, "docker": "embedded Go SDK", "runtime": "embedded_go_sdk", "sdk_ready": ready["configuration_ready"] == true, "configuration_ready": ready["configuration_ready"], "config_apply_pending": ready["config_apply_pending"]}, "provider_secrets": secrets}
+	return Result{"ok": true, "status": map[string]any{"gateway": state, "docker": "embedded Go SDK", "runtime": "embedded_go_sdk", "sdk_ready": ready["configuration_ready"] == true, "configuration_ready": ready["configuration_ready"], "config_apply_pending": ready["config_apply_pending"], "accounting": ready["accounting"]}, "provider_secrets": secrets}
 }
