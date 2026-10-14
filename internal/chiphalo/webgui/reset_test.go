@@ -3,7 +3,10 @@ package webgui
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,5 +89,45 @@ func TestAccountFastPathDoesNotFetchResetCredits(t *testing.T) {
 	s.accountResponse(w, httptest.NewRequest("GET", "/api/oauth-accounts?include_reset=0", nil))
 	if w.Code != 200 {
 		t.Fatal("fast account page failed")
+	}
+}
+
+func TestResetCreditGETRoutePollsWithoutBillingScanOrConsumption(t *testing.T) {
+	s, _ := fixtureServer(t)
+	if err := writeJSON(s.options.Quota, map[string]any{"accounts": []any{map[string]any{"id": "one", "prefix": "codex", "workspace_id": "member-one"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// Credit reads must not parse usage or pricing just to identify accounts.
+	_ = os.Remove(s.options.Usage)
+	entered, release := make(chan struct{}), make(chan struct{})
+	s.options.Helper = probeHelperFunc(func(_ context.Context, op string, _ map[string]any) (map[string]any, error) {
+		if op != "oauth_reset_credits" {
+			t.Errorf("credit page attempted a non-read operation: %s", op)
+		}
+		close(entered)
+		<-release
+		return map[string]any{"ok": true, "accounts": map[string]any{"codex": map[string]any{"status": "ok", "available_count": float64(1), "credits": []any{}, "token": "private"}}}, nil
+	})
+	token, err := s.auth.login("local", "fixture-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() *httptest.ResponseRecorder {
+		r := httptest.NewRequest("GET", "/gui/api/oauth-reset-credits", nil)
+		r.AddCookie(&http.Cookie{Name: "cpa_session", Value: token})
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		return w
+	}
+	w := read()
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"loading"`) {
+		t.Fatalf("missing or blocking credit GET route: %d %s", w.Code, w.Body.String())
+	}
+	<-entered
+	close(release)
+	waitResetWorker(t, s)
+	w = read()
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"available_count":1`) || strings.Contains(w.Body.String(), "private") {
+		t.Fatalf("credit read failed or leaked credentials: %d %s", w.Code, w.Body.String())
 	}
 }

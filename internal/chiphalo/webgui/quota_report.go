@@ -450,7 +450,8 @@ func (s *Server) computeQuotaFit(window string, cycles int) (map[string]any, err
 		}
 	}
 	acc := billing.NewAccumulator(accounts, models, prices, now, marks)
-	if err := scanUsage(s.options.Usage, func(row billing.Row, _ map[string]any) error {
+	if err := s.visitUsage(func(entry usageRecord) error {
+		row := entry.Row
 		if priceErr == nil {
 			acc.Add(row)
 		}
@@ -473,7 +474,7 @@ func (s *Server) computeQuotaFit(window string, cycles int) (map[string]any, err
 		}
 		tokenRows[account.ID] = append(tokenRows[account.ID], map[string]any{"ts": row.TS, "model": model, "input": total - cache, "cached": cache, "output": output, "requests": 1})
 		return nil
-	}); err != nil {
+	}, nil); err != nil {
 		return nil, err
 	}
 	for _, bucket := range tokenRows {

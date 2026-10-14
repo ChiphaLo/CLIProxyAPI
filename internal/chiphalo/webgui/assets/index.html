@@ -1987,6 +1987,32 @@ function wireOAuthResetButtons(panel){
     };
   });
 }
+async function loadOAuthResetCredits(panel,accounts,loadId,{force=false}={}){
+  const current=()=>panel.isConnected&&panel._oauthLoadId===loadId&&page==="subs";
+  try{
+    for(let attempt=0;attempt<30&&current();attempt++){
+      const data=await api('/oauth-reset-credits'+(force&&attempt===0?'?fresh=1':''));
+      if(!current()) return;
+      let loading=false;
+      accounts.forEach(account=>{
+        const target=Array.from(panel.querySelectorAll('[data-reset-prefix]')).find(el=>el.getAttribute('data-reset-prefix')===String(account.prefix));
+        if(!target) return;
+        const reset=(data.accounts||{})[account.prefix]||{status:'unavailable'};
+        loading=loading||reset.status==='loading';
+        target.outerHTML=bankedResetHTML(reset,account);
+      });
+      wireOAuthResetButtons(panel);
+      if(!loading) return;
+      await new Promise(resolve=>setTimeout(resolve,2000));
+    }
+  }catch(e){
+    if(!current()) return;
+    accounts.forEach(account=>{
+      const target=Array.from(panel.querySelectorAll('[data-reset-prefix]')).find(el=>el.getAttribute('data-reset-prefix')===String(account.prefix));
+      if(target) target.outerHTML=bankedResetHTML({status:'unavailable'},account);
+    });
+  }
+}
 async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
   const loadId=panel._oauthLoadId=(panel._oauthLoadId||0)+1;
   if(!silent) stopOAuthQuotaCountdown(panel);
@@ -2029,23 +2055,7 @@ async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
     panel.querySelector('[data-oauth-refresh]').onclick=()=>loadOAuthAccounts(panel,{force:true});
     // Reset credits use a slower read-only management call; do not block
     // official quota and CPA billing while waiting for it.
-    if(silent) wireOAuthResetButtons(panel);
-    else api('/oauth-reset-credits').then(resetData=>{
-      if(!panel.isConnected||panel._oauthLoadId!==loadId||page!=="subs") return;
-      (data.accounts||[]).forEach(a=>{
-        const target=Array.from(panel.querySelectorAll('[data-reset-prefix]')).find(el=>el.getAttribute('data-reset-prefix')===String(a.prefix));
-        if(!target) return;
-        const reset=(resetData.accounts||{})[a.prefix]||{status:'unavailable'};
-        target.outerHTML=bankedResetHTML(reset,a);
-      });
-      wireOAuthResetButtons(panel);
-    }).catch(()=>{
-      if(!panel.isConnected||panel._oauthLoadId!==loadId||page!=="subs") return;
-      (data.accounts||[]).forEach(a=>{
-        const target=Array.from(panel.querySelectorAll('[data-reset-prefix]')).find(el=>el.getAttribute('data-reset-prefix')===String(a.prefix));
-        if(target) target.outerHTML=bankedResetHTML({status:'unavailable'},a);
-      });
-    });
+    loadOAuthResetCredits(panel,data.accounts||[],loadId,{force});
     const nextCycleEnd=(data.accounts||[]).map(a=>Number((a.billing||{}).cycle_end_ts||0)).filter(ts=>Number.isFinite(ts)&&ts>Date.now()/1000).sort((a,b)=>a-b)[0];
     const untilReset=nextCycleEnd?Math.max(1000,(nextCycleEnd-Date.now()/1000)*1000+1000):OAUTH_BILLING_POLL_MS;
     oauthBillingRefreshTimer=setTimeout(()=>{

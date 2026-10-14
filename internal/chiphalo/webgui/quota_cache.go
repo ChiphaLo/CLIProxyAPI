@@ -15,6 +15,7 @@ type quotaFitKey struct {
 	Window    string
 	Cycles    int
 	Signature string
+	Control   string
 }
 type quotaFitCache struct {
 	mu        sync.Mutex
@@ -35,6 +36,12 @@ func (s *Server) fitSignature() string {
 		history = filepath.Join(filepath.Dir(s.options.Quota), "oauth-quota-history.jsonl")
 	}
 	paths := []string{history, s.options.Usage, s.options.Quota, s.options.Exposed, filepath.Join(s.options.Data, "quota-model.json"), filepath.Join(s.options.Data, "gui.json"), filepath.Join(s.options.Data, "oauth-billing-resets.json")}
+	return fitFileSignature(paths)
+}
+func (s *Server) fitControlSignature() string {
+	return fitFileSignature([]string{s.options.Quota, s.options.Exposed, filepath.Join(s.options.Data, "quota-model.json"), filepath.Join(s.options.Data, "gui.json"), filepath.Join(s.options.Data, "oauth-billing-resets.json")})
+}
+func fitFileSignature(paths []string) string {
 	parts := []string{}
 	for _, path := range paths {
 		info, err := os.Lstat(path)
@@ -47,12 +54,18 @@ func (s *Server) fitSignature() string {
 	return strings.Join(parts, "|")
 }
 func (s *Server) quotaFitReport(window string, cycles int, force bool) map[string]any {
-	key := quotaFitKey{Window: window, Cycles: cycles, Signature: s.fitSignature()}
+	key := quotaFitKey{Window: window, Cycles: cycles, Signature: s.fitSignature(), Control: s.fitControlSignature()}
 	cache := &s.fitCache
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
 	now := s.options.Now()
 	if cache.data != nil && cache.key == key && now.Sub(cache.at) < 300*time.Second && !force {
+		return cache.data
+	}
+	// The empirical fit is explicitly as-of, not a per-request live counter.
+	// Appends must not turn the UI's 2.5-second computing poll into a permanent
+	// bootstrap/refit loop. Account, pricing and exclusion edits still invalidate.
+	if cache.data != nil && cache.key.Window == window && cache.key.Cycles == cycles && cache.key.Control == key.Control && now.Sub(cache.at) < 30*time.Second && !force {
 		return cache.data
 	}
 	if cache.err && cache.inflight == key && now.Sub(cache.errAt) < 10*time.Second && !force {

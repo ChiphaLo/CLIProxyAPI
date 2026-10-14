@@ -100,6 +100,7 @@ type Server struct {
 	slots      chan struct{}
 	fitCache   quotaFitCache
 	resetCache resetCreditCache
+	usageCache usageProjectionCache
 	stateFault func(string) error
 }
 
@@ -320,6 +321,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.usageResponse(w, r)
 	case path == "/api/oauth-accounts" && r.Method == "GET":
 		s.accountResponse(w, r)
+	case path == "/api/oauth-reset-credits" && r.Method == "GET":
+		s.resetCreditResponse(w, r)
 	case path == "/api/quota-model" && r.Method == "GET":
 		window := "recent"
 		if r.URL.Query().Get("window") == "all" {

@@ -185,6 +185,10 @@ func TestQuotaFitSourceChangesAndTTLRefresh(t *testing.T) {
 	}
 	_, _ = file.WriteString("{}\n")
 	_ = file.Close()
+	if value := s.quotaFitReport("recent", 6, false); value["computing"] != false || calls.Load() != 1 {
+		t.Fatal("usage appends restarted the computing poll loop")
+	}
+	*clock = clock.Add(31 * time.Second)
 	value := s.quotaFitReport("recent", 6, false)
 	if value["refreshing"] != true {
 		t.Fatal("source update ignored")
@@ -195,6 +199,27 @@ func TestQuotaFitSourceChangesAndTTLRefresh(t *testing.T) {
 	waitFitWorker(t, s)
 	if calls.Load() != 3 {
 		t.Fatal("TTL/source refresh wrong")
+	}
+}
+
+func TestQuotaFitControlEditsInvalidateWithoutThrottle(t *testing.T) {
+	s, _ := fixtureServer(t)
+	var calls atomic.Int32
+	s.fitCache.compute = func(string, int) (map[string]any, error) {
+		calls.Add(1)
+		return map[string]any{"status": "stable", "computing": false}, nil
+	}
+	_ = s.quotaFitReport("recent", 6, false)
+	waitFitWorker(t, s)
+	if err := writeJSON(filepath.Join(s.options.Data, "gui.json"), map[string]any{"prices": map[string]any{"updated": true}}); err != nil {
+		t.Fatal(err)
+	}
+	if value := s.quotaFitReport("recent", 6, false); value["refreshing"] != true {
+		t.Fatal("pricing edit was hidden by the append throttle")
+	}
+	waitFitWorker(t, s)
+	if calls.Load() != 2 {
+		t.Fatal("pricing edit did not trigger a refit")
 	}
 }
 func TestQuotaFitFailureIsExplicitAndBounded(t *testing.T) {

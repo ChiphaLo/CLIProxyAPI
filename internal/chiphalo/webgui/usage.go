@@ -130,8 +130,10 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 	byHalf := map[int64]*usageStat{}
 	models := map[string]bool{}
 	recent := []map[string]any{}
+	var recentEntries []usageRecord
 	todayKey := s.options.Now().UTC().Format("2006-01-02")
-	err = scanUsage(s.options.Usage, func(row billing.Row, raw map[string]any) error {
+	err = s.visitUsage(func(entry usageRecord) error {
+		row := entry.Row
 		if row.TS < start || row.TS >= end {
 			return nil
 		}
@@ -160,19 +162,34 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 			}
 			group.Slots[slot].add(row, cost)
 		}
-		raw["cost"] = cost
-		raw["input"] = max(row.Input-row.Cached, 0)
-		raw["total"] = max(row.Input-row.Cached, 0) + row.Cached + row.Output
-		if row.DurationMS > 7*86400000 {
-			raw["duration_ms"] = 0
+		recentEntries = append(recentEntries, entry)
+		if len(recentEntries) > limit {
+			slices.SortStableFunc(recentEntries, func(a, b usageRecord) int { return int(b.Row.TS - a.Row.TS) })
+			recentEntries = recentEntries[:limit]
 		}
-		if row.DurationMS <= 0 || row.DurationMS > 7*86400000 {
-			raw["output_tps"] = 0
-		}
-		recent = append(recent, raw)
-		if len(recent) > limit {
-			slices.SortFunc(recent, func(a, b map[string]any) int { return int(number(b["ts"]) - number(a["ts"])) })
-			recent = recent[:limit]
+		return nil
+	}, func(file *os.File) error {
+		// Preserve every existing recent-call field without caching full JSON.
+		for _, entry := range recentEntries {
+			line := make([]byte, entry.Length)
+			if _, err := file.ReadAt(line, entry.Offset); err != nil {
+				return errors.New("recent usage read failed")
+			}
+			var raw map[string]any
+			if json.Unmarshal(line, &raw) != nil {
+				return errors.New("recent usage changed during read")
+			}
+			row := entry.Row
+			raw["cost"] = billing.Cost(row, prices)
+			raw["input"] = max(row.Input-row.Cached, 0)
+			raw["total"] = max(row.Input-row.Cached, 0) + row.Cached + row.Output
+			if row.DurationMS > 7*86400000 {
+				raw["duration_ms"] = 0
+			}
+			if row.DurationMS <= 0 || row.DurationMS > 7*86400000 {
+				raw["output_tps"] = 0
+			}
+			recent = append(recent, raw)
 		}
 		return nil
 	})
@@ -227,14 +244,13 @@ func (s *Server) usageResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 200, value)
 }
-func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
+func (s *Server) quotaAccounts() ([]billing.Account, []map[string]any, error) {
 	var snapshot struct {
 		Accounts []json.RawMessage `json:"accounts"`
 		Updated  int64             `json:"updated_at"`
 	}
 	if readJSON(s.options.Quota, 4*1024*1024, false, &snapshot) != nil || snapshot.Accounts == nil {
-		reject(w, 503, "official quota snapshot unavailable")
-		return
+		return nil, nil, errors.New("official quota snapshot unavailable")
 	}
 	accounts := []billing.Account{}
 	public := []map[string]any{}
@@ -242,11 +258,18 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 		var account billing.Account
 		var value map[string]any
 		if json.Unmarshal(raw, &account) != nil || json.Unmarshal(raw, &value) != nil || account.ID == "" {
-			reject(w, 503, "quota account data invalid")
-			return
+			return nil, nil, errors.New("quota account data invalid")
 		}
 		accounts = append(accounts, account)
 		public = append(public, publicAccount(value))
+	}
+	return accounts, public, nil
+}
+func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
+	accounts, public, err := s.quotaAccounts()
+	if err != nil {
+		reject(w, 503, err.Error())
+		return
 	}
 	prices, err := s.prices()
 	if err != nil {
@@ -282,7 +305,8 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 	now := s.options.Now().Unix()
 	acc := billing.NewAccumulator(accounts, models, prices, now, marks)
 	unknown := int64(0)
-	if scanUsage(s.options.Usage, func(row billing.Row, _ map[string]any) error {
+	if s.visitUsage(func(entry usageRecord) error {
+		row := entry.Row
 		acc.Add(row)
 		if _, ok := billing.AccountForRow(row, accounts, models); !ok {
 			prefix, _, _ := strings.Cut(row.Model, "/")
@@ -291,7 +315,7 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		return nil
-	}) != nil {
+	}, nil) != nil {
 		reject(w, 503, "usage unavailable")
 		return
 	}

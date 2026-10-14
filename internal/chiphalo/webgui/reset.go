@@ -3,6 +3,7 @@ package webgui
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"sync"
 	"time"
 
@@ -44,6 +45,15 @@ func publicResetCredits(value any) map[string]any {
 		result["updated_at"] = int64(stamp)
 	}
 	return result
+}
+
+func (s *Server) resetCreditResponse(w http.ResponseWriter, r *http.Request) {
+	accounts, public, err := s.quotaAccounts()
+	if err != nil {
+		reject(w, 503, err.Error())
+		return
+	}
+	respond(w, 200, map[string]any{"ok": true, "accounts": s.resetReports(accounts, public, r.URL.Query().Get("fresh") == "1")})
 }
 
 // resetReports is read-only and asynchronous. Slow official GETs do not hold the
