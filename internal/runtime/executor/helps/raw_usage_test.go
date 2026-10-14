@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
+	"github.com/tidwall/gjson"
 )
 
 func TestRawUsageCaptureIsOptIn(t *testing.T) {
@@ -39,6 +41,53 @@ func TestRawResponsesCompactionAndTerminalRootUsage(t *testing.T) {
 		if got, format := r.rawUsageSnapshot(); string(got) != raw || format != "responses" {
 			t.Fatalf("known Responses envelope lost raw usage: %s / %s", got, format)
 		}
+	}
+}
+
+func TestRawOversizedAttributionPreservesOriginalBillingFields(t *testing.T) {
+	for _, format := range []string{"responses", "chat"} {
+		t.Run(format, func(t *testing.T) {
+			r := NewUsageReporter(usage.WithRawUsageCapture(context.Background()), "codex", "fixture", nil)
+			fields := `"input_tokens":"4107","output_tokens":27,"input_tokens_details":{"cached_tokens":4000,"cache_write_tokens":3},"output_tokens_details":{"reasoning_tokens":23}`
+			identity := `"object":"response"`
+			if format == "chat" {
+				fields = `"prompt_tokens":"4107","completion_tokens":27,"prompt_tokens_details":{"cached_tokens":4000,"cache_write_tokens":3},"completion_tokens_details":{"reasoning_tokens":23}`
+				identity = `"object":"chat.completion"`
+			}
+			payload := []byte(`{` + identity + `,"usage":{` + fields + `,"attribution":{"items":"` + strings.Repeat("PRIVATE_ITEM_METADATA", 5000) + `"}}}`)
+			r.ObserveResponseModel(payload)
+			record := r.buildRecord(usage.Detail{InputTokens: 999999}, false)
+			if record.RawUsageFormat != format || len(record.RawUsage) > maxRawUsageBytes || strings.Contains(string(record.RawUsage), "PRIVATE_") {
+				t.Fatal("oversized attribution poisoned capture or escaped the retained bound")
+			}
+			key := "input_tokens"
+			if format == "chat" {
+				key = "prompt_tokens"
+			}
+			if gjson.GetBytes(record.RawUsage, key).Raw != `"4107"` {
+				t.Fatal("original numeric representation was normalized")
+			}
+			raw := record.RawUsage
+			if format == "chat" {
+				var err error
+				raw, err = billing.ChatUsage(raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			row, err := billing.FromRawUsage(raw, billing.Row{})
+			if err != nil || row.Input != 4107 || row.Output != 27 || row.Cached != 4000 || row.Write != 3 {
+				t.Fatalf("billing changed after bounded projection: %+v / %v", row, err)
+			}
+		})
+	}
+}
+
+func TestRawOversizedBillingScalarRemainsUnknown(t *testing.T) {
+	r := NewUsageReporter(usage.WithRawUsageCapture(context.Background()), "codex", "fixture", nil)
+	r.ObserveResponseModel([]byte(`{"object":"response","usage":{"input_tokens":"` + strings.Repeat("9", maxRawUsageBytes+1) + `","output_tokens":1}}`))
+	if raw, _ := r.rawUsageSnapshot(); len(raw) != 0 {
+		t.Fatal("an unbounded billing scalar was retained or truncated into a fake number")
 	}
 }
 

@@ -2,6 +2,7 @@ package helps
 
 import (
 	"bytes"
+	"encoding/json"
 
 	"github.com/tidwall/gjson"
 )
@@ -58,13 +59,70 @@ func (r *UsageReporter) observeRawUsage(payload []byte) {
 	if (format == "responses" || format == "chat") && !hasOpenAIStyleUsageTokenFields(value) {
 		return
 	}
-	if len(value.Raw) > maxRawUsageBytes {
+	raw := boundedBillingUsage(value, format)
+	if len(raw) == 0 {
 		return
 	}
 	r.rawUsageMu.Lock()
-	r.rawUsage = append(r.rawUsage[:0], value.Raw...)
+	r.rawUsage = append(r.rawUsage[:0], raw...)
 	r.rawUsageFormat = format
 	r.rawUsageMu.Unlock()
+}
+
+// OpenAI usage.attribution can exceed the entire capture bound on long Codex
+// histories. Preserve raw billing values, not SDK-normalized counts, while
+// omitting the per-message attribution that CPA's billing never consumes.
+func boundedBillingUsage(value gjson.Result, format string) []byte {
+	if len(value.Raw) <= maxRawUsageBytes {
+		return []byte(value.Raw)
+	}
+	if format != "responses" && format != "chat" {
+		return nil
+	}
+	out := map[string]json.RawMessage{}
+	for _, key := range []string{"input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens", "prompt_cache_hit_tokens", "prompt_cache_miss_tokens"} {
+		field := lastJSONProperty(value, key)
+		if !field.Exists() {
+			continue
+		}
+		if len(field.Raw) > maxRawUsageBytes {
+			return nil
+		}
+		out[key] = json.RawMessage(field.Raw)
+	}
+	for _, key := range []string{"input_tokens_details", "output_tokens_details", "prompt_tokens_details", "completion_tokens_details"} {
+		field := lastJSONProperty(value, key)
+		if !field.Exists() {
+			continue
+		}
+		if !field.IsObject() {
+			if len(field.Raw) > maxRawUsageBytes {
+				return nil
+			}
+			out[key] = json.RawMessage(field.Raw)
+			continue
+		}
+		details := map[string]json.RawMessage{}
+		for _, name := range []string{"cached_tokens", "cache_write_tokens", "cache_creation_tokens", "reasoning_tokens", "accepted_prediction_tokens", "rejected_prediction_tokens"} {
+			count := lastJSONProperty(field, name)
+			if count.Exists() {
+				if len(count.Raw) > maxRawUsageBytes {
+					return nil
+				}
+				details[name] = json.RawMessage(count.Raw)
+			}
+		}
+		encoded, err := json.Marshal(details)
+		if err != nil || len(encoded) > maxRawUsageBytes {
+			return nil
+		}
+		out[key] = encoded
+	}
+	raw, err := json.Marshal(out)
+	if err != nil || len(raw) > maxRawUsageBytes {
+		return nil
+	}
+	return raw
 }
 
 // The deployed json.loads decoder used last-key-wins. Avoid changing receipt
