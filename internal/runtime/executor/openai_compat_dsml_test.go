@@ -93,3 +93,81 @@ func TestOpenAICompatDSMLHonorsFinalPayloadBarrier(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenAICompatStepRepeatedTerminalUsageResponses(t *testing.T) {
+	for _, custom := range []bool{false, true} {
+		t.Run(fmt.Sprint(custom), func(t *testing.T) {
+			args := `{"ok":true}`
+			tool := `{"type":"function","name":"health_check","parameters":{"type":"object","properties":{"ok":{"type":"boolean"}},"required":["ok"],"additionalProperties":false}}`
+			if custom {
+				args = `{"input":"text(1);"}`
+				tool = `{"type":"custom","name":"exec","format":{"type":"text"}}`
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				final, _ := io.ReadAll(r.Body)
+				name := gjson.GetBytes(final, "tools.0.function.name").String()
+				if name == "" {
+					t.Error("tool declaration lost")
+					w.WriteHeader(400)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				emit := func(delta any, finish any, usage any) {
+					value := map[string]any{"id": "step-fixture", "object": "chat.completion.chunk", "model": "step-5-preview-free", "created": 1791981514, "choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}}}
+					if usage != nil {
+						value["usage"] = usage
+					}
+					raw, _ := json.Marshal(value)
+					_, _ = fmt.Fprintf(w, "data: %s\n\n", raw)
+				}
+				emit(map[string]any{"tool_calls": []any{map[string]any{"index": 0, "id": "step-call", "type": "function", "function": map[string]any{"name": name, "arguments": ""}}}}, nil, nil)
+				emit(map[string]any{"tool_calls": []any{map[string]any{"index": 0, "function": map[string]any{"arguments": args}}}}, nil, nil)
+				end := map[string]any{"role": "assistant", "content": nil}
+				emit(end, "tool_calls", nil)
+				emit(end, "tool_calls", map[string]any{"prompt_tokens": 261, "completion_tokens": 24, "total_tokens": 285, "completion_tokens_details": map[string]any{"reasoning_tokens": 1}})
+				_, _ = io.WriteString(w, "data: [DONE]\n\n")
+			}))
+			defer server.Close()
+			e := NewOpenAICompatExecutor("fixture", &config.Config{})
+			auth := &cliproxyauth.Auth{Provider: "fixture", Attributes: map[string]string{"api_key": "synthetic", "base_url": server.URL}}
+			req := cliproxyexecutor.Request{Model: "step-5-preview-free", Payload: []byte(`{"model":"step-5-preview-free","input":[{"role":"user","content":"protocol fixture"}],"tools":[` + tool + `],"stream":true}`)}
+			result, err := e.ExecuteStream(opencode.WithRecovery(context.Background()), auth, req, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatOpenAIResponse, Stream: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var completed, done int
+			for chunk := range result.Chunks {
+				if chunk.Err != nil {
+					t.Fatal(chunk.Err)
+				}
+				for _, line := range strings.Split(string(chunk.Payload), "\n") {
+					if !strings.HasPrefix(line, "data: ") {
+						continue
+					}
+					root := gjson.Parse(strings.TrimPrefix(line, "data: "))
+					switch root.Get("type").String() {
+					case "response.output_item.done":
+						done++
+						if custom {
+							if root.Get("item.type").String() != "custom_tool_call" || root.Get("item.input").String() != "text(1);" {
+								t.Fatalf("custom call changed: %s", root.Raw)
+							}
+						} else if root.Get("item.name").String() != "health_check" || root.Get("item.arguments").String() != args {
+							t.Fatalf("function call changed: %s", root.Raw)
+						}
+					case "response.completed":
+						completed++
+						for path, want := range map[string]int64{"input_tokens": 261, "output_tokens": 24, "total_tokens": 285, "output_tokens_details.reasoning_tokens": 1} {
+							if root.Get("response.usage."+path).Int() != want {
+								t.Fatalf("late usage lost: %s", root.Raw)
+							}
+						}
+					}
+				}
+			}
+			if completed != 1 || done != 1 {
+				t.Fatalf("duplicate or missing terminal items: completed=%d done=%d", completed, done)
+			}
+		})
+	}
+}

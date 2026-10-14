@@ -146,3 +146,72 @@ func TestChatBridgeNonStreamAndUsageArePreserved(t *testing.T) {
 		t.Fatal("standalone usage event changed")
 	}
 }
+
+func TestChatBridgeStepRepeatedTerminalUsage(t *testing.T) {
+	usage := `{"prompt_tokens":261,"completion_tokens":24,"total_tokens":285,"prompt_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"completion_tokens_details":{"reasoning_tokens":1}}`
+	for _, mode := range []string{"native", "dsml", "text"} {
+		t.Run(mode, func(t *testing.T) {
+			bridge := newBridge(t, "auto")
+			var native any
+			text, finish := "", "tool_calls"
+			switch mode {
+			case "native":
+				native = []any{map[string]any{"index": 0, "id": "step-native", "type": "function", "function": map[string]any{"name": "exec", "arguments": `{"input":"text(1);"}`}}}
+			case "dsml":
+				text, finish = dsmlRoot(dsmlInvoke("exec", "input", "text(1);", "true")), "stop"
+			case "text":
+				text, finish = "OK", "stop"
+			}
+			if _, err := bridge.Event(chatEvent(text, finish, native)); err != nil {
+				t.Fatal(err)
+			}
+			late := []byte(`{"id":"fixture","object":"chat.completion.chunk","model":"reported-model","choices":[{"index":0,"delta":{"role":"assistant","content":null},"finish_reason":"` + finish + `"}],"usage":` + usage + `}`)
+			out, err := bridge.Event(late)
+			if err != nil || gjson.GetBytes(out, "choices").Raw != "[]" || gjson.GetBytes(out, "usage").Raw != usage {
+				t.Fatalf("late usage rejected or changed: %s %v", out, err)
+			}
+			if last, err := bridge.Finish(); err != nil || len(last) != 0 {
+				t.Fatalf("terminal duplicated: %s %v", last, err)
+			}
+		})
+	}
+}
+
+func TestChatBridgeRepeatedTerminalUsageStillRejectsNewOutput(t *testing.T) {
+	for _, delta := range []string{
+		`{"content":"late text"}`, `{"reasoning_content":"late reasoning"}`,
+		`{"tool_calls":[{"index":0,"function":{"arguments":"}"}}]}`,
+		`{"function_call":{"name":"exec"}}`, `{"role":"user"}`, `{"unknown":null}`, `[]`,
+	} {
+		t.Run(delta, func(t *testing.T) {
+			bridge := newBridge(t, "auto")
+			_, _ = bridge.Event(chatEvent("OK", "stop", nil))
+			late := []byte(`{"choices":[{"index":0,"delta":` + delta + `,"finish_reason":"stop"}],"usage":{"prompt_tokens":1}}`)
+			if _, err := bridge.Event(late); err == nil {
+				t.Fatal("post-terminal output was accepted")
+			}
+		})
+	}
+	for _, late := range []string{
+		`{"choices":[{"index":0,"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":1}}`,
+		`{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+		`{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":null}`,
+		`{"choices":[{"index":0,"delta":{},"finish_reason":"stop","message":{"content":"late"}}],"usage":{"prompt_tokens":1}}`,
+	} {
+		bridge := newBridge(t, "auto")
+		_, _ = bridge.Event(chatEvent("OK", "stop", nil))
+		if _, err := bridge.Event([]byte(late)); err == nil {
+			t.Fatalf("invalid late terminal accepted: %s", late)
+		}
+	}
+}
+
+func TestChatBridgeRepeatedTerminalDoesNotDropActiveChoices(t *testing.T) {
+	bridge := newBridge(t, "auto")
+	_, _ = bridge.Event(chatEvent("OK", "stop", nil))
+	raw := []byte(`{"choices":[{"index":0,"delta":{"content":""},"finish_reason":"stop"},{"index":1,"delta":{"content":"active"},"finish_reason":null}],"usage":{"prompt_tokens":1}}`)
+	out, err := bridge.Event(raw)
+	if err != nil || gjson.GetBytes(out, "choices.#").Int() != 1 || gjson.GetBytes(out, "choices.0.index").Int() != 1 || gjson.GetBytes(out, "choices.0.delta.content").String() != "active" {
+		t.Fatalf("active choice lost: %s %v", out, err)
+	}
+}

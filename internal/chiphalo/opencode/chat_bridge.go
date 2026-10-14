@@ -25,6 +25,7 @@ type choiceState struct {
 	buffer   strings.Builder
 	chars    int
 	finished bool
+	finish   string
 	overflow bool
 }
 
@@ -121,6 +122,43 @@ func (b *ChatBridge) Response(raw []byte) ([]byte, error) {
 	return raw, nil
 }
 
+// Some providers repeat a terminal choice on their late usage chunk. Only an
+// identical finish with no new output is redundant; usage remains untouched.
+func redundantUsageChoice(choice gjson.Result, finish string) bool {
+	if choice.Get("finish_reason").String() != finish {
+		return false
+	}
+	valid := true
+	choice.ForEach(func(key, value gjson.Result) bool {
+		switch key.String() {
+		case "index", "finish_reason":
+		case "logprobs":
+			valid = value.Type == gjson.Null
+		case "delta":
+			valid = value.IsObject()
+			if valid {
+				value.ForEach(func(key, value gjson.Result) bool {
+					switch key.String() {
+					case "role":
+						valid = value.Type == gjson.Null || value.Type == gjson.String && (value.String() == "" || value.String() == "assistant")
+					case "content", "reasoning_content", "reasoning":
+						valid = value.Type == gjson.Null || value.Type == gjson.String && value.String() == ""
+					case "tool_calls":
+						valid = value.Type == gjson.Null || value.IsArray() && len(value.Array()) == 0
+					default:
+						valid = false
+					}
+					return valid
+				})
+			}
+		default:
+			valid = false
+		}
+		return valid
+	})
+	return valid
+}
+
 // Event operates on one complete Chat SSE JSON event. DSML bytes stay buffered
 // until the ENTIRE batch and terminal finish_reason have been validated.
 func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
@@ -141,6 +179,7 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 	if len(metadata) > 0 {
 		b.metadata, _ = json.Marshal(metadata)
 	}
+	var redundant []int
 	for pos, choice := range choices {
 		index := int(choice.Get("index").Int())
 		state := b.states[index]
@@ -152,6 +191,10 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 			b.states[index] = state
 		}
 		if state.finished {
+			if gjson.GetBytes(raw, "usage").IsObject() && redundantUsageChoice(choice, state.finish) {
+				redundant = append(redundant, pos)
+				continue
+			}
 			return nil, fmt.Errorf("OpenCode choice emitted after its terminal event")
 		}
 		base := fmt.Sprintf("choices.%d", pos)
@@ -219,6 +262,16 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 		}
 		if finish != "" {
 			state.finished = true
+			state.finish = finish
+		}
+	}
+	// Delete backwards so other active choice indices and every raw usage field
+	// survive. Translators see a usage-only chunk, not another item finalization.
+	for i := len(redundant) - 1; i >= 0; i-- {
+		var err error
+		raw, err = sjson.DeleteBytes(raw, fmt.Sprintf("choices.%d", redundant[i]))
+		if err != nil {
+			return nil, fmt.Errorf("cannot serialize OpenCode usage event")
 		}
 	}
 	return raw, nil
