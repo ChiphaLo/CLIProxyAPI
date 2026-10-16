@@ -10,6 +10,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/appendlog"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/modelidentity"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 )
 
@@ -126,7 +127,7 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 		row.OAuthAccountID, row.OAuthPrefix = account.ID, account.Prefix
 		row.RoutedModel = account.Prefix + "/" + terminalName(routed)
 	}
-	row.ModelMismatch = row.UpstreamReportedModel != "" && terminalName(row.Model) != terminalName(row.UpstreamReportedModel)
+	row.ModelMismatch = modelidentity.Mismatch(row.Model, row.UpstreamReportedModel)
 	data, err := json.Marshal(row)
 	if err == nil {
 		err = s.file.Append(append(data, '\n'))

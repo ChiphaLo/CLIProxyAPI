@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/modelidentity"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/nativegemini"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
@@ -161,6 +162,9 @@ func (p *LegacyProfile) GeminiCatalog(base *handlers.BaseAPIHandler) gin.Handler
 				}
 				c.Next()
 				return
+			}
+			if canonical := modelidentity.Expected(name); action == "list" && canonical != name && routable[canonical] && p.Keys.Authorize(keyID, canonical) == nil {
+				continue
 			}
 			rows = append(rows, copy)
 		}

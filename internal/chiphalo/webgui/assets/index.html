@@ -1328,12 +1328,13 @@ const recentModelCell = c => {
   const requested=String(c.model||"").trim();
   const reported=String(c.upstream_reported_model||"").trim();
   const routed=String(c.routed_model||"").trim();
-  const mismatch=Boolean(reported && requested && modelName(reported)!==modelName(requested));
+  const displayed=String(c.display_model||requested).trim();
+  const mismatch=typeof c.model_mismatch==="boolean"?c.model_mismatch:Boolean(reported && requested && modelName(reported)!==modelName(requested));
   const lines=[`请求：${requested||"—"}`];
   if(routed) lines.push(`路由：${routed}`);
   lines.push(`上游响应：${reported||"—"}`);
   const title=lines.join("\n");
-  return `<div class="model-req">${esc(requested||"—")}</div><div class="model-sub${mismatch?" mismatch":""}" title="${esc(title)}">${mismatch?'<span class="model-mismatch-tag">模型不一致</span>':''}上游响应：${esc(reported||"—")}</div>`;
+  return `<div class="model-req" title="${esc(title)}">${esc(displayed||"—")}</div><div class="model-sub${mismatch?" mismatch":""}" title="${esc(title)}">${mismatch?'<span class="model-mismatch-tag">模型不一致</span>':''}上游响应：${esc(reported||"—")}</div>`;
 };
 const timeAgo = t => { if(!t) return "从未使用"; const d=Math.floor(Date.now()/1000-t); if(d<60)return d+" 秒前"; if(d<3600)return Math.floor(d/60)+" 分钟前"; if(d<86400)return Math.floor(d/3600)+" 小时前"; return new Date(t*1000).toLocaleDateString("zh-CN"); };
 const dateStr = t => new Date(t*1000).toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});

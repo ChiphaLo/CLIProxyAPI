@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/modelidentity"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
 )
 
@@ -181,6 +182,10 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 				return errors.New("recent usage changed during read")
 			}
 			row := entry.Row
+			// Read-only identity projection also corrects legacy alias badges.
+			// Original model, tokens, timestamps and price lookup stay unchanged.
+			raw["display_model"] = modelidentity.Display(row.Model, row.UpstreamReportedModel)
+			raw["model_mismatch"] = modelidentity.Mismatch(row.Model, row.UpstreamReportedModel)
 			raw["cost"] = billing.Cost(row, prices)
 			raw["input"] = max(row.Input-row.Cached, 0)
 			raw["total"] = max(row.Input-row.Cached, 0) + row.Cached + row.Output

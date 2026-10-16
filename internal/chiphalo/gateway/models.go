@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/modelidentity"
 	codexmodels "github.com/router-for-me/CLIProxyAPI/v8/internal/client/codex/models"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	responsesclaude "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/claude/openai/responses"
@@ -69,6 +70,9 @@ func (p *LegacyProfile) ModelCatalog(base *handlers.BaseAPIHandler) gin.HandlerF
 			}
 		}
 		for id, row := range available {
+			if canonical := modelidentity.Expected(id); canonical != id && available[canonical] != nil && p.Keys.Authorize(keyID, canonical) == nil {
+				continue // Keep legacy routing, but list only the verified response ID.
+			}
 			// Never publish unregistered or unpublished credentials from an OAuth
 			// pool, including a duplicate primary codex/ group.
 			if slices.Contains(modelRegistry.GetModelProviders(id), "codex") || sources[id] != "" || p.Keys.Authorize(keyID, id) != nil {

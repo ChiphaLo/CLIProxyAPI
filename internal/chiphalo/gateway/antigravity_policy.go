@@ -4,6 +4,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/modelidentity"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 )
 
@@ -22,4 +23,20 @@ func ApplyAntigravityPolicy(cfg *config.Config) {
 	}
 	excluded["antigravity"] = models
 	cfg.OAuthExcludedModels = excluded
+	aliases := maps.Clone(cfg.OAuthModelAlias)
+	if aliases == nil {
+		aliases = map[string][]config.OAuthModelAlias{}
+	}
+	entries := slices.Clone(aliases["antigravity"])
+	// Keep the supported upstream route registered for existing conversations.
+	// Native aliases preserve its thinking and modality metadata on refresh.
+	if !slices.ContainsFunc(entries, func(entry config.OAuthModelAlias) bool {
+		return entry.Alias == modelidentity.AntigravityFlashReported
+	}) {
+		entries = append(entries, config.OAuthModelAlias{
+			Name: modelidentity.AntigravityFlashRoute, Alias: modelidentity.AntigravityFlashReported, Fork: true,
+		})
+	}
+	aliases["antigravity"] = entries
+	cfg.OAuthModelAlias = aliases
 }
