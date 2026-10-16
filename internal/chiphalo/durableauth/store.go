@@ -90,7 +90,7 @@ func (s *Store) List(ctx context.Context) ([]*coreauth.Auth, error) {
 func (s *Store) Delete(context.Context, string) error { return ErrReadOnly }
 
 func (s *Store) path(auth *coreauth.Auth) (string, error) {
-	if auth == nil || !coreauth.IsCodexAuthRecord(auth) {
+	if auth == nil || !coreauth.IsCodexAuthRecord(auth) && !(auth.Provider == "antigravity" && auth.Metadata["type"] == "antigravity") {
 		return "", ErrUnsafePath
 	}
 	name := strings.TrimSpace(auth.Attributes[coreauth.AttributePath])
@@ -162,7 +162,11 @@ func (s *Store) Save(ctx context.Context, auth *coreauth.Auth) (string, error) {
 			return ErrUnconfirmed
 		}
 		coreauth.NormalizeCredentialMetadata(disk)
-		for _, key := range []string{"type", "prefix", "account_id", "email", "access_token", "refresh_token", "id_token", "expired", "disabled"} {
+		keys := []string{"type", "prefix", "account_id", "email", "access_token", "refresh_token", "id_token", "expired", "disabled"}
+		if auth.Provider == "antigravity" {
+			keys = append(keys, "project_id", "proxy_url", "antigravity_capability_hints")
+		}
+		for _, key := range keys {
 			if value, found := auth.Metadata[key]; found && !reflect.DeepEqual(value, disk[key]) {
 				return ErrUnconfirmed
 			}

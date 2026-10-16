@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -52,6 +53,73 @@ func TestNativeCodexSaveConfirmedWithoutLosingBusinessFieldsOrMode(t *testing.T)
 	}
 	if _, err := os.Lstat(filepath.Join(health, markerName)); !os.IsNotExist(err) {
 		t.Fatal("confirmed save left a restart fence")
+	}
+}
+
+func TestAntigravityMetadataAndRefreshSaveRemainDurable(t *testing.T) {
+	dir, health := privateRoots(t)
+	auth := fixtureAuth(t, dir)
+	auth.Provider, auth.Prefix = "antigravity", "antigravity"
+	auth.Metadata["type"], auth.Metadata["prefix"] = "antigravity", "antigravity"
+	auth.Metadata["project_id"], auth.Metadata["proxy_url"] = "project-fixture", "socks5h://127.0.0.1:10808"
+	delete(auth.Metadata, "account_id")
+	initial, _ := json.Marshal(auth.Metadata)
+	path := filepath.Join(dir, "test.json")
+	if err := os.WriteFile(path, initial, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(dir, health, sdkauth.NewFileTokenStore(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	auth.Metadata["antigravity_capability_hints"] = map[string]any{"project_id": "project-fixture", "endpoint": "https://daily-cloudcode-pa.googleapis.com", "model_ids": []any{"gemini-fixture"}}
+	for _, refresh := range []bool{false, true} {
+		if refresh {
+			auth.Metadata["access_token"], auth.Metadata["refresh_token"] = "access-new", "refresh-new"
+		}
+		if saved, err := s.Save(context.Background(), auth); err != nil || saved != path || s.Err() != nil || s.Pending() {
+			t.Fatalf("Antigravity save failed (refresh=%t): %v", refresh, err)
+		}
+		raw, err := os.ReadFile(path)
+		var actual map[string]any
+		if err != nil || json.Unmarshal(raw, &actual) != nil || !reflect.DeepEqual(actual, auth.Metadata) {
+			t.Fatal("metadata, routing, project or rotated tokens changed during save")
+		}
+		info, _ := os.Stat(path)
+		if info.Mode().Perm() != 0600 {
+			t.Fatal("credential mode changed")
+		}
+		if _, err := os.Lstat(filepath.Join(health, markerName)); !os.IsNotExist(err) {
+			t.Fatal("confirmed Antigravity save left a restart fence")
+		}
+	}
+	if _, err := Open(dir, health, sdkauth.NewFileTokenStore(), false); err != nil {
+		t.Fatalf("confirmed Antigravity save blocked restart: %v", err)
+	}
+}
+
+func TestAntigravityConfirmationChecksProjectAndCapabilityHints(t *testing.T) {
+	for _, key := range []string{"project_id", "proxy_url", "antigravity_capability_hints"} {
+		t.Run(key, func(t *testing.T) {
+			dir, health := privateRoots(t)
+			auth := fixtureAuth(t, dir)
+			auth.Provider, auth.Metadata["type"] = "antigravity", "antigravity"
+			auth.Metadata[key] = "expected-fixture"
+			inner := &testStore{save: func(_ context.Context, a *coreauth.Auth) (string, error) {
+				wrong := maps.Clone(a.Metadata)
+				wrong[key] = "wrong-fixture"
+				raw, _ := json.Marshal(wrong)
+				path := filepath.Join(dir, "test.json")
+				return path, os.WriteFile(path, raw, 0600)
+			}}
+			s, err := Open(dir, health, inner, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Save(context.Background(), auth); err != ErrUnconfirmed || s.Err() != ErrUnconfirmed {
+				t.Fatal("wrong Antigravity postimage was accepted")
+			}
+		})
 	}
 }
 
