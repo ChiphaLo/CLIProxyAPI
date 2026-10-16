@@ -53,6 +53,7 @@ func hostedTransform(options candidateOptions) (func(*config.Config) error, erro
 		cfg.UsageStatisticsEnabled = false
 		cfg.SaveCooldownStatus = false
 		cfg.WebsocketAuth = true
+		gateway.ApplyAntigravityPolicy(cfg)
 		return nil
 	}, nil
 }

@@ -30,18 +30,30 @@ func collectAntigravityQuota(ctx context.Context, manager *coreauth.Manager, pro
 		allowed := map[string]bool{}
 		for _, info := range registry.GetGlobalRegistry().GetModelsForClient(auth.ID) {
 			if info != nil {
-				allowed[strings.TrimPrefix(info.ID, auth.Prefix+"/")] = true
+				name := strings.TrimPrefix(info.ID, auth.Prefix+"/")
+				if strings.HasPrefix(name, "gemini-") {
+					allowed[name] = true
+				}
 			}
 		}
 		route := auth.ProxyURL
 		if route == "" {
 			route = proxy
 		}
-		models, err := fetcher.FetchAntigravity(ctx, quota.Credential{Token: token, Workspace: project, Proxy: route}, allowed)
-		if err == nil {
+		credential := quota.Credential{Token: token, Workspace: project, Proxy: route}
+		summary, summaryErr := fetcher.FetchAntigravitySummary(ctx, credential)
+		if summaryErr == nil {
 			row.Status = "ok"
-			row.Models = models
-			row.Updated = new(time.Now().Unix())
+			row.Gemini = summary
+			row.Updated = summary.Updated
+		} else {
+			row.Gemini = &quota.AntigravityGeminiQuota{Status: "unavailable", Checked: time.Now().Unix()}
+			models, err := fetcher.FetchAntigravity(ctx, credential, allowed)
+			if err == nil {
+				row.Status = "ok"
+				row.Models = models
+				row.Updated = new(time.Now().Unix())
+			}
 		}
 		rows = append(rows, row)
 	}

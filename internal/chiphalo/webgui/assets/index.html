@@ -2015,15 +2015,14 @@ async function loadOAuthResetCredits(panel,accounts,loadId,{force=false}={}){
 }
 function antigravityQuotaHTML(accounts,now=Date.now()){
   return (accounts||[]).map(a=>{
-    const stale=a.status!=='ok'||!a.updated_at||now/1000-a.updated_at>300;
-    const rows=(a.models||[]).map(m=>{
-      const remaining=typeof m.remaining_percent==='number'&&Number.isFinite(m.remaining_percent)?Math.max(0,Math.min(100,m.remaining_percent)):null;
-      const resetAt=quotaResetEpochSeconds(m.reset_at);
-      return `<div class="quota-item"><div class="quota-line"><span>${esc(m.model)}</span><strong>${remaining===null?'官方未提供':fmt(remaining)+'% 剩余'}</strong></div>
-        ${remaining===null?'':`<div class="quota-track" role="progressbar" aria-label="${esc(m.model)}剩余额度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${remaining}"><span style="width:${remaining}%"></span></div>`}
-        <div class="quota-reset"${resetAt===null?'':` data-reset-at="${esc(resetAt)}"`}>${esc(resetAt===null?'重置时间未知':quotaResetCountdown(resetAt,now))}</div></div>`;
-    }).join('');
-    return `<section class="oauth-account"><div class="oauth-account-head"><div class="grow"><h4 class="oauth-account-title">${esc(a.prefix)} · Antigravity</h4><p class="oauth-account-meta">Google 官方额度 · 更新时间：${esc(a.updated_at?new Date(a.updated_at*1000).toLocaleString():'未知')}</p></div><span class="badge ${stale?'warn':'ok'}">${stale?'数据过期 / 暂不可用':'已更新'}</span></div><div class="quota-list">${rows||'<p class="muted">官方额度暂不可用，未按 0 或无限额度显示。</p>'}</div><p class="muted">各模型可能共享额度池，不能将百分比相加。后台定期采集；这些是官方剩余比例，不是 CPA 估算费用。</p></section>`;
+    const q=a.gemini||{};
+    const stale=a.status!=='ok'||q.status!=='ok'||!q.updated_at||now/1000-q.updated_at>300;
+    const models=(a.models||[]).filter(m=>String(m.model||'').startsWith('gemini-')&&typeof m.remaining_percent==='number'&&Number.isFinite(m.remaining_percent)&&m.remaining_percent>=0&&m.remaining_percent<=100);
+    const worst=models.reduce((best,m)=>!best||m.remaining_percent<best.remaining_percent?m:best,null);
+    const five=q.five_hour||(worst?{used_percent:100-worst.remaining_percent,remaining_percent:worst.remaining_percent,limit_window_seconds:18000,reset_at:worst.reset_at}:null);
+    const unknown=label=>`<div class="quota-item"><div class="quota-line"><span>${esc(label)}</span><strong>官方未提供</strong></div><p class="muted">暂不可用；不从其他周期推算。</p></div>`;
+    const updated=q.updated_at||a.updated_at;
+    return `<section class="oauth-account"><div class="oauth-account-head"><div class="grow"><h4 class="oauth-account-title">${esc(a.prefix)} · Gemini</h4><p class="oauth-account-meta">Google 官方额度 · 更新时间：${esc(updated?new Date(updated*1000).toLocaleString():'未知')}</p></div><span class="badge ${stale?'warn':'ok'}">${stale?'数据过期 / 部分不可用':'已更新'}</span></div><div class="quota-list">${five?oauthWindowText(five):unknown('5 小时额度')}${q.weekly?oauthWindowText(q.weekly):unknown('周额度')}</div><p class="muted">Gemini 系列按同一额度组显示；5 小时与周额度独立限制，不相加。${q.status==='ok'?'数据源：Google 官方额度汇总。':'汇总暂不可用；短周期可回退为已发布 Gemini 模型中最少的官方剩余比例。'}</p></section>`;
   }).join('');
 }
 async function loadOAuthAccounts(panel,{silent=false,force=false}={}){

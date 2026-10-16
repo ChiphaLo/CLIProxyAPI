@@ -122,6 +122,7 @@ func candidateTransform(options candidateOptions) (func(*config.Config) error, e
 		cfg.UsageStatisticsEnabled = false
 		cfg.SaveCooldownStatus = false
 		cfg.WebsocketAuth = true
+		gateway.ApplyAntigravityPolicy(cfg)
 		return nil
 	}, nil
 }

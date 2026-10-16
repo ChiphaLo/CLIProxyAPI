@@ -76,6 +76,13 @@ func Collect(ctx context.Context, bindings []Binding, lookup Lookup, fetcher Fet
 // tuple. Collector failure must not turn an unavailable account into zero usage.
 func CarryPrevious(current Snapshot, previous Snapshot) Snapshot {
 	for i, row := range current.Antigravity {
+		for _, old := range previous.Antigravity {
+			if row.ID == old.ID && row.Prefix == old.Prefix && row.Gemini != nil && row.Gemini.Status != "ok" && old.Gemini != nil {
+				current.Antigravity[i].Gemini.FiveHour = old.Gemini.FiveHour
+				current.Antigravity[i].Gemini.Weekly = old.Gemini.Weekly
+				current.Antigravity[i].Gemini.Updated = old.Gemini.Updated
+			}
+		}
 		if row.Status == "ok" {
 			continue
 		}

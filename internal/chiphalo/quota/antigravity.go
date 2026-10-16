@@ -18,6 +18,7 @@ import (
 )
 
 const AntigravityModelsURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels"
+const AntigravitySummaryURL = "https://daily-cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary"
 
 var publicModelName = regexp.MustCompile(`^[a-zA-Z0-9._/-]{1,200}$`)
 
@@ -28,12 +29,21 @@ type AntigravityModel struct {
 }
 
 type AntigravityAccount struct {
-	ID      string             `json:"id"`
-	Prefix  string             `json:"prefix"`
-	Status  string             `json:"status"`
-	Checked int64              `json:"checked_at"`
-	Updated *int64             `json:"updated_at"`
-	Models  []AntigravityModel `json:"models"`
+	ID      string                  `json:"id"`
+	Prefix  string                  `json:"prefix"`
+	Status  string                  `json:"status"`
+	Checked int64                   `json:"checked_at"`
+	Updated *int64                  `json:"updated_at"`
+	Models  []AntigravityModel      `json:"models"`
+	Gemini  *AntigravityGeminiQuota `json:"gemini,omitempty"`
+}
+
+type AntigravityGeminiQuota struct {
+	Status   string  `json:"status"`
+	Checked  int64   `json:"checked_at"`
+	Updated  *int64  `json:"updated_at"`
+	FiveHour *Window `json:"five_hour"`
+	Weekly   *Window `json:"weekly"`
 }
 
 // ProjectAntigravity drops experiments, prompts and credential fields. Missing
@@ -84,6 +94,22 @@ func ProjectAntigravity(raw []byte, allowed map[string]bool) ([]AntigravityModel
 // FetchAntigravity performs only the fixed official metadata read. OAuth refresh
 // remains exclusively owned by the SDK; GUI and collector never read token files.
 func (f Fetcher) FetchAntigravity(ctx context.Context, credential Credential, allowed map[string]bool) ([]AntigravityModel, error) {
+	raw, err := f.fetchAntigravityJSON(ctx, credential, AntigravityModelsURL)
+	if err != nil {
+		return nil, err
+	}
+	return ProjectAntigravity(raw, allowed)
+}
+
+func (f Fetcher) FetchAntigravitySummary(ctx context.Context, credential Credential) (*AntigravityGeminiQuota, error) {
+	raw, err := f.fetchAntigravityJSON(ctx, credential, AntigravitySummaryURL)
+	if err != nil {
+		return nil, err
+	}
+	return ProjectAntigravitySummary(raw)
+}
+
+func (f Fetcher) fetchAntigravityJSON(ctx context.Context, credential Credential, endpoint string) ([]byte, error) {
 	if credential.Token == "" || len(credential.Token) > 65536 || credential.Workspace == "" || len(credential.Workspace) > 512 {
 		return nil, errors.New("official antigravity credential unavailable")
 	}
@@ -99,7 +125,7 @@ func (f Fetcher) FetchAntigravity(ctx context.Context, credential Credential, al
 		defer idle.CloseIdleConnections()
 	}
 	body, _ := json.Marshal(map[string]string{"project": credential.Workspace})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, AntigravityModelsURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, errors.New("official antigravity request unavailable")
 	}
@@ -119,7 +145,10 @@ func (f Fetcher) FetchAntigravity(ctx context.Context, credential Credential, al
 	if err != nil {
 		return nil, errors.New("official antigravity response unavailable")
 	}
-	return ProjectAntigravity(raw, allowed)
+	if len(raw) > 8<<20 {
+		return nil, errors.New("official antigravity response exceeds bound")
+	}
+	return raw, nil
 }
 
 // PublicAntigravity validates cached projections again at every trust boundary.
@@ -135,6 +164,9 @@ func PublicAntigravity(rows []AntigravityAccount) ([]AntigravityAccount, error) 
 			return nil, errors.New("antigravity projection invalid")
 		}
 		ids[row.ID] = true
+		if err := validateGeminiQuota(row.Gemini); err != nil {
+			return nil, err
+		}
 		for _, model := range row.Models {
 			if !publicModelName.MatchString(model.Model) || model.Remaining != nil && (math.IsNaN(*model.Remaining) || math.IsInf(*model.Remaining, 0) || *model.Remaining < 0 || *model.Remaining > 100) || model.Reset != nil && *model.Reset <= 0 {
 				return nil, errors.New("antigravity model quota invalid")
