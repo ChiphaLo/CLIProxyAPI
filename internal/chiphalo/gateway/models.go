@@ -84,6 +84,13 @@ func (p *LegacyProfile) ModelCatalog(base *handlers.BaseAPIHandler) gin.HandlerF
 			}
 			return id
 		}
+		_, codexClient := c.Request.URL.Query()["client_version"]
+		for i, row := range models {
+			id, _ := row["id"].(string)
+			if slices.Contains(modelRegistry.GetModelProviders(resolve(id)), "antigravity") {
+				models[i] = antigravityModelMetadata(row, modelRegistry.GetModelInfo(resolve(id), "antigravity"), codexClient)
+			}
+		}
 		if _, codex := c.Request.URL.Query()["client_version"]; codex {
 			var patch codexmodels.ApplyPatchCapabilityForModelFunc
 			var search codexmodels.ToolSearchCapabilityForModelFunc

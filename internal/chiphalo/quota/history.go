@@ -65,6 +65,9 @@ func History(snapshot Snapshot, exclusions Exclusions) ([]HistoryRow, error) {
 	return rows, nil
 }
 func snapshotBytes(snapshot Snapshot) ([]byte, error) {
+	if _, err := PublicAntigravity(snapshot.Antigravity); err != nil {
+		return nil, err
+	}
 	if snapshot.Accounts == nil || len(snapshot.Accounts) > 128 || snapshot.Checked <= 0 {
 		return nil, errors.New("public quota snapshot invalid")
 	}

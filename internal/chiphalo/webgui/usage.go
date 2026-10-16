@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
 )
 
 type usageStat struct {
@@ -333,7 +334,16 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 			public[i]["banked_reset"] = reset
 		}
 	}
-	respond(w, 200, map[string]any{"accounts": public, "unattributed_oauth_requests": unknown, "billing_available": true, "billing_basis": "CPA token usage × currently configured USD / 1M token rates; not official charges", "billing_as_of_ts": now, "updated_at": now})
+	var cached struct {
+		Antigravity []quota.AntigravityAccount `json:"antigravity_accounts"`
+	}
+	antigravity := []quota.AntigravityAccount{}
+	if readJSON(s.options.Quota, 4*1024*1024, false, &cached) == nil {
+		if safe, err := quota.PublicAntigravity(cached.Antigravity); err == nil {
+			antigravity = safe
+		}
+	}
+	respond(w, 200, map[string]any{"accounts": public, "antigravity_accounts": antigravity, "unattributed_oauth_requests": unknown, "billing_available": true, "billing_basis": "CPA token usage × currently configured USD / 1M token rates; not official charges", "billing_as_of_ts": now, "updated_at": now})
 }
 
 // Public quota snapshots are allowlisted again at the GUI boundary. An extra

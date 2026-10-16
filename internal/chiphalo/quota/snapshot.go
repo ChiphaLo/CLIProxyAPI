@@ -20,8 +20,9 @@ type Account struct {
 	Quota       *Usage `json:"quota"`
 }
 type Snapshot struct {
-	Accounts []Account `json:"accounts"`
-	Checked  int64     `json:"checked_at"`
+	Accounts    []Account            `json:"accounts"`
+	Checked     int64                `json:"checked_at"`
+	Antigravity []AntigravityAccount `json:"antigravity_accounts,omitempty"`
 }
 
 type Binding struct {
@@ -74,6 +75,16 @@ func Collect(ctx context.Context, bindings []Binding, lookup Lookup, fetcher Fet
 // CarryPrevious keeps stale quota only for the same verified public account
 // tuple. Collector failure must not turn an unavailable account into zero usage.
 func CarryPrevious(current Snapshot, previous Snapshot) Snapshot {
+	for i, row := range current.Antigravity {
+		if row.Status == "ok" {
+			continue
+		}
+		for _, old := range previous.Antigravity {
+			if row.ID == old.ID && row.Prefix == old.Prefix {
+				current.Antigravity[i].Models, current.Antigravity[i].Updated = old.Models, old.Updated
+			}
+		}
+	}
 	byID := map[string]Account{}
 	for _, row := range previous.Accounts {
 		byID[row.ID] = row
@@ -102,6 +113,10 @@ func DecodeSnapshot(raw []byte) (Snapshot, error) {
 	err := json.Unmarshal(raw, &value)
 	if err != nil {
 		return value, err
+	}
+	value.Antigravity, err = PublicAntigravity(value.Antigravity)
+	if err != nil {
+		return Snapshot{}, err
 	}
 	for i, row := range value.Accounts {
 		if row.Quota != nil {

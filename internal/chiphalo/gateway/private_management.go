@@ -186,7 +186,9 @@ func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *c
 			} else if r.URL.Path == "/reset-credits" {
 				_ = json.NewEncoder(w).Encode(quota.CollectResetCredits(r.Context(), bindings, lookup, fetcher, time.Now))
 			} else {
-				_ = json.NewEncoder(w).Encode(quota.Collect(r.Context(), bindings, lookup, fetcher, time.Now))
+				snapshot := quota.Collect(r.Context(), bindings, lookup, fetcher, time.Now)
+				snapshot.Antigravity = collectAntigravityQuota(r.Context(), manager, cfg.ProxyURL, fetcher)
+				_ = json.NewEncoder(w).Encode(snapshot)
 			}
 		default:
 			fail(404)

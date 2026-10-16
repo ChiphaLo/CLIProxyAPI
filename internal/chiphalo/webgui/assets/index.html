@@ -2013,6 +2013,19 @@ async function loadOAuthResetCredits(panel,accounts,loadId,{force=false}={}){
     });
   }
 }
+function antigravityQuotaHTML(accounts,now=Date.now()){
+  return (accounts||[]).map(a=>{
+    const stale=a.status!=='ok'||!a.updated_at||now/1000-a.updated_at>300;
+    const rows=(a.models||[]).map(m=>{
+      const remaining=typeof m.remaining_percent==='number'&&Number.isFinite(m.remaining_percent)?Math.max(0,Math.min(100,m.remaining_percent)):null;
+      const resetAt=quotaResetEpochSeconds(m.reset_at);
+      return `<div class="quota-item"><div class="quota-line"><span>${esc(m.model)}</span><strong>${remaining===null?'官方未提供':fmt(remaining)+'% 剩余'}</strong></div>
+        ${remaining===null?'':`<div class="quota-track" role="progressbar" aria-label="${esc(m.model)}剩余额度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${remaining}"><span style="width:${remaining}%"></span></div>`}
+        <div class="quota-reset"${resetAt===null?'':` data-reset-at="${esc(resetAt)}"`}>${esc(resetAt===null?'重置时间未知':quotaResetCountdown(resetAt,now))}</div></div>`;
+    }).join('');
+    return `<section class="oauth-account"><div class="oauth-account-head"><div class="grow"><h4 class="oauth-account-title">${esc(a.prefix)} · Antigravity</h4><p class="oauth-account-meta">Google 官方额度 · 更新时间：${esc(a.updated_at?new Date(a.updated_at*1000).toLocaleString():'未知')}</p></div><span class="badge ${stale?'warn':'ok'}">${stale?'数据过期 / 暂不可用':'已更新'}</span></div><div class="quota-list">${rows||'<p class="muted">官方额度暂不可用，未按 0 或无限额度显示。</p>'}</div><p class="muted">各模型可能共享额度池，不能将百分比相加。后台定期采集；这些是官方剩余比例，不是 CPA 估算费用。</p></section>`;
+  }).join('');
+}
 async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
   const loadId=panel._oauthLoadId=(panel._oauthLoadId||0)+1;
   if(!silent) stopOAuthQuotaCountdown(panel);
@@ -2049,6 +2062,7 @@ async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
     panel.innerHTML=`<div class="oauth-panel">
       <div class="oauth-panel-head"><div class="grow"><h3 class="oauth-panel-title">OAuth 账号 · 官方额度 / CPA 计费</h3><p class="oauth-panel-copy">仅统计本额度周期内经对应 OAuth 账号的 CPA 调用，按调用时间戳筛选与当前单价估算；官方额度百分比不是 CPA 费用。</p></div><button class="btn btn-secondary btn-sm" data-oauth-refresh>刷新</button></div>
       <div class="oauth-accounts">${accounts}</div>
+      <div class="oauth-accounts" data-antigravity-accounts>${antigravityQuotaHTML(data.antigravity_accounts)}</div>
       <div class="oauth-panel-foot">历史归属无法确认的 OAuth 记录：${fmt(data.unattributed_oauth_requests||0)} 条（未计入上述账号）。同一 Team 不代表同一用户或同一额度。</div>
     </div>`;
     startOAuthQuotaCountdown(panel);
