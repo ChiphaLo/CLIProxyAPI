@@ -310,10 +310,21 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	now := s.options.Now().Unix()
 	acc := billing.NewAccumulator(accounts, models, prices, now, marks)
+	var cached struct {
+		Antigravity []quota.AntigravityAccount `json:"antigravity_accounts"`
+	}
+	antigravity := []quota.AntigravityAccount{}
+	if readJSON(s.options.Quota, 4*1024*1024, false, &cached) == nil {
+		if safe, err := quota.PublicAntigravity(cached.Antigravity); err == nil {
+			antigravity = safe
+		}
+	}
+	gemini := newGeminiBilling(antigravity, now)
 	unknown := int64(0)
 	if s.visitUsage(func(entry usageRecord) error {
 		row := entry.Row
 		acc.Add(row)
+		gemini.add(row, prices)
 		if _, ok := billing.AccountForRow(row, accounts, models); !ok {
 			prefix, _, _ := strings.Cut(row.Model, "/")
 			if row.OAuthAccountID != "" || models[row.Model] || prefixes[prefix] {
@@ -339,16 +350,7 @@ func (s *Server) accountResponse(w http.ResponseWriter, r *http.Request) {
 			public[i]["banked_reset"] = reset
 		}
 	}
-	var cached struct {
-		Antigravity []quota.AntigravityAccount `json:"antigravity_accounts"`
-	}
-	antigravity := []quota.AntigravityAccount{}
-	if readJSON(s.options.Quota, 4*1024*1024, false, &cached) == nil {
-		if safe, err := quota.PublicAntigravity(cached.Antigravity); err == nil {
-			antigravity = safe
-		}
-	}
-	respond(w, 200, map[string]any{"accounts": public, "antigravity_accounts": antigravity, "unattributed_oauth_requests": unknown, "billing_available": true, "billing_basis": "CPA token usage × currently configured USD / 1M token rates; not official charges", "billing_as_of_ts": now, "updated_at": now})
+	respond(w, 200, map[string]any{"accounts": public, "antigravity_accounts": gemini.public(), "unattributed_oauth_requests": unknown, "billing_available": true, "billing_basis": "CPA token usage × currently configured USD / 1M token rates; not official charges", "billing_as_of_ts": now, "updated_at": now})
 }
 
 // Public quota snapshots are allowlisted again at the GUI boundary. An extra

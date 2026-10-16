@@ -2014,6 +2014,20 @@ async function loadOAuthResetCredits(panel,accounts,loadId,{force=false}={}){
     });
   }
 }
+function geminiBillingHTML(billing){
+  const b=billing||{};
+  if(b.error) return '<div class="oauth-block"><p class="muted">同一模型前缀存在多个账号，计费归属无法确认；未合并计入任何账号。</p></div>';
+  const period=(label,value)=>{
+    const p=value||{};
+    if(!p.window_available) return `<div class="oauth-block"><p class="billing-label">${esc(label)} · CPA 估算费用</p><p class="muted">官方周期时间暂不可用，未推测统计区间。</p></div>`;
+    const requests=Number(p.requests||0), unpriced=Number(p.unpriced_requests||0);
+    const money=requests>0&&unpriced===requests?'未定价':fmtCost(p.cost_usd);
+    const cycle=`本周期：${new Date(p.cycle_start_ts*1000).toLocaleString()} — ${new Date(p.cycle_end_ts*1000).toLocaleString()}`;
+    const seen=p.requests&&p.first_ts&&p.last_ts?`纳入记录：${new Date(p.first_ts*1000).toLocaleString()} — ${new Date(p.last_ts*1000).toLocaleString()}`:'本周期暂无 CPA 调用';
+    return `<div class="oauth-block"><p class="billing-label">${esc(label)} · CPA 估算费用</p><div class="billing-total">${esc(money)}</div><p class="billing-meta">${fmt(requests)} 次调用<br>未缓存输入 ${fmt(p.input||0)} · 缓存输入 ${fmt(p.cached||0)} · 输出（含思考）${fmt(p.output||0)}<br>${esc(cycle)}<br>${esc(seen)}${unpriced?'<br>'+fmt(unpriced)+' 条记录未设置价格，不计入金额':''}</p></div>`;
+  };
+  return `<div class="oauth-account-columns">${period('5 小时周期',b.five_hour)}${period('周周期',b.weekly)}</div><p class="muted">按 Gemini 模型前缀归集 CPA 记录；历史日志未记录账号身份，不将其宣称为已验证的账号归属。两个周期包含重叠调用，金额不相加。费用按 token 与设定单价估算，不代表 Google 实际扣费，不做额度拟合。${b.as_of_ts?'统计截止：'+esc(new Date(b.as_of_ts*1000).toLocaleString()):''}</p>`;
+}
 function antigravityQuotaHTML(accounts,now=Date.now()){
   return (accounts||[]).map(a=>{
     const q=a.gemini||{};
@@ -2023,7 +2037,7 @@ function antigravityQuotaHTML(accounts,now=Date.now()){
     const five=q.five_hour||(worst?{used_percent:100-worst.remaining_percent,remaining_percent:worst.remaining_percent,limit_window_seconds:18000,reset_at:worst.reset_at}:null);
     const unknown=label=>`<div class="quota-item"><div class="quota-line"><span>${esc(label)}</span><strong>官方未提供</strong></div><p class="muted">暂不可用；不从其他周期推算。</p></div>`;
     const updated=q.updated_at||a.updated_at;
-    return `<section class="oauth-account"><div class="oauth-account-head"><div class="grow"><h4 class="oauth-account-title">${esc(a.prefix)} · Gemini</h4><p class="oauth-account-meta">Google 官方额度 · 更新时间：${esc(updated?new Date(updated*1000).toLocaleString():'未知')}</p></div><span class="badge ${stale?'warn':'ok'}">${stale?'数据过期 / 部分不可用':'已更新'}</span></div><div class="quota-list">${five?oauthWindowText(five):unknown('5 小时额度')}${q.weekly?oauthWindowText(q.weekly):unknown('周额度')}</div><p class="muted">Gemini 系列按同一额度组显示；5 小时与周额度独立限制，不相加。${q.status==='ok'?'数据源：Google 官方额度汇总。':'汇总暂不可用；短周期可回退为已发布 Gemini 模型中最少的官方剩余比例。'}</p></section>`;
+    return `<section class="oauth-account"><div class="oauth-account-head"><div class="grow"><h4 class="oauth-account-title">${esc(a.prefix)} · Gemini</h4><p class="oauth-account-meta">Google 官方额度 · 更新时间：${esc(updated?new Date(updated*1000).toLocaleString():'未知')}</p></div><span class="badge ${stale?'warn':'ok'}">${stale?'数据过期 / 部分不可用':'已更新'}</span></div><div class="quota-list">${five?oauthWindowText(five):unknown('5 小时额度')}${q.weekly?oauthWindowText(q.weekly):unknown('周额度')}</div><p class="muted">Gemini 系列按同一额度组显示；5 小时与周额度独立限制，不相加。${q.status==='ok'?'数据源：Google 官方额度汇总。':'汇总暂不可用；短周期可回退为已发布 Gemini 模型中最少的官方剩余比例。'}</p>${geminiBillingHTML(a.billing)}</section>`;
   }).join('');
 }
 async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
@@ -2070,7 +2084,8 @@ async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
     // Reset credits use a slower read-only management call; do not block
     // official quota and CPA billing while waiting for it.
     loadOAuthResetCredits(panel,data.accounts||[],loadId,{force});
-    const nextCycleEnd=(data.accounts||[]).map(a=>Number((a.billing||{}).cycle_end_ts||0)).filter(ts=>Number.isFinite(ts)&&ts>Date.now()/1000).sort((a,b)=>a-b)[0];
+    const cycleEnds=[...(data.accounts||[]).map(a=>(a.billing||{}).cycle_end_ts),...(data.antigravity_accounts||[]).flatMap(a=>[((a.billing||{}).five_hour||{}).cycle_end_ts,((a.billing||{}).weekly||{}).cycle_end_ts])];
+    const nextCycleEnd=cycleEnds.map(Number).filter(ts=>Number.isFinite(ts)&&ts>Date.now()/1000).sort((a,b)=>a-b)[0];
     const untilReset=nextCycleEnd?Math.max(1000,(nextCycleEnd-Date.now()/1000)*1000+1000):OAUTH_BILLING_POLL_MS;
     oauthBillingRefreshTimer=setTimeout(()=>{
       if(page==="subs"&&panel.isConnected) loadOAuthAccounts(panel,{silent:true});

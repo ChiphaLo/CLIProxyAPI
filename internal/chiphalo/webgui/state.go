@@ -497,7 +497,7 @@ func (s *Server) prices() (map[string]*billing.Rates, error) {
 			}
 		}
 	}
-	return doc.Prices, nil
+	return geminiPrices(doc.Prices), nil
 }
 func (s *Server) pricesRoute(w http.ResponseWriter, r *http.Request, body map[string]any) {
 	s.auth.mu.Lock()
