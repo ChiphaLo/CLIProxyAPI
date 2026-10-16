@@ -61,6 +61,9 @@ func samePublished(p provider, previous *yaml.Node) bool {
 	return true
 }
 func validateOrigin(ctx context.Context, p provider, previous *yaml.Node, resolve Resolver) error {
+	if WorkBuddyLocalOrigin(p.Base, p.Proxy) {
+		return nil
+	}
 	if !permittedProxy(p.Proxy) {
 		return errors.New("provider proxy is outside the configured allowlist")
 	}
@@ -104,6 +107,13 @@ func validateOrigin(ctx context.Context, p provider, previous *yaml.Node, resolv
 		}
 	}
 	return nil
+}
+
+// WorkBuddyLocalOrigin permits only the two isolated, authenticated WorkBuddy
+// hosts. It is not a general loopback/private-network or plaintext exemption.
+// Direct transport is mandatory so a global SOCKS proxy cannot redirect it.
+func WorkBuddyLocalOrigin(base, proxy string) bool {
+	return proxy == "direct" && (base == "http://127.0.0.1:8331/v1" || base == "http://127.0.0.1:8332/v1")
 }
 
 // ValidateProviderOrigin validates a new management URL without trusting GUI drafts.

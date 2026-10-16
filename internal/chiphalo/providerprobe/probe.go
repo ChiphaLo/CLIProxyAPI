@@ -110,6 +110,9 @@ func (f Fetcher) Fetch(ctx context.Context, input Input) Result {
 	if configbundle.ValidateProviderOriginWithResolver(ctx, input.Base, input.Proxy, validateResolve) != nil {
 		return fail("provider_url_rejected", 0)
 	}
+	if configbundle.WorkBuddyLocalOrigin(input.Base, input.Proxy) {
+		addresses = []netip.Addr{netip.MustParseAddr("127.0.0.1")}
+	}
 	factory := f.Transport
 	if factory == nil {
 		factory = pinnedTransport
