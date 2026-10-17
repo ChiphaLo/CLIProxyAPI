@@ -1652,6 +1652,7 @@ async function renderSubs(){
         <div id="subsList"></div>
       </div>
     </div>
+    <div class="section" id="workbuddyCreditsPanel"></div>
   </section>`;
   const st=await api("/state");
   if(page!=="subs") return;
@@ -1659,7 +1660,48 @@ async function renderSubs(){
   codexState=st.codex||{};
   renderProviderList();
   renderCodexCard(codexState);
+  const workbuddyPanel=$("#workbuddyCreditsPanel");
+  if(subsProviders.some(p=>p.prefix==='workbuddy-cn'||p.prefix==='workbuddy-intl')) loadWorkBuddyCredits(workbuddyPanel);
+  else workbuddyPanel.remove();
   $("#addProvider").onclick=openProviderSheet;
+}
+
+function workBuddyCreditsHTML(data){
+  const cards=(data.accounts||[]).map(a=>{
+    const known=a.status==='ok'&&typeof a.remaining_credits==='number'&&Number.isFinite(a.remaining_credits)&&a.remaining_credits>=0;
+    const remaining=known?a.remaining_credits:null;
+    const total=known&&typeof a.total_credits==='number'&&Number.isFinite(a.total_credits)&&a.total_credits>0&&a.total_credits>=remaining?a.total_credits:null;
+    const used=total===null?null:Math.max(0,Math.min(100,(total-remaining)/total*100));
+    const title=a.region==='cn'?'WorkBuddy 国内':'WorkBuddy 国际';
+    const state=known?(a.stale?'数据过期':'已更新'):'暂不可用';
+    const at=a.updated_at?new Date(a.updated_at*1000).toLocaleString():'未知';
+    const schedule=a.checkin_supported?(a.checkin_enabled?`自动签到：每天 ${String(a.checkin_hour).padStart(2,'0')}:${String(a.checkin_minute).padStart(2,'0')}（UTC+8）`:'自动签到：未启用'):'国际版不支持每日签到';
+    const last=a.last_checkin_at?`<br>最近签到：${esc(new Date(a.last_checkin_at*1000).toLocaleString())} · ${a.last_checkin_success?'成功':'未成功'}`:'';
+    return `<section class="oauth-account"><div class="oauth-account-head"><div class="grow"><h4 class="oauth-account-title">${esc(title)}</h4><p class="oauth-account-meta">${esc(a.prefix)}/ · 余额更新时间：${esc(at)}</p></div><span class="badge ${known&&!a.stale?'ok':'warn'}">${state}</span></div>
+      <p class="billing-label">上游剩余积分</p><div class="billing-total">${remaining===null?'暂不可用':fmt(remaining)+' 积分'}</div>
+      ${total===null?'':`<div class="quota-item"><div class="quota-line"><span>上游报告总量 ${fmt(total)} 积分</span><strong>已用 ${fmt(total-remaining)}</strong></div><div class="quota-track" role="progressbar" aria-label="${esc(title)}已用积分" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${used}"><span style="width:${used}%"></span></div></div>`}
+      <p class="billing-meta">${esc(schedule)}${last}</p><p class="muted">${known?`插件每 ${fmt(a.interval_minutes||30)} 分钟查询上游；${a.stale?'当前为过期读数，请等待插件更新。':'此处显示最近一次查询结果。'}`:'余额查询失败或尚未取得有效数据，不按 0 积分处理。'}</p></section>`;
+  }).join('');
+  return `<div class="oauth-panel"><div class="oauth-panel-head"><div class="grow"><h3 class="oauth-panel-title">WorkBuddy 积分</h3><p class="oauth-panel-copy">国内、国际账号分别展示上游余额，不合并、不用 CPA Token 费用推算。积分可读取不代表模型调用已通过上游渠道校验。</p></div><button type="button" class="btn btn-secondary btn-sm" data-workbuddy-refresh>刷新显示</button></div><div class="oauth-accounts">${cards||'<div class="empty">暂无 WorkBuddy 余额数据</div>'}</div><details class="muted"><summary>积分获取方式与说明</summary><p>国内版可通过每日签到及官方成长任务、活动获得积分；国际版没有每日签到，试用、套餐或活动赠额以官方账号页面为准。奖励数量、领取条件和有效期可能调整，不保证固定每日奖励。</p><p>自动签到开关和时间以上方账号卡片为准；请在官方客户端查看活动与任务条件。本 GUI 不启用成长任务、猫猫旅行等自动任务，只读取积分与签到状态，不会执行签到、兑换或 Banked Reset。刷新显示只重新读取插件缓存，不触发新的领取操作。</p></details></div>`;
+}
+
+async function loadWorkBuddyCredits(panel){
+  if(!panel.isConnected||page!=='subs') return;
+  clearTimeout(panel._workbuddyTimer);
+  const loadId=panel._workbuddyLoadId=(panel._workbuddyLoadId||0)+1;
+  if(!panel.innerHTML) panel.innerHTML='<div class="oauth-panel"><h3 class="oauth-panel-title">WorkBuddy 积分</h3><p class="muted">正在读取插件余额…</p></div>';
+  const refresh=panel.querySelector('[data-workbuddy-refresh]');
+  if(refresh) refresh.disabled=true;
+  try{
+    const data=await api('/workbuddy-credits');
+    if(!panel.isConnected||page!=='subs'||panel._workbuddyLoadId!==loadId) return;
+    panel.innerHTML=workBuddyCreditsHTML(data);
+    panel.querySelector('[data-workbuddy-refresh]').onclick=()=>loadWorkBuddyCredits(panel);
+  }catch(e){
+    if(!panel.isConnected||page!=='subs'||panel._workbuddyLoadId!==loadId) return;
+    panel.innerHTML='<div class="oauth-panel-error">WorkBuddy 积分暂时无法读取；不会影响订阅配置，也不会将余额视为 0。</div>';
+  }
+  if(panel.isConnected&&page==='subs'&&panel._workbuddyLoadId===loadId) panel._workbuddyTimer=setTimeout(()=>loadWorkBuddyCredits(panel),60000);
 }
 
 function providerCard(p){

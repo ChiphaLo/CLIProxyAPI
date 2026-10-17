@@ -38,6 +38,9 @@ func serveHosted(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
+	if err := service.EnableWorkBuddy(filepath.Join(filepath.Dir(m.AdminRoot), "cpa-workbuddy-onboarding", "worker-access.private.json")); err != nil {
+		return err
+	}
 	backend := adminhelper.NewUnixBackend(m.Control(), m.GatewayUID)
 	if err := service.EnableInventory(backend); err != nil {
 		return err

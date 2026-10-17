@@ -22,21 +22,22 @@ import (
 type Paths struct{ Keys, Vault, Lock, Audit string }
 
 type Service struct {
-	paths          Paths
-	mu             sync.Mutex
-	gate           chan struct{}
-	now            func() time.Time
-	apply          *Applier
-	inventory      *HTTPBackend
-	probe          *providerprobe.Fetcher
-	probeSlots     chan struct{}
-	resetSlots     chan struct{}
-	catalogMu      sync.Mutex
-	catalogJob     *catalogJob
-	catalogWorkers sync.WaitGroup
-	redeemMu       sync.Mutex
-	redeemJob      *catalogJob
-	redeemWorkers  sync.WaitGroup
+	paths           Paths
+	mu              sync.Mutex
+	gate            chan struct{}
+	now             func() time.Time
+	apply           *Applier
+	inventory       *HTTPBackend
+	probe           *providerprobe.Fetcher
+	probeSlots      chan struct{}
+	resetSlots      chan struct{}
+	workBuddyAccess string
+	catalogMu       sync.Mutex
+	catalogJob      *catalogJob
+	catalogWorkers  sync.WaitGroup
+	redeemMu        sync.Mutex
+	redeemJob       *catalogJob
+	redeemWorkers   sync.WaitGroup
 }
 
 func New(paths Paths) (*Service, error) {
@@ -56,6 +57,12 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 	return s.dispatchContext(ctx, op, payload)
 }
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
+	if op == "workbuddy_credits" {
+		if len(payload) != 0 {
+			return failure("WorkBuddy credit lookup does not accept parameters")
+		}
+		return readWorkBuddyCredits(ctx, s.workBuddyAccess, s.now(), workBuddyHTTPClient())
+	}
 	if op == "consume_oauth_reset_credit" {
 		return s.consumeReset(ctx, payload)
 	}

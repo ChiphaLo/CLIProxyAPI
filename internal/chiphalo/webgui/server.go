@@ -321,6 +321,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.usageResponse(w, r)
 	case path == "/api/oauth-accounts" && r.Method == "GET":
 		s.accountResponse(w, r)
+	case path == "/api/workbuddy-credits" && r.Method == "GET":
+		s.forward(w, r, "workbuddy_credits", nil)
 	case path == "/api/oauth-reset-credits" && r.Method == "GET":
 		s.resetCreditResponse(w, r)
 	case path == "/api/quota-model" && r.Method == "GET":
