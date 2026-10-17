@@ -228,9 +228,10 @@ func (p *Provider) Count() int { return len(p.state.Load().byID) }
 // Limits returns the existing per-key policy without retaining any bearer key.
 // Admission must call it for each new request/turn, not cache a semaphore sized
 // at startup, because the GUI can lower limits while calls are still in flight.
+// Zero limits mean unlimited only for the reserved authenticated admin identity.
 func (p *Provider) Limits(id string) (rpm, concurrent int, ok bool) {
 	if id == "admin" {
-		return 120, 8, true
+		return 0, 0, true
 	}
 	candidate := p.state.Load().byID[id]
 	if !p.active(candidate) {

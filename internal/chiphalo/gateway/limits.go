@@ -17,7 +17,8 @@ type limitState struct {
 }
 
 // AdmissionLimits preserves the legacy 120/IP/min, 32 global and current
-// per-key RPM/concurrency policies. All counters survive identity hot reload.
+// per-key RPM/concurrency policies, except authenticated admin limits. All
+// counters survive identity hot reload.
 // Tracking memory is bounded; exhausted bookkeeping fails closed, not open.
 type AdmissionLimits struct {
 	mu        sync.Mutex
@@ -83,8 +84,15 @@ func (l *AdmissionLimits) chargeIP(ip string) bool {
 }
 
 func (l *AdmissionLimits) Global() gin.HandlerFunc {
+	return l.global(nil)
+}
+
+// global accepts an authentication-backed RPM exemption, never a client hint.
+// Global concurrency remains enforced for every request, including admin.
+func (l *AdmissionLimits) global(adminExempt func(*gin.Context) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.URL.Path != "/health" && !l.chargeIP(c.ClientIP()) {
+		exempt := adminExempt != nil && adminExempt(c)
+		if c.Request.URL.Path != "/health" && !exempt && !l.chargeIP(c.ClientIP()) {
 			rateAbort(c, "CPA client IP rate limit reached")
 			return
 		}
@@ -109,12 +117,14 @@ func (l *AdmissionLimits) AcquireKey(id string, rpm, concurrent int, charge bool
 	l.mu.Lock()
 	now := l.now()
 	s := l.state(l.keys, id, now)
-	if s == nil || rpm < 1 || concurrent < 1 || s.active >= concurrent || charge && (len(s.times) >= rpm || l.samples >= maxLimitSamples) {
+	unlimited := id == "admin" && rpm == 0
+	unlimitedConcurrency := id == "admin" && concurrent == 0
+	if s == nil || rpm < 0 || rpm == 0 && !unlimited || concurrent < 0 || concurrent == 0 && !unlimitedConcurrency || !unlimitedConcurrency && s.active >= concurrent || charge && !unlimited && (len(s.times) >= rpm || l.samples >= maxLimitSamples) {
 		l.mu.Unlock()
 		return nil, false
 	}
 	s.active++
-	if charge {
+	if charge && !unlimited {
 		s.times = append(s.times, now)
 		l.samples++
 	}
@@ -128,6 +138,11 @@ func (l *AdmissionLimits) ChargeTurn(id, ip string, rpm, concurrent int) bool {
 	defer l.mu.Unlock()
 	now := l.now()
 	k := l.state(l.keys, id, now)
+	if id == "admin" && rpm == 0 {
+		// Admin turns allocate no per-minute samples or IP identities. Global
+		// HTTP and WebSocket admission budgets remain enforced separately.
+		return k != nil && concurrent >= 0 && (concurrent == 0 || k.active <= concurrent)
+	}
 	i := l.state(l.ips, ip, now)
 	if k == nil || i == nil || rpm < 1 || concurrent < 1 || k.active > concurrent || len(k.times) >= rpm || len(i.times) >= 120 || l.samples+2 > maxLimitSamples {
 		return false

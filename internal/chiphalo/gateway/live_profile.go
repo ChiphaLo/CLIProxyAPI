@@ -151,6 +151,28 @@ func (l *LiveProfile) RegisterAccess() {
 	sdkaccess.SetExclusiveProvider(l.Identifier())
 }
 
+// adminRPMExempt verifies the actual credential before skipping the IP quota.
+// Reject non-admin candidates from the cached snapshot first, so repeated
+// unauthenticated traffic cannot force identity-file scans beyond its IP limit.
+// A matching candidate is checked again against refreshed state: rotation or
+// invalid identity files must never leave an old admin exemption active.
+func (l *LiveProfile) adminRPMExempt(c *gin.Context) bool {
+	p := l.active.Load()
+	if p == nil {
+		return false
+	}
+	result, authErr := p.Keys.Authenticate(c.Request.Context(), c.Request)
+	if authErr != nil || result == nil || result.Principal != "admin" {
+		return false
+	}
+	p, err := l.Refresh()
+	if err != nil {
+		return false
+	}
+	result, authErr = p.Keys.Authenticate(c.Request.Context(), c.Request)
+	return authErr == nil && result != nil && result.Principal == "admin"
+}
+
 // KeyLimit belongs immediately after authentication and before decompression,
 // so a single key cannot occupy every global slot with 64 MiB decoded bodies.
 func (l *LiveProfile) KeyLimit() gin.HandlerFunc {
@@ -228,7 +250,7 @@ func (l *LiveProfile) Admission() gin.HandlerFunc {
 func (l *LiveProfile) ServerOptions() []api.ServerOption {
 	var base *handlers.BaseAPIHandler
 	return []api.ServerOption{
-		api.WithMiddleware(l.limits.Global(), PublicSurface()),
+		api.WithMiddleware(l.limits.global(l.adminRPMExempt), PublicSurface()),
 		api.WithProxyMiddleware(l.KeyLimit(), traffic.HTTP(), l.Admission(), func(c *gin.Context) {
 			p, _ := c.Request.Context().Value(profileContextKey{}).(*LegacyProfile)
 			if p == nil || base == nil {

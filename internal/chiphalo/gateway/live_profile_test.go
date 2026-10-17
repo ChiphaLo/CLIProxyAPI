@@ -46,7 +46,7 @@ func liveFixture(t *testing.T) (*LiveProfile, *profileFixture, *gin.Engine) {
 	manager.SetProviders([]sdkaccess.Provider{l})
 	engine := gin.New()
 	_ = engine.SetTrustedProxies(nil)
-	engine.Use(l.limits.Global(), api.AuthMiddleware(manager), l.KeyLimit(), l.Admission())
+	engine.Use(l.limits.global(l.adminRPMExempt), api.AuthMiddleware(manager), l.KeyLimit(), l.Admission())
 	engine.GET("/v1/models", func(c *gin.Context) { c.Status(200) })
 	engine.POST("/v1/responses", func(c *gin.Context) {
 		meta := c.Request.Context().Value(metadataKey{}).(requestMetadata)
