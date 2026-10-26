@@ -179,3 +179,13 @@ func TestRawGeminiUsageSnapshotsFinalFrameAndEnvelopes(t *testing.T) {
 		})
 	}
 }
+
+func TestRawUsageAndEffectiveRequestMetadataSurviveTogether(t *testing.T) {
+	r := NewUsageReporter(usage.WithRawUsageCapture(context.Background()), "fixture", "requested", nil)
+	r.ObserveResponseModel([]byte(`{"model":"reported","usage":{"prompt_tokens":12,"completion_tokens":7}}`))
+	r.SetTranslatedRequestMetadata([]byte(`{"reasoning_effort":"high","service_tier":"priority"}`), "openai")
+	record := r.buildRecord(usage.Detail{InputTokens: 12, OutputTokens: 7}, false)
+	if record.EffectiveServiceTier != "priority" || record.ReasoningEffort != "high" || record.RawUsageFormat != "chat" || len(record.RawUsage) == 0 || record.ResponseModel != "reported" {
+		t.Fatalf("upstream metadata and CPA raw billing capture diverged: %+v", record)
+	}
+}

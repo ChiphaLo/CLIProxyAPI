@@ -80,3 +80,23 @@ func TestReviewedCatalogReloadKeepsAuthAndRefreshUntouched(t *testing.T) {
 		t.Fatal("stock SDK enabled custom reload by default")
 	}
 }
+
+func TestRejectedReviewedCatalogCannotRemoveSupersedingRegistration(t *testing.T) {
+	cfg := &config.Config{}
+	reg := registry.GetGlobalRegistry()
+	auth := &coreauth.Auth{ID: t.Name(), Provider: "codex", Status: coreauth.StatusActive}
+	t.Cleanup(func() { reg.UnregisterClient(auth.ID) })
+	s := &Service{cfg: cfg}
+	s.modelCatalogTransform = func(context.Context, *coreauth.Auth, []*ModelInfo) ([]*ModelInfo, error) {
+		// Simulate a newer publication completing while the old transform runs.
+		reg.RegisterClient(auth.ID, "codex", []*ModelInfo{{ID: "newer-reviewed-model", Type: "codex"}})
+		return nil, errors.New("obsolete private catalog failure")
+	}
+	reg.RegisterClient(auth.ID, "codex", []*ModelInfo{{ID: "old-reviewed-model", Type: "codex"}})
+	if s.registerModelsForAuth(t.Context(), auth) {
+		t.Fatal("obsolete reviewed catalog did not report its publication fence rejection")
+	}
+	if !reg.ClientSupportsModel(auth.ID, "newer-reviewed-model") {
+		t.Fatal("obsolete reviewed catalog removed a newer registration")
+	}
+}

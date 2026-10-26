@@ -30,7 +30,9 @@ func newWatcherFactory(transform func(*config.Config) error) WatcherFactory {
 			setConfig: func(cfg *config.Config) {
 				w.SetConfig(cfg)
 			},
-			snapshotAuths: func() []*coreauth.Auth { return w.SnapshotCoreAuths() },
+			snapshotAuths:               func() []*coreauth.Auth { return w.SnapshotCoreAuths() },
+			snapshotAuthFile:            func(path string) ([]*coreauth.Auth, error) { return w.SnapshotAuthFile(path) },
+			rereadDiscardedFileSnapshot: func(auth *coreauth.Auth) { w.RereadDiscardedFileSnapshot(auth) },
 			setUpdateQueue: func(queue chan<- watcher.AuthUpdate) {
 				w.SetAuthUpdateQueue(queue)
 			},
