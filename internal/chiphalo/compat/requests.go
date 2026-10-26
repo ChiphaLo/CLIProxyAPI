@@ -57,7 +57,7 @@ func NormalizeOpenCodeTools(raw []byte) ([]byte, error) {
 	}
 	if trusted {
 		var err error
-		tools, err = deduplicate(tools, "", make(map[string]string))
+		tools, err = deduplicate(tools, "", make(map[string]toolDeclaration))
 		if err != nil {
 			return nil, err
 		}
@@ -67,7 +67,44 @@ func NormalizeOpenCodeTools(raw []byte) ([]byte, error) {
 	return json.Marshal(body)
 }
 
-func deduplicate(entries []any, namespace string, seen map[string]string) ([]any, error) {
+type toolDeclaration struct {
+	signature string
+	tool      map[string]any
+}
+
+// Tool documentation can change when Codex discovers another MCP server. Only
+// descriptions are excluded: type, namespace, grammar, parameters and all other
+// contract fields must still match. Never strip descriptions inside JSON Schema.
+func toolContract(tool map[string]any) map[string]any {
+	contract := make(map[string]any, len(tool))
+	for key, value := range tool {
+		if key == "description" {
+			continue
+		}
+		if key == "function" {
+			if function, ok := value.(map[string]any); ok {
+				value = toolContract(function)
+			}
+		}
+		contract[key] = value
+	}
+	return contract
+}
+
+func updateToolDescription(previous, current map[string]any) {
+	if description, exists := current["description"]; exists {
+		previous["description"] = description
+	} else {
+		delete(previous, "description")
+	}
+	if function, ok := previous["function"].(map[string]any); ok {
+		if updated, ok := current["function"].(map[string]any); ok {
+			updateToolDescription(function, updated)
+		}
+	}
+}
+
+func deduplicate(entries []any, namespace string, seen map[string]toolDeclaration) ([]any, error) {
 	result := make([]any, 0, len(entries))
 	for _, value := range entries {
 		tool, ok := value.(map[string]any)
@@ -100,17 +137,21 @@ func deduplicate(entries []any, namespace string, seen map[string]string) ([]any
 			if ns == "" {
 				ns = namespace
 			}
-			signature, err := json.Marshal([]any{ns, tool})
+			signature, err := json.Marshal([]any{ns, toolContract(tool)})
 			if err != nil {
 				return nil, err
 			}
 			if previous, exists := seen[name]; exists {
-				if previous != string(signature) {
+				if previous.signature != string(signature) {
 					return nil, fmt.Errorf("conflicting tool declaration: %s", name)
 				}
+				// Additional declarations are trusted system/developer records in
+				// chronological order. Preserve one tool and its unchanged contract,
+				// but advertise the latest documentation instead of stale MCP tools.
+				updateToolDescription(previous.tool, tool)
 				continue
 			}
-			seen[name] = string(signature)
+			seen[name] = toolDeclaration{signature: string(signature), tool: tool}
 		}
 		result = append(result, tool)
 	}

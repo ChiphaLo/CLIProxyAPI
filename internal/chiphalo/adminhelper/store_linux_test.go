@@ -54,6 +54,65 @@ func requireOK(t *testing.T, result Result) {
 	}
 }
 
+func TestEditKeyScopeAndLimitsKeepsCredential(t *testing.T) {
+	s := fixture(t)
+	created := call(s, "create_api_key", map[string]any{"name": "editable", "modelPatterns": []string{"gpt-6.1-sol"}, "rpm": 30, "maxConcurrent": 4})
+	requireOK(t, created)
+	id, key := created["id"].(string), created["key"].(string)
+	read := func() ([]byte, map[string]any) {
+		t.Helper()
+		raw, err := os.ReadFile(s.paths.Keys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc struct{ Keys []map[string]any }
+		if json.Unmarshal(raw, &doc) != nil {
+			t.Fatal("invalid key database")
+		}
+		for _, entry := range doc.Keys {
+			if entry["id"] == id {
+				return raw, entry
+			}
+		}
+		t.Fatal("key missing")
+		return nil, nil
+	}
+	raw, before := read()
+	p, err := clientkeys.New("admin-fixture", raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := call(s, "update_api_key", map[string]any{"key_id": id, "modelPatterns": []string{"codex2/gpt-6.1-sol"}, "providerPrefixes": []string{}, "rpm": 7, "maxConcurrent": 2})
+	requireOK(t, updated)
+	if updated["key"] != nil {
+		t.Fatal("edit returned a replacement secret")
+	}
+	raw, after := read()
+	for _, field := range []string{"id", "hash", "prefix", "createdAt", "enabled"} {
+		if before[field] != after[field] {
+			t.Errorf("edit changed %s", field)
+		}
+	}
+	if err := p.Reload(raw); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := newKeyRequest(key)
+	if auth, errAuth := p.Authenticate(context.Background(), req); errAuth != nil || auth.Principal != id {
+		t.Fatal("original credential no longer authenticates")
+	}
+	if p.Authorize(id, "gpt-6.1-sol") == nil || p.Authorize(id, "codex2/gpt-6.1-sol") != nil {
+		t.Fatal("edited model policy not published")
+	}
+	if rpm, concurrent, ok := p.Limits(id); !ok || rpm != 7 || concurrent != 2 {
+		t.Fatal("edited limits not published")
+	}
+	requireOK(t, call(s, "update_api_key", map[string]any{"key_id": id, "rpm": 9}))
+	raw, _ = read()
+	if p.Reload(raw) != nil || p.Authorize(id, "gpt-6.1-sol") == nil || p.Authorize(id, "codex2/gpt-6.1-sol") != nil {
+		t.Fatal("limits-only edit changed model scope")
+	}
+}
+
 func TestKeysPreserveSchemaAndAuthenticate(t *testing.T) {
 	s := fixture(t)
 	result := call(s, "create_api_key", map[string]any{"name": "测试", "rpm": 12})

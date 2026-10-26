@@ -891,7 +891,7 @@ select.form-input,select{
 .page-overview{gap:0}
 .overview-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;align-items:start;gap:24px}
 .panel{display:flex;flex-direction:column;gap:12px;min-width:0}
-.list,.kv,.datagrid,.table-wrap,.chart-panel,#oauthAccountsPanel>.oauth-panel,#quotaModelPanel>.oauth-panel{
+.list,.kv,.datagrid,.table-wrap,.chart-panel,#oauthAccountsPanel>.oauth-panel{
   border:1px solid var(--separator);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-1);
 }
 .page-overview .list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden}
@@ -967,40 +967,6 @@ select.form-input,select{
 .oauth-panel-foot{padding:12px 20px;background:var(--surface-subtle);font-size:11.5px;color:var(--text-tertiary)}
 .oauth-panel-error{padding:16px 20px;border:1px solid var(--separator);border-radius:var(--radius-md);background:var(--danger-tint);color:var(--danger);font-size:12.5px}
 
-/* Quota model: empirical Codex quota fitting, additive next to API cost. */
-#quotaModelPanel{margin-top:24px}
-.qm-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.qm-viewbar{display:inline-flex;align-items:center;gap:6px;padding:3px;border:1px solid var(--separator);border-radius:var(--radius-sm);background:var(--surface-subtle)}
-.qm-viewbar .btn{box-shadow:none}
-.qm-viewbar .btn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-.qm-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));border-bottom:1px solid var(--separator)}
-.qm-summary-cell{padding:14px 18px;border-right:1px solid var(--separator)}
-.qm-summary-cell:last-child{border-right:0}
-.qm-summary-label{display:block;font-size:11.5px;color:var(--text-tertiary)}
-.qm-summary-value{display:block;margin-top:3px;font-size:15px;font-weight:620;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.qm-summary-sub{display:block;margin-top:2px;font-size:11px;color:var(--text-tertiary)}
-.qm-cols{grid-template-columns:minmax(150px,1.2fr) 78px 118px 96px minmax(128px,1fr) minmax(132px,1fr)}
-.qm-cols .qm-mult{font-weight:620;font-variant-numeric:tabular-nums}
-.qm-ci{display:block;margin-top:1px;font-size:10.5px;color:var(--text-tertiary)}
-.qm-tag{display:inline-block;margin-top:3px;padding:1px 6px;border-radius:var(--radius-xs);background:var(--surface-subtle);font-size:10.5px;color:var(--text-tertiary)}
-.qm-accounts{padding:6px 20px 2px}
-.qm-account{padding:14px 0;border-top:1px solid var(--separator)}
-.qm-account:first-child{border-top:0}
-.qm-account-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-.qm-side{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px}
-.qm-side-label{display:block;font-size:11px;color:var(--text-tertiary)}
-.qm-side-value{display:block;margin-top:2px;font-size:14px;font-weight:620;font-variant-numeric:tabular-nums}
-.qm-points{margin-top:12px;overflow:auto;max-height:300px;border:1px solid var(--separator);border-radius:var(--radius-sm)}
-.qm-points.qm-collapsed{display:none}
-.qm-points table{width:100%;border-collapse:collapse;font-size:12px}
-.qm-points th,.qm-points td{padding:6px 10px;border-top:1px solid var(--separator);text-align:left;white-space:nowrap}
-.qm-points thead th{border-top:0;background:var(--surface-subtle);font-size:11px;color:var(--text-tertiary)}
-.qm-points td.num,.qm-points th.num{text-align:right;font-variant-numeric:tabular-nums}
-.qm-points tr.qm-excluded{color:var(--danger)}
-.qm-notes{margin:4px 20px 0;padding:0 0 16px;list-style:none;display:grid;gap:4px;font-size:12px;color:var(--text-secondary)}
-.qm-foot{padding:12px 20px;background:var(--surface-subtle);font-size:11.5px;color:var(--text-tertiary)}
-
-
 /* Usage */
 .toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding:16px;border:1px solid var(--separator);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-1)}
 .toolbar .field{flex:1 1 150px;max-width:230px}
@@ -1036,6 +1002,11 @@ select.form-input,select{
 .table-wrap.scroll{max-height:min(62vh,610px)}
 .tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 .tbl th{position:sticky;top:0;z-index:2;padding:10px 14px;text-align:left;white-space:nowrap;background:var(--surface-subtle);border-bottom:1px solid var(--separator);font-size:11.5px;font-weight:620;color:var(--text-tertiary)}
+.usage-sort{display:inline-flex;align-items:center;gap:5px;border:0;padding:0;background:none;color:inherit;font:inherit;cursor:pointer;border-radius:3px}
+.usage-sort span{font-size:12px;opacity:.45}
+.usage-sort.is-active,.usage-sort:hover{color:var(--accent)}
+.usage-sort.is-active span{opacity:1}
+.usage-sort:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
 .tbl td{padding:11px 14px;border-bottom:1px solid var(--separator);vertical-align:top;color:var(--text-secondary)}
 .tbl tbody tr:last-child td{border-bottom:0}
 .tbl tbody tr:hover td{background:var(--surface-hover)}
@@ -1517,11 +1488,17 @@ const NAV_ICONS={
   usage:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V11M10 20V5M16 20v-6M21.5 20H2.5"/></svg>',
 };
 let page="overview";
-let usageTimer=null, usageLoading=false, oauthBillingRefreshTimer=null;
+let usageTimer=null, usageLoading=false, usageRefreshPending=false, usageRequestVersion=0, oauthBillingRefreshTimer=null;
 const OAUTH_BILLING_POLL_MS=60000;
-let usageFilters={model:"",preset:"14d",start:"",end:"",bucket:1800,refreshMs:10000};
+const USAGE_SORT_COLUMNS=[
+  ["ts","时间",true],["model","模型",false],["key_id","Key",false],
+  ["input","未缓存输入",true],["cached","缓存",true],["output","输出",true],
+  ["total","总 Token",true],["cost","成本",true],["duration_ms","时长",true],
+  ["ttft_ms","首字",true],["output_tps","速度",true]
+];
+let usageFilters={model:"",preset:"14d",start:"",end:"",bucket:1800,refreshMs:10000,sort:"ts",order:"desc"};
 const USAGE_FILTERS_KEY="cpa_usage_filters_v1";
-function loadUsageFilters(){try{const raw=localStorage.getItem(USAGE_FILTERS_KEY);if(!raw) return;const d=JSON.parse(raw);if(typeof d.model==="string") usageFilters.model=d.model;if(typeof d.preset==="string"&&["today","1d","7d","14d","30d","custom"].includes(d.preset)) usageFilters.preset=d.preset;if(typeof d.bucket==="number"&&[300,1800,3600].includes(d.bucket)) usageFilters.bucket=d.bucket;if(typeof d.refreshMs==="number"&&[5000,10000,30000,60000].includes(d.refreshMs)) usageFilters.refreshMs=d.refreshMs;if(typeof d.start==="string") usageFilters.start=d.start;if(typeof d.end==="string") usageFilters.end=d.end;}catch(e){}}
+function loadUsageFilters(){try{const raw=localStorage.getItem(USAGE_FILTERS_KEY);if(!raw) return;const d=JSON.parse(raw);if(typeof d.model==="string") usageFilters.model=d.model;if(typeof d.preset==="string"&&["today","1d","7d","14d","30d","custom"].includes(d.preset)) usageFilters.preset=d.preset;if(typeof d.bucket==="number"&&[300,1800,3600].includes(d.bucket)) usageFilters.bucket=d.bucket;if(typeof d.refreshMs==="number"&&[5000,10000,30000,60000].includes(d.refreshMs)) usageFilters.refreshMs=d.refreshMs;if(typeof d.start==="string") usageFilters.start=d.start;if(typeof d.end==="string") usageFilters.end=d.end;if(USAGE_SORT_COLUMNS.some(c=>c[0]===d.sort)) usageFilters.sort=d.sort;if(["asc","desc"].includes(d.order)) usageFilters.order=d.order;}catch(e){}}
 function saveUsageFilters(){try{localStorage.setItem(USAGE_FILTERS_KEY,JSON.stringify(usageFilters));}catch(e){}}
 loadUsageFilters();
 let usageModels=[];
@@ -2141,132 +2118,6 @@ async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
   }
 }
 
-/* ---------- quota model (empirical Codex quota fitting) ---------- */
-const QUOTA_MODEL_VIEWS=[
-  {key:"recent6",label:"近 6 个周期",window:"recent",cycles:6},
-  {key:"recent12",label:"近 12 个周期",window:"recent",cycles:12},
-  {key:"all",label:"全部历史",window:"all",cycles:24},
-];
-const QUOTA_STATUS_LABEL={stable:"Stable",experimental:"Experimental",poorly_identified:"Poorly identified",insufficient_data:"Insufficient data",computing:"计算中"};
-const QUOTA_STATUS_TAG={stable:"ok",experimental:"warn",poorly_identified:"bad",insufficient_data:"plain",computing:"plain"};
-const QUOTA_REGIME_LABEL={stable:"Stable",drifting:"Drifting",shifted:"Changed",unknown:"Unknown"};
-function quotaStatusLabel(value){return QUOTA_STATUS_LABEL[value]||String(value||"—");}
-function quotaStatusTag(value){return QUOTA_STATUS_TAG[value]||"plain";}
-function quotaModelViewKey(){return localStorage.getItem("cpa-quota-model-view")||"recent6";}
-function quotaModelView(){return QUOTA_MODEL_VIEWS.find(v=>v.key===quotaModelViewKey())||QUOTA_MODEL_VIEWS[0];}
-function qmMult(value){return value==null?"—":Number(value).toFixed(3)+"x";}
-function qmCi(ci){if(!ci||ci.length!==2||ci[0]==null||ci[1]==null)return "";return "95% CI "+Number(ci[0]).toFixed(3)+" – "+Number(ci[1]).toFixed(3);}
-function qmPp(value){if(value==null)return "—";const n=Number(value);return (n>0?"+":"")+n.toFixed(4)+" pp";}
-function qmMetric(value,digits){return value==null?"—":Number(value).toFixed(digits==null?4:digits);}
-function qmStamp(ts){if(!ts)return "—";return new Date(Number(ts)*1000).toLocaleString("zh-CN",{hour12:false,month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"});}
-function qmSpanText(span){if(!span||!span.start_ts)return "—";return qmStamp(span.start_ts)+" — "+qmStamp(span.end_ts);}
-
-function quotaModelHTML(data,view){
-  const computing=Boolean(data.computing);
-  const status=computing?"computing":String(data.status||"insufficient_data");
-  const models=data.models||{};
-  const metrics=data.metrics||{};
-  const inSample=metrics.in_sample||{};
-  const holdout=metrics.test||null;
-  const regime=data.regime||{};
-  const accounts=data.accounts||[];
-  const spans=accounts.map(a=>a.span).filter(s=>s&&s.start_ts);
-  const span=spans.length?{start_ts:Math.min.apply(null,spans.map(s=>s.start_ts)),end_ts:Math.max.apply(null,spans.map(s=>s.end_ts))}:null;
-  const excluded=accounts.reduce((total,a)=>total+Number((((a.fit||{}).diagnostics||{}).observations_excluded)||0),0);
-  const summary=[
-    ["Model status",quotaStatusLabel(status),"最弱一项决定整体状态"],
-    ["Observations",fmt(data.observations||0),"排除 "+fmt(excluded)+" 条异常观测"],
-    ["Quota cycles",fmt(data.cycles_count||0),"视图："+view.label],
-    ["Training span",qmSpanText(span),"仅在同一 cycle 内做差"],
-    ["MAE / RMSE",qmMetric(inSample.mae)+" / "+qmMetric(inSample.rmse),"R² "+qmMetric(inSample.r2)+"（in-sample）"],
-    ["MAE / RMSE（hold-out）",holdout?(qmMetric(holdout.mae)+" / "+qmMetric(holdout.rmse)):"—",holdout?("R² "+qmMetric(holdout.r2)+" · 时间顺序 80/20，未打乱"):"观测不足，未做留出验证"],
-    ["Billing model",String(data.billing_model_version||"—"),"fitting epoch "+qmStamp(data.fitting_epoch)],
-    ["Regime stability",String(QUOTA_REGIME_LABEL[regime.status]||regime.status||"Unknown"),"比较 "+fmt(regime.cycles_compared||0)+" 个周期 · 最大漂移 "+qmMetric(regime.max_input_drift,3)],
-  ];
-  const modelKeys=Object.keys(models).sort();
-  const modelRows=modelKeys.map(key=>{
-    const info=models[key]||{};
-    const modelStatus=String(info.status||"insufficient_data");
-    const blind=modelStatus==="insufficient_data";
-    const pooled=String(info.source||"")==="pooled";
-    const flags=info.status_flags||[];
-    const confidence=(flags.indexOf("insufficient_variation")>=0)?"Insufficient variation":quotaStatusLabel(modelStatus);
-    const owners=(info.accounts||[]).join(" · ");
-    const active=Number(info.active_observations||0);
-    return `<div class="datagrid-row qm-cols">
-      <span class="row-main"><span class="row-title mono">${esc(key)}</span><span class="row-sub">${owners?esc(owners):"未归属"} · active obs ${fmt(active)}</span>${pooled?`<span class="qm-tag">Estimated from pooled data</span>`:``}</span>
-      <span class="cell qm-mult">${blind?"—":"1.000x"}</span>
-      <span class="cell qm-mult">${blind?"—":esc(qmMult(info.cache_multiplier))+`<span class="qm-ci">${esc(qmCi(info.cache_ci))}</span>`}</span>
-      <span class="cell qm-mult">${blind?"—":esc(qmMult(info.output_multiplier))+`<span class="qm-ci">${esc(qmCi(info.output_ci))}</span>`}</span>
-      <span class="cell qm-mult">${blind?"—":esc(qmMult(info.relative_input_weight))+`<span class="qm-ci">${esc(String(info.relative_input_weight_status||""))}</span>`}</span>
-      <span class="cell"><span class="badge ${quotaStatusTag(modelStatus)}">${esc(confidence)}</span></span>
-    </div>`;
-  }).join("");
-  const accountBlocks=accounts.map(acc=>{
-    const fit=acc.fit||{};
-    const fitStatus=String(fit.status||"insufficient_data");
-    const diag=fit.diagnostics||{};
-    const points=(acc.points||[]).slice(-40);
-    const rows=points.map(point=>`<tr${point.excluded?` class="qm-excluded"`:``}><td>${esc(qmStamp(point.start_ts))}</td><td class="num">${qmMetric(point.actual,4)}</td><td class="num">${point.predicted==null?"—":qmMetric(point.predicted,4)}</td><td class="num">${point.residual==null?"—":qmPp(point.residual)}</td><td>${point.excluded?esc(point.exclude_reason||"excluded"):(point.is_rounded?"rounded":"included")}</td></tr>`).join("");
-    return `<div class="qm-account">
-      <div class="qm-account-head"><span class="mono">${esc(acc.prefix||"?")}</span><span class="muted">${esc(acc.label||"")}</span><span class="badge ${quotaStatusTag(fitStatus)}">${esc(quotaStatusLabel(fitStatus))}</span><span class="muted">观测 ${fmt(acc.observations||0)} · 快照 ${fmt(acc.snapshots||0)}</span></div>
-      <div class="qm-side">
-        <div><span class="qm-side-label">API Equivalent Cost（既有模型，独立）</span><span class="qm-side-value">${acc.api_cost_usd==null?"—":esc(fmtCost(acc.api_cost_usd))}</span></div>
-        <div><span class="qm-side-label">Observed Weekly Quota</span><span class="qm-side-value">${acc.observed_used_percent==null?"—":Number(acc.observed_used_percent).toFixed(2)+"%"}</span></div>
-        <div><span class="qm-side-label">Observed ΔQ（窗口内）</span><span class="qm-side-value">${qmPp(acc.observed_change_pp)}</span></div>
-        <div><span class="qm-side-label">Empirical Predicted ΔQ</span><span class="qm-side-value">${qmPp(acc.predicted_change_pp)}</span></div>
-        <div><span class="qm-side-label">Residual</span><span class="qm-side-value">${qmPp(acc.residual_pp)}</span></div>
-      </div>
-      <p class="billing-meta">聚合窗口 ${fmtDuration(Number(acc.window_seconds||0)*1000)} · 训练区间 ${esc(qmSpanText(acc.span))} · 排除 ${fmt(Number(diag.observations_excluded||0))} 条${acc.cycle_end_ts?`<br>当前额度周期 ${esc(qmStamp(acc.cycle_start_ts))} — ${esc(qmStamp(acc.cycle_end_ts))}`:``}</p>
-      ${points.length?`<div class="qm-points qm-collapsed"><table><thead><tr><th>区间开始</th><th class="num">实际 ΔQ</th><th class="num">拟合</th><th class="num">残差</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table></div>`:``}
-    </div>`;
-  }).join("");
-  const notes=(data.notes||[]).map(note=>`<li>• ${esc(note)}</li>`).join("");
-  return `<div class="oauth-panel">
-    <div class="oauth-panel-head">
-      <div class="grow"><h3 class="oauth-panel-title">额度拟合 · Quota Model <span class="badge ${quotaStatusTag(status)}">${esc(quotaStatusLabel(status))}</span></h3>
-      <p class="oauth-panel-copy">经验系数（empirical coefficient / observed quota coefficient）：由额度快照差分与 CPA token 记录拟合，不使用官方 API 价格校准，与上方 API Equivalent Cost 完全独立。</p></div>
-      <div class="qm-toolbar">
-        <div class="qm-viewbar">${QUOTA_MODEL_VIEWS.map(item=>`<button class="btn btn-secondary btn-sm" type="button" data-qm-view="${item.key}" aria-pressed="${item.key===view.key?"true":"false"}">${esc(item.label)}</button>`).join("")}</div>
-        <button class="btn btn-secondary btn-sm" type="button" data-qm-refresh>立即刷新</button>
-        ${accountBlocks?`<button class="btn btn-secondary btn-sm" type="button" data-qm-points>显示观测明细</button>`:``}
-      </div>
-    </div>
-    <div class="qm-summary">${summary.map(item=>`<div class="qm-summary-cell"><span class="qm-summary-label">${esc(item[0])}</span><span class="qm-summary-value">${esc(item[1])}</span><span class="qm-summary-sub">${esc(item[2])}</span></div>`).join("")}</div>
-    <div class="datagrid"><div class="datagrid-head qm-cols"><span>Model</span><span>Input</span><span>Cache Hit</span><span>Output</span><span>Relative Input Weight</span><span>Confidence</span></div>
-      ${modelRows||`<div class="datagrid-row"><span class="muted">尚无可用模型观测：样本不足时不显示倍率</span></div>`}</div>
-    ${accountBlocks?`<div class="qm-accounts">${accountBlocks}</div>`:``}
-    ${notes?`<ul class="qm-notes">${notes}</ul>`:``}
-    <div class="qm-foot">${esc(computing?"拟合进行中：后台线程计算，稍后自动刷新。":"观测 "+fmt(data.observations||0)+" 个区间 · 全部历史视图为实验性质，默认使用最近若干完整周期；数据不足时显示 “—”，不伪造精度。")}</div>
-  </div>`;
-}
-
-async function loadQuotaModel(panel,opts){
-  const options=opts||{};
-  const loadId=panel._qmLoadId=(panel._qmLoadId||0)+1;
-  const view=quotaModelView();
-  if(!options.silent) panel.innerHTML=`<div class="oauth-panel"><div class="oauth-panel-head"><div class="grow"><h3 class="oauth-panel-title">额度拟合 · Quota Model</h3><p class="oauth-panel-copy">正在读取额度快照与 CPA token 记录并拟合…</p></div></div></div>`;
-  try{
-    const data=await api("/quota-model?window="+(view.window==="all"?"all":"recent")+"&cycles="+view.cycles+(options.force?"&fresh=1":""));
-    if(!panel.isConnected||panel._qmLoadId!==loadId||page!=="subs") return;
-    panel.innerHTML=quotaModelHTML(data,view);
-    const refresh=panel.querySelector("[data-qm-refresh]");
-    if(refresh) refresh.onclick=()=>loadQuotaModel(panel,{force:true});
-    panel.querySelectorAll("[data-qm-view]").forEach(btn=>{btn.onclick=()=>{localStorage.setItem("cpa-quota-model-view",btn.getAttribute("data-qm-view"));loadQuotaModel(panel,{force:true});};});
-    const toggle=panel.querySelector("[data-qm-points]");
-    if(toggle) toggle.onclick=()=>{
-      const boxes=Array.from(panel.querySelectorAll(".qm-points"));
-      const collapsed=boxes.length?boxes[0].classList.contains("qm-collapsed"):false;
-      boxes.forEach(box=>box.classList.toggle("qm-collapsed",!collapsed));
-      toggle.textContent=collapsed?"隐藏观测明细":"显示观测明细";
-    };
-    if(data.computing) setTimeout(()=>{if(page==="subs"&&panel.isConnected) loadQuotaModel(panel,{silent:true});},2500);
-  }catch(e){
-    if(!panel.isConnected||panel._qmLoadId!==loadId||page!=="subs") return;
-    panel.innerHTML=`<div class="oauth-panel-error">额度拟合读取失败：${esc(e.message)}</div>`;
-  }
-}
-
 function renderCodexCard(cx){
   const el=$("#codexCard");
   const models=(cx.models||[]);
@@ -2284,9 +2135,6 @@ function renderCodexCard(cx){
   let accounts=document.getElementById("oauthAccountsPanel");
   if(!accounts){accounts=document.createElement("div");accounts.id="oauthAccountsPanel";el.parentElement.after(accounts);}
   loadOAuthAccounts(accounts);
-  let quotaModel=document.getElementById("quotaModelPanel");
-  if(!quotaModel){quotaModel=document.createElement("div");quotaModel.id="quotaModelPanel";accounts.after(quotaModel);}
-  loadQuotaModel(quotaModel);
 }
 
 function openCodexDetails(cx){
@@ -2329,7 +2177,7 @@ async function renderKeys(){
   $("#pageActions").innerHTML=`<button class="btn btn-primary btn-sm" id="newKey" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>签发新 Key</button>`;
   main.innerHTML=`<section class="page">
     <div class="section">
-      <div class="section-head"><h2>已签发密钥</h2><p>开关即时生效；撤销后客户端将立即失去访问权限。</p></div>
+      <div class="section-head"><h2>已签发密钥</h2><p>点击名称编辑模型与限流；开关即时生效，撤销后立即失去访问权限。</p></div>
       <div class="datagrid">
         <div class="datagrid-head key-cols" aria-hidden="true"><span>名称</span><span>Key</span><span>状态</span><span>启用</span><span></span></div>
         <div id="keyList"></div>
@@ -2339,7 +2187,7 @@ async function renderKeys(){
   const st=await api("/state");
   if(page!=="keys") return;
   renderKeyList(st.keys||[]);
-  $("#newKey").onclick=openKeySheet;
+  $("#newKey").onclick=()=>openKeySheet();
 }
 
 const revealedKeys={};
@@ -2350,8 +2198,9 @@ function renderKeyList(keys){
   el.innerHTML=keys.map(k=>`
     <div class="datagrid-row key-cols key-item" data-key="${esc(k.id)}">
       <span class="row-main">
-        <span class="kname row-title">${esc(k.name)}</span>
+        <button class="kname row-title" type="button" data-role="edit" title="编辑模型权限与限流" style="background:none;border:0;padding:0;text-align:left;color:var(--accent);cursor:pointer">${esc(k.name)} <span class="row-sub">编辑</span></button>
         <span class="row-sub">创建于 ${dateStr(k.createdAt)} · ${timeAgo(k.lastUsedAt)}${k.note?" · "+esc(k.note):""}</span>
+        <span class="row-sub">RPM ${esc(k.rpm||120)} · 并发 ${esc(k.maxConcurrent||8)}</span>
       </span>
       <span class="kmask" data-role="value">${esc(revealedKeys[k.id]||keyMask(k))}</span>
       <span class="state"><i class="dot ${k.enabled?(k.expiresAt?"warn":"on"):""}"></i>${k.enabled?(k.expiresAt?new Date(k.expiresAt*1000).toLocaleDateString("zh-CN")+" 到期":"生效中"):"已停用"}</span>
@@ -2360,6 +2209,16 @@ function renderKeyList(keys){
     </div>`).join("") || `<div class="empty">尚未签发下游 API Key。</div>`;
   el.querySelectorAll("[data-key]").forEach(row=>{
     const k=keys.find(x=>x.id===row.dataset.key); if(!k) return;
+    row.querySelector('[data-role="edit"]').onclick=async e=>{
+      const button=e.currentTarget; button.disabled=true;
+      try{
+        const r=await api("/keys");
+        const current=(r.keys||[]).find(x=>x.id===k.id);
+        if(!current) throw new Error("该 Key 已被撤销，请刷新列表");
+        if(button.isConnected&&page==="keys") openKeySheet(current);
+      }catch(err){ toast(err.message,"err"); }
+      finally{ button.disabled=false; }
+    };
     row.querySelector('[data-role="toggle"]').onclick=async e=>{
       e.currentTarget.classList.toggle("on");
       try{ await api("/keys/"+encodeURIComponent(k.id),{method:"PATCH",body:JSON.stringify({enabled:e.currentTarget.classList.contains("on")})}); toast("Key 已"+(e.currentTarget.classList.contains("on")?"启用":"停用")); }catch(err){ e.currentTarget.classList.toggle("on"); toast(err.message,"err"); }
@@ -2371,28 +2230,114 @@ function renderKeyList(keys){
   });
 }
 
-function openKeySheet(){
+function keyModelPattern(model){
+  return model.replace(/[\[*?]/g,c=>({"[":"[[]","*":"[*]","?":"[?]"}[c]));
+}
+function keyModelLiteral(pattern){
+  let model="";
+  for(let i=0;i<pattern.length;i++){
+    const token=pattern.slice(i,i+3);
+    if(token==="[[]"||token==="[*]"||token==="[?]"){ model+=token[1]; i+=2; }
+    else if("[*?".includes(pattern[i])) return null;
+    else model+=pattern[i];
+  }
+  return model;
+}
+function openKeySheet(existing=null){
+  const patterns=existing?(existing.modelPatterns?.length?existing.modelPatterns:existing.model_patterns||[]):[];
+  const prefixes=existing?(existing.providerPrefixes?.length?existing.providerPrefixes:existing.provider_prefixes||[]):[];
+  const literals=patterns.map(keyModelLiteral);
+  const legacy=!!existing&&(prefixes.length>0||literals.some(m=>m===null));
+  const unrestricted=!!existing&&!patterns.length&&!prefixes.length;
   const s=$("#sheet"); s.classList.remove("wide");
-  s.innerHTML=`<h3>签发新 Key</h3>
+  s.innerHTML=`<h3>${existing?"编辑 Key":"签发新 Key"}</h3>
+    ${existing?'<p class="hint">保存后立即生效；保留原 Key，无需修改客户端密钥。</p>':""}
     <div class="field"><label class="form-label">名称</label><input class="form-input" id="nkName" placeholder="例如：我的笔记本"></div>
     <div class="field"><label class="form-label">备注</label><input class="form-input" id="nkNote" placeholder="可选"></div>
     <div class="field"><label class="form-label">到期时间（可选，Unix 秒）</label><input class="form-input mono" id="nkExp" placeholder="留空则永不过期"></div>
-    <p class="hint">模型范围：默认全部模型可用（无需填写）。</p>
-    <div class="row"><div class="field"><label class="form-label">RPM</label><input class="form-input mono" id="nkRpm" type="number" min="1" value="120"></div><div class="field"><label class="form-label">最大并发</label><input class="form-input mono" id="nkConc" type="number" min="1" value="8"></div></div>
-    <div class="foot"><button class="btn btn-secondary" id="nkCancel">取消</button><button class="btn btn-primary" id="nkCreate">生成</button></div>
+    <div class="field">
+      <label class="form-label">允许使用的模型</label>
+      <div class="row"><button class="btn btn-secondary btn-sm" id="nkSelectAll" disabled>全选</button><button class="btn btn-secondary btn-sm" id="nkClearAll" disabled>取消全选</button><span class="hint" id="nkModelCount" role="status" style="margin:0">正在加载模型…</span><button class="btn btn-secondary btn-sm" id="nkRetryModels" hidden>重试</button></div>
+      <div id="nkModels" role="group" aria-label="允许使用的模型" style="max-height:240px;overflow:auto;border:1px solid var(--separator);border-radius:8px;padding:8px"></div>
+      <p class="hint" id="nkScopeHint">${legacy?"原 Key 使用通配符或前缀策略；默认保留原策略。若需逐项选择，请点击下方按钮，重新选择允许的模型。":unrestricted?"原 Key 为全部模型可用（包含未来模型）。仅修改限流时保留原权限；操作模型勾选或全选按钮后，将改为当前所选模型列表。":existing?"已勾选原有权限；未发布的原授权模型也会保留。至少选择一个模型，新模型不会自动授权。":"默认全选当前已发布模型；至少选择一个。新发布的模型不会自动获得授权。"}</p>
+      ${legacy?'<button class="btn btn-secondary btn-sm" id="nkReplaceScope">改为逐项授权</button>':""}
+    </div>
+    <div class="row"><div class="field"><label class="form-label">RPM（1–10000）</label><input class="form-input mono" id="nkRpm" type="number" min="1" max="10000" value="120"></div><div class="field"><label class="form-label">最大并发（1–64）</label><input class="form-input mono" id="nkConc" type="number" min="1" max="64" value="8"></div></div>
+    <div class="foot"><button class="btn btn-secondary" id="nkCancel">取消</button><button class="btn btn-primary" id="nkCreate" disabled>${existing?"保存修改":"生成"}</button></div>
     <div id="nkResult"></div>`;
   $("#sheetBack").classList.add("on"); s.classList.add("on");
   $("#nkCancel").onclick=closeSheet;
-  $("#nkCreate").onclick=async()=>{
-    const btn=$("#nkCreate"); btn.disabled=true;
+  const list=$("#nkModels"), btn=$("#nkCreate"), count=$("#nkModelCount");
+  const selectAll=$("#nkSelectAll"), clearAll=$("#nkClearAll"), retry=$("#nkRetryModels");
+  const fields={name:$("#nkName"),note:$("#nkNote"),expiresAt:$("#nkExp"),rpm:$("#nkRpm"),maxConcurrent:$("#nkConc")};
+  if(existing){
+    fields.name.value=existing.name||""; fields.note.value=existing.note||"";
+    fields.expiresAt.value=existing.expiresAt??""; fields.rpm.value=existing.rpm||120; fields.maxConcurrent.value=existing.maxConcurrent||8;
+  }
+  let models=[], selected=new Set(), loaded=false, creating=false, scopeDirty=false, scopeEditable=!legacy;
+  const update=()=>{
+    count.textContent=scopeEditable?`已选 ${selected.size} / ${models.length} 个模型`:"保留原模型策略";
+    btn.disabled=creating||((!existing||scopeDirty)&&(!loaded||selected.size===0||selected.size>128));
+    selectAll.disabled=clearAll.disabled=creating||!loaded||!scopeEditable;
+    if(legacy) $("#nkReplaceScope").disabled=creating||!loaded;
+    list.querySelectorAll("input").forEach(input=>{ input.checked=selected.has(input.value); input.disabled=creating||!scopeEditable; });
+    Object.values(fields).forEach(input=>{ input.disabled=creating; });
+  };
+  const load=async()=>{
+    loaded=false; btn.disabled=true; selectAll.disabled=clearAll.disabled=true; retry.hidden=true;
+    count.textContent="正在加载模型…";
     try{
-      const r=await api("/keys",{method:"POST",body:JSON.stringify({name:$("#nkName").value,note:$("#nkNote").value,expiresAt:parseInt($("#nkExp").value)||null,rpm:parseInt($("#nkRpm").value)||120,maxConcurrent:parseInt($("#nkConc").value)||8})});
+      const r=await api("/model");
+      if($("#nkModels")!==list) return;
+      if(r.truncated||!Array.isArray(r.models)||r.models.some(m=>typeof m!=="string"||!m||m!==m.trim())) throw new Error("模型目录不完整，无法签发，请重试");
+      const published=new Set(r.models);
+      models=[...new Set([...r.models,...(existing&&!legacy?literals:[])])].sort((a,b)=>a.localeCompare(b));
+      if(!models.length&&!existing) throw new Error("当前没有已发布模型，请先配置并应用模型");
+      if(models.length>128||models.some(m=>[...keyModelPattern(m)].length>200)) throw new Error("模型目录超出当前 Key 权限范围上限，无法安全签发");
+      selected=new Set(!existing||unrestricted?models:legacy?[]:literals);
+      list.innerHTML=models.map(m=>`<label class="row" style="padding:6px 4px;flex-wrap:nowrap;cursor:pointer"><input type="checkbox" value="${esc(m)}"><span class="mono" style="overflow-wrap:anywhere;min-width:0">${esc(m)}${published.has(m)?"":"（当前未发布）"}</span></label>`).join("");
+      loaded=true; update();
+    }catch(e){
+      if($("#nkModels")!==list) return;
+      list.textContent=existing?"未加载模型。仍可保存名称与限流，原模型权限将保持不变。":"未加载模型，不会签发无限制 Key。";
+      update(); count.textContent=e.message; retry.hidden=false;
+    }
+  };
+  list.onchange=e=>{
+    if(!loaded||creating||!scopeEditable||e.target.type!=="checkbox"||!models.includes(e.target.value)) return;
+    scopeDirty=true;
+    if(e.target.checked) selected.add(e.target.value); else selected.delete(e.target.value);
+    update();
+  };
+  selectAll.onclick=()=>{ if(!scopeEditable||creating||!loaded) return; scopeDirty=true; selected=new Set(models); update(); };
+  clearAll.onclick=()=>{ if(!scopeEditable||creating||!loaded) return; scopeDirty=true; selected.clear(); update(); };
+  if(legacy) $("#nkReplaceScope").onclick=e=>{
+    if(!loaded||creating) return;
+    scopeEditable=true; scopeDirty=true; selected.clear(); e.currentTarget.hidden=true;
+    $("#nkScopeHint").textContent="保存将替换原通配符与前缀策略，仅允许勾选的模型；至少选择一个。"; update();
+  };
+  retry.onclick=load;
+  btn.onclick=async()=>{
+    if(creating) return;
+    if((!existing||scopeDirty)&&(!loaded||!selected.size||selected.size>128)){ toast("请选择 1–128 个允许使用的模型","err"); return; }
+    const rpm=Number(fields.rpm.value), maxConcurrent=Number(fields.maxConcurrent.value);
+    const expiresAt=fields.expiresAt.value.trim()===""?null:Number(fields.expiresAt.value);
+    if(!Number.isSafeInteger(rpm)||rpm<1||rpm>10000||!Number.isSafeInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>64){ toast("RPM 须为 1–10000 的整数，最大并发须为 1–64 的整数","err"); return; }
+    if(expiresAt!==null&&(!Number.isSafeInteger(expiresAt)||expiresAt<0)){ toast("到期时间须为有效的 Unix 秒时间戳","err"); return; }
+    const payload={name:fields.name.value,note:fields.note.value,expiresAt,rpm,maxConcurrent};
+    if(!existing||scopeDirty){ payload.modelPatterns=[...selected].map(keyModelPattern); payload.providerPrefixes=[]; }
+    creating=true; update();
+    try{
+      const r=await api(existing?"/keys/"+encodeURIComponent(existing.id):"/keys",{method:existing?"PATCH":"POST",body:JSON.stringify(payload)});
+      if($("#nkModels")!==list) return;
+      if(existing){ toast("Key 已更新，原密钥保持不变"); closeSheet(); if(page==="keys") renderKeys(); return; }
       $("#nkResult").innerHTML=`<div class="key-reveal"><code>${esc(r.key)}</code><button class="btn btn-primary btn-sm" id="cpKey">复制</button></div><p class="hint">此 Key 仅显示一次，请立即保存。</p>`;
       $("#cpKey").onclick=()=>{ navigator.clipboard.writeText(r.key); toast("已复制"); };
       toast("Key 已签发");
     }catch(e){ toast(e.message,"err"); }
-    btn.disabled=false;
+    creating=false; update();
   };
+  load();
 }
 function closeSheet(){ const s=$("#sheet"); s.classList.remove("on","wide"); $("#sheetBack").classList.remove("on"); }
 $("#sheetBack").onclick=closeSheet;
@@ -2423,9 +2368,31 @@ function usageWindowLabel(w){
 function usageQuery(){
   const w=usageWindow();
   if(!Number.isFinite(w.start)||!Number.isFinite(w.end)||w.end<=w.start) throw new Error("时间范围无效：结束时间必须晚于开始时间");
-  const q=new URLSearchParams({start:String(w.start),end:String(w.end),bucket:String(usageFilters.bucket),limit:"200"});
+  const q=new URLSearchParams({start:String(w.start),end:String(w.end),bucket:String(usageFilters.bucket),limit:"200",sort:usageFilters.sort,order:usageFilters.order});
   if(usageFilters.model) q.set("model",usageFilters.model);
   return q.toString();
+}
+function usageRecentHeader(){
+  return '<thead><tr>'+USAGE_SORT_COLUMNS.map(([field,label,numeric])=>{
+    const active=usageFilters.sort===field;
+    const next=active?(usageFilters.order==="asc"?"desc":"asc"):(numeric?"desc":"asc");
+    const direction=active?(usageFilters.order==="asc"?"ascending":"descending"):"none";
+    const action=`按${label}${next==="asc"?"升序":"降序"}排列`;
+    return `<th class="${numeric&&field!=='ts'?'r':''}" aria-sort="${direction}"><button type="button" class="usage-sort${active?' is-active':''}" data-usage-sort="${field}" aria-label="${action}" title="${action}">${label}<span aria-hidden="true">${active?(usageFilters.order==="asc"?'↑':'↓'):'↕'}</span></button></th>`;
+  }).join('')+'</tr></thead>';
+}
+function bindUsageSortControls(){
+  $("#recentTbl").querySelectorAll('[data-usage-sort]').forEach(button=>{
+    button.onclick=()=>{
+      const field=button.getAttribute('data-usage-sort');
+      const column=USAGE_SORT_COLUMNS.find(c=>c[0]===field);
+      if(!column) return;
+      usageFilters.order=usageFilters.sort===field?(usageFilters.order==="asc"?"desc":"asc"):(column[2]?"desc":"asc");
+      usageFilters.sort=field;
+      saveUsageFilters();
+      refreshUsage();
+    };
+  });
 }
 function renderUsageModelOptions(models){
   const select=$("#usageModelFilter"); if(!select) return;
@@ -2477,7 +2444,7 @@ async function renderUsage(){
       <div class="table-wrap"><table class="tbl" id="modelTbl"></table></div>
     </section>
     <section class="section">
-      <div class="section-head"><h2>最近调用</h2><p>使用相同筛选条件的请求明细</p></div>
+      <div class="section-head"><h2>最近调用</h2><p id="recentSummary">最多显示 200 条</p></div>
       <div class="table-wrap scroll"><table class="tbl" id="recentTbl"></table></div>
     </section>
   </section>`;
@@ -2486,10 +2453,15 @@ async function renderUsage(){
 }
 
 async function refreshUsage(){
-  if(usageLoading) return; usageLoading=true;
+  const version=++usageRequestVersion;
+  if(usageLoading){ usageRefreshPending=true; return; }
+  usageLoading=true;
+  clearTimeout(usageTimer);
+  const table=$("#recentTbl");
+  if(table) table.setAttribute('aria-busy','true');
   try{
     const u=await api("/usage?"+usageQuery());
-    if(page!=="usage") return;
+    if(page!=="usage"||version!==usageRequestVersion) return;
     usageModels=u.models||[]; usagePrices=u.prices||{};
     renderUsageModelOptions(usageModels);
     const t=u.totals||{};
@@ -2510,12 +2482,17 @@ async function refreshUsage(){
     const models=Object.entries(u.byModel||{}).sort((a,b)=>(Number(b[1].input||0)+Number(b[1].cached||0)+Number(b[1].output||0))-(Number(a[1].input||0)+Number(a[1].cached||0)+Number(a[1].output||0)));
     $("#modelTbl").innerHTML=`<thead><tr><th>模型</th><th class="r">请求</th><th class="r">未缓存输入</th><th class="r">缓存命中</th><th class="r">输出</th><th class="r">成本</th><th class="r">平均速度</th></tr></thead><tbody>${models.map(([m,v])=>`<tr><td class="mono">${esc(m)}</td><td class="r">${fmt(v.requests)}</td><td class="r">${fmtShort(v.input)}</td><td class="r">${fmtShort(v.cached)}</td><td class="r">${fmtShort(v.output)}</td><td class="r">${fmtCost(v.cost)}</td><td class="r">${fmtTps(v.output_tps)}</td></tr>`).join("")||`<tr><td colspan="7" class="muted">暂无数据</td></tr>`}</tbody>`;
     const recent=u.recent||[];
-    $("#recentTbl").innerHTML=`<thead><tr><th>时间</th><th>模型</th><th>Key</th><th class="r">未缓存输入</th><th class="r">缓存</th><th class="r">输出</th><th class="r">总 Token</th><th class="r">成本</th><th class="r">时长</th><th class="r">首字</th><th class="r">速度</th></tr></thead><tbody>${recent.map(c=>`<tr><td class="mono">${fmtClock(c.ts)}</td><td class="mono">${recentModelCell(c)}</td><td class="mono" title="${esc(c.key_id||"")}">${esc(shortKey(c.key_id))}</td><td class="r">${fmt(c.input)}</td><td class="r">${fmt(c.cached)}</td><td class="r">${fmt(c.output)}</td><td class="r">${fmt(c.total)}</td><td class="r">${fmtCost(c.cost)}</td><td class="r">${fmtDuration(c.duration_ms)}</td><td class="r">${c.ttft_ms?fmtDuration(c.ttft_ms):"—"}</td><td class="r">${fmtTps(c.output_tps)}</td></tr>`).join("")||`<tr><td colspan="11" class="muted">暂无调用记录</td></tr>`}</tbody>`;
-  }catch(e){ if(page==="usage") toast(e.message,"err"); }
+    $("#recentTbl").innerHTML=`${usageRecentHeader()}<tbody>${recent.map(c=>`<tr><td class="mono">${fmtClock(c.ts)}</td><td class="mono">${recentModelCell(c)}</td><td class="mono" title="${esc(c.key_id||"")}">${esc(shortKey(c.key_id))}</td><td class="r">${fmt(c.input)}</td><td class="r">${fmt(c.cached)}</td><td class="r">${fmt(c.output)}</td><td class="r">${fmt(c.total)}</td><td class="r">${fmtCost(c.cost)}</td><td class="r">${fmtDuration(c.duration_ms)}</td><td class="r">${c.ttft_ms?fmtDuration(c.ttft_ms):"—"}</td><td class="r">${fmtTps(c.output_tps)}</td></tr>`).join("")||`<tr><td colspan="11" class="muted">暂无调用记录</td></tr>`}</tbody>`;
+    $("#recentSummary").textContent=`当前筛选范围 · ${fmt(recent.length)} / ${fmt(t.requests||0)} 条`;
+    bindUsageSortControls();
+  }catch(e){ if(page==="usage"&&version===usageRequestVersion) toast(e.message,"err"); }
   finally{
     usageLoading=false;
+    if(table&&table.isConnected) table.removeAttribute('aria-busy');
     clearTimeout(usageTimer);
-    usageTimer=setTimeout(()=>{ if(page==="usage") refreshUsage(); }, usageFilters.refreshMs);
+    const delay=usageRefreshPending?0:usageFilters.refreshMs;
+    usageRefreshPending=false;
+    usageTimer=setTimeout(()=>{ if(page==="usage") refreshUsage(); }, delay);
   }
 }
 

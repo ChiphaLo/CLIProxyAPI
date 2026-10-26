@@ -116,6 +116,7 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 	end := integerQuery(query, "end", now+1)
 	bucket := max(300, min(integerQuery(query, "bucket", 1800), 3600))
 	limit := int(max(1, min(integerQuery(query, "limit", 100), 500)))
+	sortField, sortOrder := usageSort(query)
 	model := strings.TrimSpace(query.Get("model"))
 	if start < 0 || end <= start || end-start > 366*86400 {
 		return nil, errors.New("invalid usage time range")
@@ -132,7 +133,7 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 	byHalf := map[int64]*usageStat{}
 	models := map[string]bool{}
 	recent := []map[string]any{}
-	var recentEntries []usageRecord
+	recentEntries := &recentUsageHeap{descending: sortOrder == "desc"}
 	todayKey := s.options.Now().UTC().Format("2006-01-02")
 	err = s.visitUsage(func(entry usageRecord) error {
 		row := entry.Row
@@ -164,15 +165,15 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 			}
 			group.Slots[slot].add(row, cost)
 		}
-		recentEntries = append(recentEntries, entry)
-		if len(recentEntries) > limit {
-			slices.SortStableFunc(recentEntries, func(a, b usageRecord) int { return int(b.Row.TS - a.Row.TS) })
-			recentEntries = recentEntries[:limit]
-		}
+		recentEntries.add(rankUsage(entry, cost, sortField), limit)
 		return nil
 	}, func(file *os.File) error {
+		slices.SortFunc(recentEntries.rows, func(a, b rankedUsage) int {
+			return compareRankedUsage(a, b, recentEntries.descending)
+		})
 		// Preserve every existing recent-call field without caching full JSON.
-		for _, entry := range recentEntries {
+		for _, selected := range recentEntries.rows {
+			entry := selected.entry
 			line := make([]byte, entry.Length)
 			if _, err := file.ReadAt(line, entry.Offset); err != nil {
 				return errors.New("recent usage read failed")
@@ -235,12 +236,11 @@ func (s *Server) usage(query url.Values) (map[string]any, error) {
 		ids = append(ids, id)
 	}
 	slices.Sort(ids)
-	slices.SortFunc(recent, func(a, b map[string]any) int { return int(number(b["ts"]) - number(a["ts"])) })
 	today := map[string]any{}
 	if byDay[todayKey] != nil {
 		today = byDay[todayKey].value()
 	}
-	return map[string]any{"totals": total.value(), "byModel": mapStats(byModel), "models": ids, "byDay": mapStats(byDay), "byHour": slots(byHour), "byHourAll": slots(byHour), "byHalfHour": slots(byHalf), "byBucket": slots(byBucket), "recent": recent, "today": today, "filters": map[string]any{"model": model, "start": start, "end": end, "bucket": bucket}, "prices": prices, "updatedAt": now}, nil
+	return map[string]any{"totals": total.value(), "byModel": mapStats(byModel), "models": ids, "byDay": mapStats(byDay), "byHour": slots(byHour), "byHourAll": slots(byHour), "byHalfHour": slots(byHalf), "byBucket": slots(byBucket), "recent": recent, "today": today, "filters": map[string]any{"model": model, "start": start, "end": end, "bucket": bucket, "sort": sortField, "order": sortOrder}, "prices": prices, "updatedAt": now}, nil
 }
 func (s *Server) usageResponse(w http.ResponseWriter, r *http.Request) {
 	value, err := s.usage(r.URL.Query())

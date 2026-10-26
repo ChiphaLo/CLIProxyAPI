@@ -98,7 +98,9 @@ func (s *Server) visitUsage(visit func(usageRecord) error, finish func(*os.File)
 			next = append(next, block)
 		} else {
 			cacheable = false
-			next = nil
+			// Keep the verified prefix within budget. Discarding it here makes
+			// every subsequent poll decode the entire file once capacity is hit.
+			// Overflow blocks are still decoded and visited, never omitted.
 		}
 		start = offset
 		hash.Reset()

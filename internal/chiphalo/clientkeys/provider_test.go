@@ -196,6 +196,29 @@ func TestPythonGlobCases(t *testing.T) {
 	}
 }
 
+func TestIssuedKeyExplicitModelSelection(t *testing.T) {
+	p, err := New("admin-test-only", keyRaw(t, "client-test-only", map[string]any{
+		"modelPatterns":    []string{"gpt-6.1-sol", "codex2/gpt-6-luna", "literal/model[[]beta][*][?]"},
+		"providerPrefixes": []string{},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, model := range []string{"gpt-6.1-sol", "codex2/gpt-6-luna", "literal/model[beta]*?"} {
+		if err := p.Authorize("client-1", model); err != nil {
+			t.Errorf("selected model %q rejected: %v", model, err)
+		}
+	}
+	for _, model := range []string{"codex2/gpt-6.1-sol", "gpt-6-luna", "codex2/gpt-6-astra", "new-model", "literal/modelbxx", "literal/model[beta]abc?"} {
+		if p.Authorize("client-1", model) == nil {
+			t.Errorf("unselected model %q authorized", model)
+		}
+	}
+	if p.Authorize("admin", "new-model") != nil {
+		t.Fatal("admin permissions changed")
+	}
+}
+
 func TestLegacyEnvReadIsLiteral(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway.env")
 	if err := os.WriteFile(path, []byte("INNER_GATEWAY_API_KEY=do-not-use\nUNIFIED_GATEWAY_API_KEY='literal-$(never-execute)'\n"), 0600); err != nil {

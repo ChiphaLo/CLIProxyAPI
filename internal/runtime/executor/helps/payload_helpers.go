@@ -59,6 +59,7 @@ func ApplyPayloadConfigWithTrackedPathsForExecutor(cfg *config.Config, targetExe
 	if IsCodexUserAgent(headers) && !isCodexTargetExecutor(targetExecutor) {
 		payload = NormalizeCodexToolIntegerTypes(payload, headers)
 	}
+	payload = applyDeepSeekMilestoneGuidance(payload, model, protocol, root)
 	if cfg == nil {
 		return payload, touched
 	}
