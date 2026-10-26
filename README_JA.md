@@ -2,6 +2,7 @@
 
 [English](README.md) | [中文](README_CN.md) | 日本語
 
+
 CLIProxyAPI は、CLI向けのOpenAI/Gemini/Claude/Codex/Grok互換APIインターフェースを提供するプロキシサーバーです。
 
 ローカル環境や複数のCLIアカウントを通じて、OpenAI（Responses含む）、Gemini（Interactions含む）、またはClaude互換のクライアントやSDKから、以下のプロバイダーにアクセスできます。
@@ -22,11 +23,11 @@ CLIProxyAPI は、CLI向けのOpenAI/Gemini/Claude/Codex/Grok互換APIインタ�
     </tr>
     <tr>
         <td align="center"><a href="https://www.anthropic.com/claude"><img src="./assets/logo/claude.svg" alt="Anthropic" width="28" height="28" /></a></td>
-        <td>Anthropic Claudeシリーズモデル（Claude Fable 5.1、Claude Opus 5.5、Claude Sonnet 5.5）。Fable 5.1は長期のコーディングや知識作業向けで、Opus 5.5は低いコストで高度なエージェント型コーディングに対応します。</td>
+        <td>Anthropic Claudeシリーズモデル（Claude Fable 5.1、Claude Opus 5.5、Claude Sonnet 5.5、Claude Haiku 5.5）。Fable 5.1は長期のコーディングや知識作業向けで、Opus 5.5は低いコストで高度なエージェント型コーディングに対応します。</td>
     </tr>
     <tr>
         <td align="center"><a href="https://antigravity.google/"><img src="./assets/logo/antigravity.svg" alt="Antigravity" width="28" height="28" /></a></td>
-        <td>Google GeminiシリーズにはGemini 3.8 FlashやGemini 3.1 Pro Previewがあります。CLIProxyAPIはGemini API、AI Studio、Vertex AI、Gemini CLI、Antigravityのアカウントに対応し、利用できるモデルは経路によって異なります。Gemini 3.8 Flashは、長期のソフトウェア開発やエージェントのワークフロー向けのGoogleの最新Flashモデルです。</td>
+        <td>Google GeminiシリーズにはGemini 4 ArgonやGemini 3.8 Flashがあります。CLIProxyAPIはGemini API、AI Studio、Vertex AI、Gemini CLI、Antigravityのアカウントに対応し、利用できるモデルは経路によって異なります。Gemini 3.8 Flashは、長期のソフトウェア開発やエージェントのワークフロー向けのGoogleの最新Flashモデルです。Antigravityの<a href="https://antigravity.google/docs/models/">公式モデル提供状況</a>では、Claude Sonnet 5.5（thinking）とClaude Opus 5.5（thinking）はGoogle AI Pro（試用版を除く）、Google AI Ultra、Enterpriseで利用可能とされています。</td>
     </tr>
     <tr>
         <td align="center"><a href="https://docs.x.ai/developers/grok-4-7"><img src="./assets/logo/xai.svg" alt="xAI" width="28" height="28" /></a></td>
@@ -34,7 +35,7 @@ CLIProxyAPI は、CLI向けのOpenAI/Gemini/Claude/Codex/Grok互換APIインタ�
     </tr>
     <tr>
         <td align="center"><a href="https://dev.meta.ai/docs/overview"><img src="./assets/logo/meta.svg" alt="Meta" width="28" height="28" /></a></td>
-        <td>Meta Museシリーズモデル（Muse Spark 1.3、Muse Spark 1.2など）。CLIProxyAPIはMetaログインによるMuse CodeアカウントとMeta Model APIキーに対応し、Muse Spark 1.3をコーディングやエージェントのワークフローに利用できます。</td>
+        <td>Meta Museシリーズモデル（Muse Wonder Full、Muse Wonder、Muse Spark 1.3など）。CLIProxyAPIはMetaログインによるMuse CodeアカウントとMeta Model APIキーに対応し、Muse Spark 1.3をコーディングやエージェントのワークフローに利用できます。MetaはMuse WonderをMeta Model APIとMuse Code向けに、Muse Wonder FullをMuse Codeのサブスクリプション利用者向けに発表しました。</td>
     </tr>
     <tr>
         <td align="center"><a href="https://devin.ai/cli">Devin</a></td>
@@ -128,14 +129,6 @@ Claude、Gemini、OpenAI、Antigravityのサブスクリプションを統合し
 
 TUI、システムトレイ、マルチプロバイダーOAuthを備えたWindows向けCLIProxyAPIフォーク - AIコーディングツール用、APIキー不要
 
-### [Claude Proxy VSCode](https://github.com/uzhao/claude-proxy-vscode)
-
-Claude Codeモデルを素早く切り替えるVSCode拡張機能。バックエンドとしてCLIProxyAPIを統合し、バックグラウンドでの自動ライフサイクル管理を搭載
-
-### [ZeroLimit](https://github.com/0xtbug/zero-limit)
-
-CLIProxyAPIを使用してAIコーディングアシスタントのクォータを監視するTauri + React製のWindowsデスクトップアプリ。Gemini、Claude、OpenAI Codex、Antigravityアカウントの使用量をリアルタイムダッシュボード、システムトレイ統合、ワンクリックプロキシコントロールで追跡 - APIキー不要
-
 ### [CPA-XXX Panel](https://github.com/ferretgeek/CPA-X)
 
 CLIProxyAPI向けの軽量Web管理パネル。ヘルスチェック、リソース監視、リアルタイムログ、自動更新、リクエスト統計、料金表示機能を搭載。ワンクリックインストールとsystemdサービスに対応
@@ -206,7 +199,6 @@ macOSネイティブのSwiftUI製AIサブスクリプションダッシュボー
 
 ### [WebBrain](https://github.com/webbrain-one/webbrain)
 
-CLIProxyAPI のローカル OpenAI 互換エンドポイントをモデルプロバイダーとして利用できるブラウザーエージェントです。EasyCLIProxyAPI を通じて CLIProxyAPI を使用する場合は、WebBrain の独立した[セットアップ、セキュリティ、アカウントリスクのガイド](https://webbrain.one/docs/easy-cli-proxy/)をご覧ください。
 
 ### [Infinitus](https://github.com/deathemperor/infinitus)
 
@@ -231,6 +223,10 @@ React と Tailwind CSS で構築された、CLIProxyAPI 向けのモダンでレ
 ### [sub2api](https://github.com/PlaygrndLabs/sub2api)
 
 Cloudflare ベースの LLM ゲートウェイ兼プロキシサーバー。CLIProxyAPI を Cloudflare Workers + Containers にワンクリックでデプロイします。ログインと設定は R2 に永続化され、ダッシュボードはパスワードで保護され、クライアント API キーを作成するまで API リクエストはすべて拒否されます。
+
+### [Hermes CLIProxyAPI Provider](https://github.com/duu261/hermes-cliproxyapi-provider)
+
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) 向けのモデルプロバイダープラグイン。CLIProxyAPI のプロバイダーごとに Hermes プロバイダーを 1 つ登録し、それぞれの executor が受け付けるプロトコル（Anthropic Messages、Responses、Chat Completions）を使います。コンテキストウィンドウと推論レベルは CLIProxyAPI から取得します。正確なプロバイダーグループ分けのための読み取り専用 Management API 照会はオプションです。[Hermes プラグインカタログ](https://hermes-agent.nousresearch.com/docs/plugins/cliproxyapi-provider)に掲載されています：`hermes plugins install cliproxyapi-provider`。
 
 > [!NOTE]
 > CLIProxyAPIをベースにプロジェクトを開発した場合は、PRを送ってこのリストに追加してください。
