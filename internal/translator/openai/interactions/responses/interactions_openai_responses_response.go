@@ -36,6 +36,9 @@ type interactionsToResponsesStreamState struct {
 	ItemIdentityIndexes   map[string]int
 	CallIdentityIndexes   map[string]int
 	ForAntigravity        bool
+	ForDevin              bool
+	MessagePhases         map[int]string
+	MessageDoneEmitted    map[int]bool
 }
 
 type interactionsFunctionCallState struct {
@@ -90,6 +93,7 @@ func ConvertInteractionsResponseToOpenAIResponses(ctx context.Context, modelName
 	}
 	st := (*param).(*interactionsToResponsesStreamState)
 	st.ForAntigravity = isAntigravityModel(modelName)
+	st.ForDevin = isDevinModel(modelName)
 	if st.FunctionCalls == nil {
 		st.FunctionCalls = make(map[int]*interactionsFunctionCallState)
 	}
@@ -192,6 +196,10 @@ func ConvertInteractionsResponseToOpenAIResponsesNonStream(ctx context.Context, 
 	}
 	interactionStatus := firstNonEmpty(root.Get("status").String(), root.Get("interaction.status").String())
 	interactionFinishReason := firstNonEmpty(root.Get("finish_reason").String(), root.Get("interaction.finish_reason").String())
+	if isDevinModel(modelName) {
+		completed := interactionStatus != "incomplete" && interactionFinishReason != "content_filter" && interactionFinishReason != "length" && interactionFinishReason != "max_tokens"
+		out = devinSetNonStreamMessagePhases(out, completed)
+	}
 	if interactionFinishReason == "content_filter" {
 		out, _ = sjson.SetBytes(out, "status", "incomplete")
 		out, _ = sjson.SetBytes(out, "incomplete_details.reason", "content_filter")
@@ -302,6 +310,7 @@ func convertInteractionsEventToResponses(modelName string, originalRequestRawJSO
 			return events
 		}
 		st.Terminal = true
+		events = append(events, devinFinalizeMessages(root, st, true)...)
 		return append(events, responsesCompletedEvent(modelName, root, st))
 	case "response.failed", "interaction.failed":
 		if interactionsHasPatchBridge(st) {
@@ -309,7 +318,8 @@ func convertInteractionsEventToResponses(modelName string, originalRequestRawJSO
 		}
 		st.SourceFailed = true
 		st.Terminal = true
-		return [][]byte{responsesFailedEvent(modelName, root, st)}
+		events := devinFinalizeMessages(root, st, false)
+		return append(events, responsesFailedEvent(modelName, root, st))
 
 	}
 	return nil
@@ -412,6 +422,9 @@ func interactionsStepStartToResponses(modelName string, root gjson.Result, st *i
 		added, _ = sjson.SetBytes(added, "sequence_number", nextResponsesSeq(st))
 		added, _ = sjson.SetBytes(added, "output_index", index)
 		added, _ = sjson.SetBytes(added, "item.id", itemID)
+		if st.ForDevin {
+			added, _ = sjson.SetBytes(added, "item.phase", "commentary")
+		}
 		part := []byte(`{"type":"response.content_part.added","output_index":0,"content_index":0,"item_id":"","part":{"type":"output_text","text":""}}`)
 		part, _ = sjson.SetBytes(part, "sequence_number", nextResponsesSeq(st))
 		part, _ = sjson.SetBytes(part, "output_index", index)
@@ -592,6 +605,13 @@ func interactionsStepStopToResponses(root gjson.Result, st *interactionsToRespon
 		part, _ = sjson.SetBytes(part, "output_index", index)
 		part, _ = sjson.SetBytes(part, "item_id", itemID)
 		part, _ = sjson.SetBytes(part, "part.text", text)
+		events := [][]byte{emitResponsesEvent("response.output_text.done", textDone), emitResponsesEvent("response.content_part.done", part)}
+		if st.ForDevin {
+			// Devin message completion is deferred to the response terminal: only
+			// then is it known whether client tool calls follow, which decides the
+			// Codex message phase (commentary vs final_answer).
+			return events
+		}
 		done := []byte(`{"type":"response.output_item.done","output_index":0,"item":{"id":"","type":"message","status":"completed","role":"assistant","content":[]}}`)
 		done, _ = sjson.SetBytes(done, "sequence_number", nextResponsesSeq(st))
 		done, _ = sjson.SetBytes(done, "output_index", index)
@@ -599,7 +619,7 @@ func interactionsStepStopToResponses(root gjson.Result, st *interactionsToRespon
 		outputText := []byte(`{"type":"output_text","text":""}`)
 		outputText, _ = sjson.SetBytes(outputText, "text", text)
 		done, _ = sjson.SetRawBytes(done, "item.content.-1", outputText)
-		return [][]byte{emitResponsesEvent("response.output_text.done", textDone), emitResponsesEvent("response.content_part.done", part), emitResponsesEvent("response.output_item.done", done)}
+		return append(events, emitResponsesEvent("response.output_item.done", done))
 	case "function_call":
 		call := st.FunctionCalls[index]
 		if call == nil {
@@ -713,6 +733,97 @@ func interactionsStepStopToResponses(root gjson.Result, st *interactionsToRespon
 		done, _ = sjson.SetRawBytes(done, "item", responsesReasoningItem(index, st))
 		return [][]byte{emitResponsesEvent("response.output_item.done", done)}
 	}
+}
+
+// devinMessagePhase reports the Codex phase assigned to a Devin message item.
+func devinMessagePhase(st *interactionsToResponsesStreamState, index int) string {
+	if st != nil && st.MessagePhases != nil {
+		if phase := st.MessagePhases[index]; phase != "" {
+			return phase
+		}
+	}
+	return "commentary"
+}
+
+// devinMessagePhases assigns Codex message phases at the response terminal. A
+// client function/custom tool call marks the whole turn as work in progress;
+// only the last message of a normally completed response without client tool
+// calls is the final answer. Failed or incomplete responses stay commentary.
+func devinMessagePhases(st *interactionsToResponsesStreamState, completed bool) map[int]string {
+	phases := make(map[int]string)
+	if st == nil || !st.ForDevin {
+		return phases
+	}
+	hasClientToolCall := false
+	lastMessage := -1
+	for index, itemType := range st.ItemTypes {
+		switch itemType {
+		case "function_call":
+			hasClientToolCall = true
+		case "model_output":
+			if index > lastMessage {
+				lastMessage = index
+			}
+		}
+	}
+	final := completed && !hasClientToolCall
+	for index, itemType := range st.ItemTypes {
+		if itemType != "model_output" {
+			continue
+		}
+		phase := "commentary"
+		if final && index == lastMessage {
+			phase = "final_answer"
+		}
+		phases[index] = phase
+	}
+	return phases
+}
+
+// devinResponsesCompleted reports whether the terminal interaction event maps to
+// a normally completed response (as opposed to incomplete).
+func devinResponsesCompleted(root gjson.Result) bool {
+	interaction := root.Get("interaction")
+	interactionStatus := firstNonEmpty(interaction.Get("status").String(), root.Get("status").String())
+	interactionFinishReason := firstNonEmpty(interaction.Get("finish_reason").String(), root.Get("finish_reason").String())
+	return interactionStatus != "incomplete" && interactionFinishReason != "content_filter" && interactionFinishReason != "length" && interactionFinishReason != "max_tokens"
+}
+
+// devinFinalizeMessages computes message phases at the response terminal and
+// emits the deferred response.output_item.done events for Devin message items.
+func devinFinalizeMessages(root gjson.Result, st *interactionsToResponsesStreamState, completed bool) [][]byte {
+	if st == nil || !st.ForDevin {
+		return nil
+	}
+	if st.MessagePhases == nil {
+		st.MessagePhases = devinMessagePhases(st, completed && devinResponsesCompleted(root))
+	}
+	if st.MessageDoneEmitted == nil {
+		st.MessageDoneEmitted = make(map[int]bool)
+	}
+	maxIndex := -1
+	for index := range st.ItemTypes {
+		if index > maxIndex {
+			maxIndex = index
+		}
+	}
+	var events [][]byte
+	for index := 0; index <= maxIndex; index++ {
+		if st.ItemTypes[index] != "model_output" || st.MessageDoneEmitted[index] {
+			continue
+		}
+		item, ok := responsesCompletedOutputItem(index, "model_output", st)
+		if !ok {
+			continue
+		}
+		done := []byte(`{"type":"response.output_item.done","output_index":0,"item":{}}`)
+		done, _ = sjson.SetBytes(done, "sequence_number", nextResponsesSeq(st))
+		done, _ = sjson.SetBytes(done, "output_index", index)
+		done, _ = sjson.SetRawBytes(done, "item", item)
+		st.MessageDoneEmitted[index] = true
+		events = append(events, emitResponsesEvent("response.output_item.done", done))
+	}
+	return events
 }
 
 func responsesCompletedEvent(modelName string, root gjson.Result, st *interactionsToResponsesStreamState) []byte {
@@ -883,6 +994,9 @@ func responsesCompletedOutputItem(index int, itemType string, st *interactionsTo
 	case "model_output":
 		item := []byte(`{"id":"","type":"message","status":"completed","role":"assistant","content":[]}`)
 		item, _ = sjson.SetBytes(item, "id", st.ItemIDs[index])
+		if st.ForDevin {
+			item, _ = sjson.SetBytes(item, "phase", devinMessagePhase(st, index))
+		}
 		if builder := st.TextOutputs[index]; builder != nil && builder.String() != "" {
 			part := []byte(`{"type":"output_text","text":""}`)
 			part, _ = sjson.SetBytes(part, "text", builder.String())
@@ -923,6 +1037,45 @@ func responsesCompletedOutputItem(index int, itemType string, st *interactionsTo
 		return item, true
 	}
 	return nil, false
+}
+
+// devinSetNonStreamMessagePhases applies the same Devin message phase rule to a
+// completed non-stream response object: client tool calls keep every message at
+// commentary; otherwise the last message is the final answer.
+func devinSetNonStreamMessagePhases(out []byte, completed bool) []byte {
+	output := gjson.GetBytes(out, "output")
+	if !output.IsArray() {
+		return out
+	}
+	hasClientToolCall := false
+	lastMessage := -1
+	index := 0
+	output.ForEach(func(_, item gjson.Result) bool {
+		switch item.Get("type").String() {
+		case "function_call", "custom_tool_call":
+			hasClientToolCall = true
+		case "message":
+			lastMessage = index
+		}
+		index++
+		return true
+	})
+	final := completed && !hasClientToolCall
+	index = 0
+	output.ForEach(func(_, item gjson.Result) bool {
+		if item.Get("type").String() != "message" {
+			index++
+			return true
+		}
+		phase := "commentary"
+		if final && index == lastMessage {
+			phase = "final_answer"
+		}
+		out, _ = sjson.SetBytes(out, fmt.Sprintf("output.%d.phase", index), phase)
+		index++
+		return true
+	})
+	return out
 }
 
 func responsesReasoningItem(index int, st *interactionsToResponsesStreamState) []byte {

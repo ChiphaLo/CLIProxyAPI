@@ -217,10 +217,16 @@ func TestInteractionsApplyPatchFinalSnapshotsPreserveOtherOutputsAndCalls(t *tes
 	finalSteps := []any{snapshots[3], snapshots[2], snapshots[1], snapshots[0]}
 	raw := patchJSON(map[string]any{"event_type": "interaction.completed", "interaction": map[string]any{"steps": finalSteps}})
 	events := patchEvents(ConvertInteractionsResponseToOpenAIResponses(context.Background(), "devin/swe-2", request, nil, raw, &param))
-	if len(events) != 1 || events[0].Get("type").String() != "response.completed" {
+	var completed *gjson.Result
+	for i := range events {
+		if events[i].Get("type").String() == "response.completed" {
+			completed = &events[i]
+		}
+	}
+	if completed == nil || completed.Get("type").String() != "response.completed" {
 		t.Fatalf("legitimate reordered snapshots failed: %v", events)
 	}
-	output := events[0].Get("response.output")
+	output := completed.Get("response.output")
 	if len(output.Array()) != 4 || output.Get("0.input").String() != "p" || output.Get("1.arguments").String() != `{"x":1}` || output.Get("2.input").String() != `{"command":"ls"}` || output.Get("3.content.0.text").String() != "hello" {
 		t.Fatalf("other output/call lost or rebound: %s", output.Raw)
 	}
