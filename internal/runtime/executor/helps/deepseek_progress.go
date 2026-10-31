@@ -22,6 +22,25 @@ func applyDeepSeekMilestoneGuidance(payload []byte, model, protocol, root string
 	if name != "deepseek" && !strings.HasPrefix(name, "deepseek-") {
 		return payload
 	}
+	return applyMilestoneGuidance(payload, protocol, root)
+}
+
+// applySWEMilestoneGuidance steers SWE models without touching other routed
+// models, even when a public alias happens to contain SWE. Text and tool calls
+// are never suppressed on the response path.
+func applySWEMilestoneGuidance(payload []byte, model, protocol, root string) []byte {
+	name := strings.ToLower(strings.TrimSpace(thinking.ParseSuffix(model).ModelName))
+	name = name[strings.LastIndex(name, "/")+1:]
+	if name != "swe" && !strings.HasPrefix(name, "swe-") {
+		return payload
+	}
+	if protocol == "devin" && gjson.ValidBytes(payload) && gjson.ParseBytes(payload).IsObject() {
+		return appendMilestoneContent(payload, buildPayloadPath(root, "system_prompt"))
+	}
+	return applyMilestoneGuidance(payload, protocol, root)
+}
+
+func applyMilestoneGuidance(payload []byte, protocol, root string) []byte {
 	if !gjson.ValidBytes(payload) || !gjson.ParseBytes(payload).IsObject() {
 		return payload
 	}

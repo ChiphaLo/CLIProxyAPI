@@ -60,6 +60,7 @@ func ApplyPayloadConfigWithTrackedPathsForExecutor(cfg *config.Config, targetExe
 		payload = NormalizeCodexToolIntegerTypes(payload, headers)
 	}
 	payload = applyDeepSeekMilestoneGuidance(payload, model, protocol, root)
+	payload = applySWEMilestoneGuidance(payload, model, protocol, root)
 	if cfg == nil {
 		return payload, touched
 	}
