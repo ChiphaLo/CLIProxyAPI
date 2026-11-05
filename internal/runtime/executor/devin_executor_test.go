@@ -4263,7 +4263,7 @@ func TestRegressionIssue5951_PreToolExplanationAndPostToolAnswer(t *testing.T) {
 	f3 = protowire.AppendTag(f3, 3, protowire.BytesType)
 	f3 = protowire.AppendString(f3, "Inspection completed. All files in order.")
 
-	// 1. Test Streaming: output_item.done and completed.output must be [message, function_call, message]
+	// 1. Streaming items retain their output_index order in completed.output.
 	var streamBuf bytes.Buffer
 	streamBuf.Write(helps.WrapConnectEnvelope(f1))
 	streamBuf.Write(helps.WrapConnectEnvelope(f2))
@@ -4310,7 +4310,14 @@ func TestRegressionIssue5951_PreToolExplanationAndPostToolAnswer(t *testing.T) {
 				}
 				ev := gjson.Parse(data)
 				if ev.Get("type").String() == "response.output_item.done" {
-					doneItemTypes = append(doneItemTypes, ev.Get("item.type").String())
+					index := int(ev.Get("output_index").Int())
+					for len(doneItemTypes) <= index {
+						doneItemTypes = append(doneItemTypes, "")
+					}
+					if doneItemTypes[index] != "" {
+						t.Fatal("output item completed twice")
+					}
+					doneItemTypes[index] = ev.Get("item.type").String()
 				}
 				if ev.Get("type").String() == "response.completed" {
 					ev.Get("response.output").ForEach(func(_, item gjson.Result) bool {

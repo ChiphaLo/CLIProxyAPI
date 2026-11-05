@@ -1,0 +1,317 @@
+package responses
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/tidwall/gjson"
+)
+
+func goldenHash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+
+// normalizeEvents parses SSE output, zeroes volatile created_at fields, and
+// re-marshals canonically so hashes compare structure, not timestamps.
+func normalizeEvents(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var out []byte
+	var zero func(v any) any
+	zero = func(v any) any {
+		switch x := v.(type) {
+		case map[string]any:
+			for k, val := range x {
+				if k == "created_at" {
+					x[k] = float64(0)
+				} else {
+					x[k] = zero(val)
+				}
+			}
+			return x
+		case []any:
+			for i := range x {
+				x[i] = zero(x[i])
+			}
+			return x
+		default:
+			return v
+		}
+	}
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if bytes.HasPrefix(line, []byte("data: ")) {
+			var v any
+			if err := json.Unmarshal(line[6:], &v); err != nil {
+				t.Fatalf("unparseable event: %s", line)
+			}
+			canon, _ := json.Marshal(zero(v))
+			out = append(out, canon...)
+			out = append(out, '\n')
+		} else {
+			out = append(out, line...)
+			out = append(out, '\n')
+		}
+	}
+	return out
+}
+
+func claudeSSEFixture() [][]byte {
+	return [][]byte{
+		[]byte(`data: {"type":"message_start","message":{"id":"msg-1","type":"message","role":"assistant","model":"claude-x","content":[],"stop_reason":null,"usage":{"input_tokens":10,"output_tokens":1}}}`),
+		[]byte(`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`),
+		[]byte(`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"ponder"}}`),
+		[]byte(`data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-1"}}`),
+		[]byte(`data: {"type":"content_block_stop","index":0}`),
+		[]byte(`data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`),
+		[]byte(`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Hello"}}`),
+		[]byte(`data: {"type":"content_block_stop","index":1}`),
+		[]byte(`data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_1","name":"editor__read","input":{}}}`),
+		[]byte(`data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"path\":\"/tmp/a\"}"}}`),
+		[]byte(`data: {"type":"content_block_stop","index":2}`),
+		[]byte(`data: {"type":"content_block_start","index":3,"content_block":{"type":"tool_use","id":"toolu_2","name":"plain","input":{}}}`),
+		[]byte(`data: {"type":"content_block_stop","index":3}`),
+		[]byte(`data: {"type":"content_block_start","index":4,"content_block":{"type":"tool_use","id":"toolu_3","name":"unknown_tool","input":{}}}`),
+		[]byte(`data: {"type":"content_block_stop","index":4}`),
+		[]byte(`data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":10,"output_tokens":9}}`),
+		[]byte(`data: {"type":"message_stop"}`),
+	}
+}
+
+func runClaudeStream(request []byte) []byte {
+	var param any
+	var out []byte
+	for _, chunk := range claudeSSEFixture() {
+		out = append(out, bytes.Join(ConvertClaudeResponseToOpenAIResponses(context.Background(), "m", request, request, chunk, &param), nil)...)
+	}
+	return out
+}
+
+func claudeEchoRequests() []struct {
+	name string
+	raw  []byte
+} {
+	history := strings.Repeat("context ", 4096)
+	nsTools := `[{"type":"namespace","name":"editor","tools":[{"type":"function","name":"read","parameters":{"type":"object"}}]},{"type":"function","name":"plain","parameters":{"type":"object"}}]`
+	return []struct {
+		name string
+		raw  []byte
+	}{
+		{"nil", nil},
+		{"empty", []byte(`{}`)},
+		{"full", []byte(`{"model":"gpt-5","instructions":"` + history + `","max_output_tokens":99,"parallel_tool_calls":false,"reasoning":{"effort":"high"},"store":true,"temperature":1,"text":{"format":{"type":"text"}},"tool_choice":"auto","tools":` + nsTools + `,"top_p":0.5,"metadata":{"b":2,"a":1},"input":[{"role":"user","content":"hi"}]}`)},
+		{"flat-collision", []byte(`{"model":"gpt-5","tools":[{"type":"function","name":"editor__read","parameters":{"type":"object"}},{"type":"namespace","name":"editor","tools":[{"type":"function","name":"read","parameters":{"type":"object"}}]}],"input":[]}`)},
+		{"weird-types", []byte(`{"model":42,"instructions":null,"temperature":"hot","store":"yes","tools":"none","metadata":[3],"input":[]}`)},
+		{"duplicate-keys", []byte(`{"model":"first","input":[],"model":"second","temperature":0.1,"temperature":0.9}`)},
+		{"history-calls", []byte(`{"model":"gpt-5","tools":` + nsTools + `,"input":[{"type":"function_call","call_id":"c0","name":"read","namespace":"editor","arguments":"{}"},{"type":"function_call_output","call_id":"c0","output":"ok"}]}`)},
+	}
+}
+
+// Golden hashes lock request echo, namespace resolution and message phases.
+var claudeEchoGoldenHashes = map[string][2]string{
+	"nil":            {"3190e49f5d47060ff9387cd094a282ccf748973fc5d75487397469996be30d1e", "33bac6460bacc4addd712b397785f1a047d022b9820a6cb9dfe7ee4b66f366ef"},
+	"empty":          {"3190e49f5d47060ff9387cd094a282ccf748973fc5d75487397469996be30d1e", "33bac6460bacc4addd712b397785f1a047d022b9820a6cb9dfe7ee4b66f366ef"},
+	"full":           {"5b1e9f57e3d8a597236357a9f62fe9a0ba40abfe1c5bbd0d2551bd57d07f51d8", "1438b452fcfb1c456e8fb40ac161468ba5e36b17cbd750949887c554a5ba4cce"},
+	"flat-collision": {"0c00a6a6cbe2688725885580993f473342090d82e10973ee043d983535fecf41", "f71df71264f9f3b66d1b0123072563d348bf5477355b82ec94006079fa108655"},
+	"weird-types":    {"fcddb880c2145f8d7d1147a2eb64959c8197edd2d3a838d11aa8b564dde81357", "b5dc51042a3fe62da3c34408ac5508422c272acbd63817b29ccd67280e0870c0"},
+	"duplicate-keys": {"c908abff658a7f868cdb57b8056c3e4c0e2fdd06311edc297237412b314613fb", "b9fa7ea2402e0d030e039a3adaea76cbc69d6a8ed05ad938991b30c208f04349"},
+	"history-calls":  {"1b0ef09417d714f5b65a1a7c62ce89276976af125b239b5a92ed8a610ca7f82d", "e282a5e5ac8c2d330e746f4d78f2a55f8455421129314f1786eb60bc7ab35435"},
+}
+
+func TestClaudeEchoGoldenOutputs(t *testing.T) {
+	for _, tc := range claudeEchoRequests() {
+		want := claudeEchoGoldenHashes[tc.name]
+		stream := normalizeEvents(t, runClaudeStream(tc.raw))
+		if got := goldenHash(stream); got != want[0] {
+			t.Errorf("%s stream: hash %s, want %s", tc.name, got, want[0])
+		}
+		var blob []byte
+		for _, c := range claudeSSEFixture() {
+			blob = append(blob, c...)
+			blob = append(blob, '\n')
+		}
+		var p any
+		non := ConvertClaudeResponseToOpenAIResponsesNonStream(context.Background(), "m", tc.raw, tc.raw, blob, &p)
+		var v any
+		if len(non) > 0 {
+			if err := json.Unmarshal(non, &v); err != nil {
+				t.Fatalf("%s: nonstream unparseable: %v", tc.name, err)
+			}
+			canon, _ := json.Marshal(zeroCreated(v))
+			// created_at is time-based in non-stream too; normalize via map walk.
+			non = canon
+		}
+		if got := goldenHash(non); got != want[1] {
+			t.Errorf("%s nonstream: hash %s, want %s", tc.name, got, want[1])
+		}
+	}
+}
+
+func BenchmarkClaudeResponsesToolStreamLongRequest(b *testing.B) {
+	history := strings.Repeat("context ", 81920)
+	request := []byte(fmt.Sprintf(`{"model":"gpt-5","instructions":%q,"tools":[{"type":"namespace","name":"editor","tools":[{"type":"function","name":"read","parameters":{"type":"object"}}]},{"type":"function","name":"plain","parameters":{"type":"object"}}],"input":[{"role":"user","content":"hi"}]}`, history))
+	chunks := claudeSSEFixture()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var param any
+		for _, chunk := range chunks {
+			ConvertClaudeResponseToOpenAIResponses(context.Background(), "m", request, request, chunk, &param)
+		}
+	}
+}
+
+func zeroCreated(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, val := range x {
+			if k == "created_at" {
+				x[k] = float64(0)
+			} else {
+				x[k] = zeroCreated(val)
+			}
+		}
+		return x
+	case []any:
+		for i := range x {
+			x[i] = zeroCreated(x[i])
+		}
+		return x
+	default:
+		return v
+	}
+}
+
+func egHash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+
+func egZero(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, val := range x {
+			if k == "created_at" {
+				x[k] = float64(0)
+			} else {
+				x[k] = egZero(val)
+			}
+		}
+		return x
+	case []any:
+		for i := range x {
+			x[i] = egZero(x[i])
+		}
+		return x
+	default:
+		return v
+	}
+}
+
+func egNormalize(t *testing.T, raw []byte) []byte {
+	t.Helper()
+	var out []byte
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
+			continue
+		}
+		if bytes.HasPrefix(line, []byte("data: ")) {
+			var v any
+			if err := json.Unmarshal(line[6:], &v); err != nil {
+				t.Fatalf("unparseable: %s", line)
+			}
+			canon, _ := json.Marshal(egZero(v))
+			out = append(out, canon...)
+		} else {
+			out = append(out, line...)
+		}
+		out = append(out, '\n')
+	}
+	return out
+}
+
+func egChunks(names []string) [][]byte {
+	out := [][]byte{
+		[]byte(`data: {"type":"message_start","message":{"id":"msg-e","type":"message","role":"assistant","model":"c","content":[],"stop_reason":null,"usage":{"input_tokens":3,"output_tokens":1}}}`),
+	}
+	for i, name := range names {
+		out = append(out,
+			[]byte(fmt.Sprintf(`data: {"type":"content_block_start","index":%d,"content_block":{"type":"tool_use","id":"toolu_%d","name":%q,"input":{}}}`, i, i, name)),
+			[]byte(fmt.Sprintf(`data: {"type":"content_block_delta","index":%d,"delta":{"type":"input_json_delta","partial_json":"{}"}}`, i)),
+			[]byte(fmt.Sprintf(`data: {"type":"content_block_stop","index":%d}`, i)),
+		)
+	}
+	out = append(out,
+		[]byte(`data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":3,"output_tokens":4}}`),
+		[]byte(`data: {"type":"message_stop"}`),
+	)
+	return out
+}
+
+// Edge cases for the cached namespace resolution: hashed/sanitized tool
+// names and the client tool_search winner rules. Hashes captured from the
+// pre-optimization implementation.
+func TestClaudeEchoGoldenEdgeCases(t *testing.T) {
+	want := map[string][2]string{
+		"long-and-invalid-names": {"41307ab5fdb3c147802cc04c12c1aebc2136c4b17fb7e0b0eb21cb750f7bd50c", "0dbf5c12e8f78697d4cdd86260fd918f1710909434738a190b2d6490ead74bcc"},
+		"toolsearch-on":          {"e57dcaf468458da7a240fe19c41a3d689d90191797ef6cc4d1f03e6ca4fdad3d", "3cc6b91c93b5789e52bdcf8bd9bf8a95308604d76fbc9e683e04306c5d2b3721"},
+		"toolsearch-off":         {"fd981f216a4da138561d4379ea8236f60aab2fbb96b292bbe5b296677a7e0bf3", "6674a51b19acb3b834840494c1110eb7e998ca5a9b808bb2731ddb69a0555d07"},
+	}
+	longName := "ns__" + strings.Repeat("x", 90)
+	dotted := "my.tool name"
+	collideA := "a.b"
+	collideB := "a_b"
+	toolsJSON := fmt.Sprintf(`[{"type":"namespace","name":"editor","tools":[{"type":"function","name":"read","parameters":{"type":"object"}}]},{"type":"function","name":%q,"parameters":{"type":"object"}},{"type":"function","name":%q,"parameters":{"type":"object"}},{"type":"function","name":%q,"parameters":{"type":"object"}},{"type":"function","name":%q,"parameters":{"type":"object"}}]`, longName, dotted, collideA, collideB)
+	searchTools := `[{"type":"tool_search","execution":"client"},{"type":"function","name":"deferred_tool","defer_loading":true,"parameters":{"type":"object"}},{"type":"function","name":"plain","parameters":{"type":"object"}}]`
+
+	cases := []struct {
+		name       string
+		request    []byte
+		toolSearch bool
+		names      func(req []byte) []string
+	}{
+		{"long-and-invalid-names", []byte(`{"model":"gpt-5","tools":` + toolsJSON + `,"input":[]}`), false, func(req []byte) []string {
+			names := buildClaudeToolNames(gjson.ParseBytes(req), false)
+			return []string{names.claudeName(longName), names.claudeName(dotted), names.claudeName(collideA), names.claudeName(collideB), "editor__read"}
+		}},
+		{"toolsearch-on", []byte(`{"model":"gpt-5","tools":` + searchTools + `,"input":[]}`), true, func(req []byte) []string {
+			return []string{"tool_search", "plain"}
+		}},
+		{"toolsearch-off", []byte(`{"model":"gpt-5","tools":` + searchTools + `,"input":[]}`), false, func(req []byte) []string {
+			return []string{"tool_search", "plain", "deferred_tool"}
+		}},
+	}
+	for _, tc := range cases {
+		ctx := WithClientToolSearch(context.Background(), tc.toolSearch)
+		chunks := egChunks(tc.names(tc.request))
+		var blob []byte
+		for _, c := range chunks {
+			blob = append(blob, c...)
+			blob = append(blob, '\n')
+		}
+		var param any
+		var out []byte
+		for _, c := range chunks {
+			out = append(out, bytes.Join(ConvertClaudeResponseToOpenAIResponses(ctx, "m", tc.request, tc.request, c, &param), nil)...)
+		}
+		var p any
+		non := ConvertClaudeResponseToOpenAIResponsesNonStream(ctx, "m", tc.request, tc.request, blob, &p)
+		if len(non) > 0 {
+			var v any
+			if err := json.Unmarshal(non, &v); err != nil {
+				t.Fatalf("%s nonstream unparseable: %v", tc.name, err)
+			}
+			non, _ = json.Marshal(egZero(v))
+		}
+		if got := egHash(egNormalize(t, out)); got != want[tc.name][0] {
+			t.Errorf("%s stream: hash %s, want %s", tc.name, got, want[tc.name][0])
+		}
+		if got := egHash(non); got != want[tc.name][1] {
+			t.Errorf("%s nonstream: hash %s, want %s", tc.name, got, want[tc.name][1])
+		}
+	}
+}

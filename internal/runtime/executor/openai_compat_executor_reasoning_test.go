@@ -48,7 +48,7 @@ func TestOpenAICompatExecutorUsesCompatibleClaudeTranslation(t *testing.T) {
 		t.Fatalf("Execute error: %v", errExecute)
 	}
 
-	assistant := gjson.GetBytes(upstreamBody, "messages.0")
+	assistant := gjson.GetBytes(upstreamBody, `messages.#(role=="assistant")`)
 	if got := assistant.Get("reasoning_content").String(); got != "prior reasoning" {
 		t.Fatalf("reasoning_content = %q, want %q; body=%s", got, "prior reasoning", upstreamBody)
 	}

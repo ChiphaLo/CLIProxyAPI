@@ -29,3 +29,14 @@ func TestBuilderConfigTransformOnlyChangesRuntimeNotSource(t *testing.T) {
 		t.Fatal("builder overwrote the shared configuration")
 	}
 }
+
+func TestTransformedWatcherRetainsUpstreamAuthReconciliationCallbacks(t *testing.T) {
+	dir := t.TempDir()
+	w, err := newWatcherFactory(func(*config.Config) error { return nil })(filepath.Join(dir, "config.yaml"), dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.snapshotAuthFile == nil || w.rereadDiscardedFileSnapshot == nil || w.dispatchPersistedAuthWithRev == nil {
+		t.Fatal("embedded watcher lost upstream credential reconciliation callbacks")
+	}
+}

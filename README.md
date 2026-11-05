@@ -2,6 +2,7 @@
 
 English | [中文](README_CN.md) | [日本語](README_JA.md)
 
+
 CLIProxyAPI is a proxy server that provides OpenAI/Gemini/Claude/Codex/Grok compatible API interfaces for CLI.
 
 You can access the following providers locally and with multiple CLI accounts through any OpenAI (including Responses), Gemini (including Interactions), or Claude-compatible client or SDK.
@@ -22,11 +23,11 @@ You can access the following providers locally and with multiple CLI accounts th
     </tr>
     <tr>
         <td align="center"><a href="https://www.anthropic.com/claude/fable"><img src="./assets/logo/claude.svg" alt="Anthropic" width="28" height="28" /></a></td>
-        <td>Anthropic Claude models (Claude Fable 5.1, Claude Opus 5.5, Claude Sonnet 5.5). Fable 5.1 is built for ambitious, long-running coding and knowledge work; Opus 5.5 brings strong agentic coding at a lower cost.</td>
+        <td>Anthropic Claude models (Claude Fable 5.1, Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5). Fable 5.1 is built for ambitious, long-running coding and knowledge work; Opus 5.5 brings strong agentic coding at a lower cost.</td>
     </tr>
     <tr>
         <td align="center"><a href="https://antigravity.google/"><img src="./assets/logo/antigravity.svg" alt="Antigravity" width="28" height="28" /></a></td>
-        <td>Google Gemini models include Gemini 3.8 Flash and Gemini 3.1 Pro Preview. CLIProxyAPI supports Gemini API, AI Studio, Vertex AI, Gemini CLI, and Antigravity accounts; model availability varies by channel. Gemini 3.8 Flash is Google's latest Flash model for long-horizon software engineering and agentic workflows.</td>
+        <td>Google Gemini models include Gemini 4 Argon and Gemini 3.8 Flash. CLIProxyAPI supports Gemini API, AI Studio, Vertex AI, Gemini CLI, and Antigravity accounts; model availability varies by channel. Gemini 3.8 Flash is Google's latest Flash model for long-horizon software engineering and agentic workflows. Antigravity's <a href="https://antigravity.google/docs/models/">official model availability</a> lists Claude Sonnet 5.5 (thinking) and Claude Opus 5.5 (thinking) for Google AI Pro (non-trial), Google AI Ultra, and Enterprise.</td>
     </tr>
     <tr>
         <td align="center"><a href="https://docs.x.ai/developers/grok-4-7"><img src="./assets/logo/xai.svg" alt="xAI" width="28" height="28" /></a></td>
@@ -34,7 +35,7 @@ You can access the following providers locally and with multiple CLI accounts th
     </tr>
     <tr>
         <td align="center"><a href="https://dev.meta.ai/docs/overview"><img src="./assets/logo/meta.svg" alt="Meta" width="28" height="28" /></a></td>
-        <td>Meta Muse models (Muse Spark 1.3, Muse Spark 1.2, etc.). CLIProxyAPI supports Muse Code accounts through Meta login and Meta Model API keys, with Muse Spark 1.3 for coding and agentic workflows.</td>
+        <td>Meta Muse models (Muse Wonder Full, Muse Wonder, Muse Spark 1.3, etc.). CLIProxyAPI supports Muse Code accounts through Meta login and Meta Model API keys, with Muse Spark 1.3 for coding and agentic workflows. Meta has announced Muse Wonder for Meta Model API and Muse Code, and Muse Wonder Full for Muse Code subscribers.</td>
     </tr>
     <tr>
         <td align="center"><a href="https://devin.ai/cli">Devin</a></td>
@@ -42,6 +43,7 @@ You can access the following providers locally and with multiple CLI accounts th
     </tr>
 </tbody>
 </table>
+
 
 ## Overview
 
@@ -128,14 +130,6 @@ Native macOS menu bar app that unifies Claude, Gemini, OpenAI, and Antigravity s
 
 Windows-native CLIProxyAPI fork with TUI, system tray, and multi-provider OAuth for AI coding tools - no API keys needed.
 
-### [Claude Proxy VSCode](https://github.com/uzhao/claude-proxy-vscode)
-
-VSCode extension for quick switching between Claude Code models, featuring integrated CLIProxyAPI as its backend with automatic background lifecycle management.
-
-### [ZeroLimit](https://github.com/0xtbug/zero-limit)
-
-Windows desktop app built with Tauri + React for monitoring AI coding assistant quotas via CLIProxyAPI. Track usage across Gemini, Claude, OpenAI Codex, and Antigravity accounts with real-time dashboard, system tray integration, and one-click proxy control - no API keys needed.
-
 ### [CPA-XXX Panel](https://github.com/ferretgeek/CPA-X)
 
 A lightweight web admin panel for CLIProxyAPI with health checks, resource monitoring, real-time logs, auto-update, request statistics and pricing display. Supports one-click installation and systemd service.
@@ -209,7 +203,6 @@ Run multiple native-feeling Claude Code commands, each powered by a different mo
 
 ### [WebBrain](https://github.com/webbrain-one/webbrain)
 
-Browser agent that can connect to CLIProxyAPI's local OpenAI-compatible endpoint as a model provider. See WebBrain's independent [setup, security, and account-risk guide](https://webbrain.one/docs/easy-cli-proxy/) for using CLIProxyAPI through EasyCLIProxyAPI.
 
 ### [Infinitus](https://github.com/deathemperor/infinitus)
 
@@ -230,6 +223,14 @@ Cross-platform Electron tray dashboard for CLIProxyAPI. Shows the real OAuth quo
 ### [panel4cliproxyapi](https://github.com/yaanlaan/panel4cliproxyapi)
 
 A modern, responsive web dashboard and management console for CLIProxyAPI built with React and Tailwind CSS. Features multi-provider OAuth login with LAN redirect assistance, visual zero-YAML configuration, real-time traffic analytics charts, client API key management, core version checking & hot-reloading, and a live SSE streaming playground.
+
+### [sub2api](https://github.com/PlaygrndLabs/sub2api)
+
+A Cloudflare-based LLM gateway and proxy server: CLIProxyAPI deployed to Cloudflare Workers + Containers in one click. Logins and config persist in R2, the dashboard sits behind a password, and API calls are refused until a client API key exists.
+
+### [Hermes CLIProxyAPI Provider](https://github.com/duu261/hermes-cliproxyapi-provider)
+
+Model-provider plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that registers one Hermes provider per CLIProxyAPI provider, each on the wire its executor accepts (Anthropic Messages, Responses or Chat Completions), with context windows and reasoning levels read from CLIProxyAPI. Optional read-only Management API pass for exact provider grouping. Listed in the [Hermes plugin catalog](https://hermes-agent.nousresearch.com/docs/plugins/cliproxyapi-provider): `hermes plugins install cliproxyapi-provider`.
 
 > [!NOTE]  
 > If you developed a project based on CLIProxyAPI, please open a PR to add it to this list.

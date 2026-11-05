@@ -13,18 +13,18 @@ func TestStrictLevelsRejectsBeforeCrossFamilyClamping(t *testing.T) {
 		{Mode: ModeLevel, Level: "low"}, {Mode: ModeLevel, Level: "ultra"},
 		{Mode: ModeNone}, {Mode: ModeAuto},
 	} {
-		if _, err := ValidateConfig(config, model, "openai-response", "openai-response", false); err == nil {
+		if _, err := ValidateConfig(config, model, "claude", "openai-response", false); err == nil {
 			t.Fatalf("unsupported level was silently changed: %+v", config)
 		}
 	}
 	for _, level := range []ThinkingLevel{"medium", "high", "max"} {
-		got, err := ValidateConfig(ThinkingConfig{Mode: ModeLevel, Level: level}, model, "openai-response", "openai-response", false)
+		got, err := ValidateConfig(ThinkingConfig{Mode: ModeLevel, Level: level}, model, "claude", "openai-response", false)
 		if err != nil || got.Level != level {
 			t.Fatalf("supported level changed: %s %+v %v", level, got, err)
 		}
 	}
 	model.Thinking.StrictLevels = false
-	if _, err := ValidateConfig(ThinkingConfig{Mode: ModeLevel, Level: "low"}, model, "openai-response", "openai-response", false); err != nil {
+	if _, err := ValidateConfig(ThinkingConfig{Mode: ModeLevel, Level: "low"}, model, "claude", "openai-response", false); err != nil {
 		t.Fatalf("default compatibility behavior changed: %v", err)
 	}
 }

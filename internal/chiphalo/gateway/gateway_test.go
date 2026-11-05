@@ -62,7 +62,7 @@ func TestAdmissionRejectsInvalidAndConflictingRequests(t *testing.T) {
 		`null`, `[]`, `{} {}`, `invalid`,
 		`{"model":null}`, `{"model":12}`, `{"model":true}`, `{"model":{}}`, `{"model":""}`, `{"model":"   "}`,
 		`{"model":"fixture\u0001"}`, `{"model":"fixture\t"}`, `{"model":"fixture\u007f"}`,
-		`{"model":"opencode/fixture","tools":[{"type":"custom","name":"exec"}],"input":[{"type":"additional_tools","role":"developer","tools":[{"type":"function","name":"exec"}]}]}`,
+		`{"model":"opencode/fixture","input":[{"type":"additional_tools","role":"developer","tools":[{"type":"custom","name":"exec"},{"type":"function","name":"exec"}]}]}`,
 	} {
 		w := httptest.NewRecorder()
 		engine.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)))
