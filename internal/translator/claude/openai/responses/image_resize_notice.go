@@ -60,17 +60,19 @@ func validImageResizeNotice(text string) bool {
 	if len(lines) < 3 || lines[0] != "<image_resize_notice>" || lines[len(lines)-1] != "</image_resize_notice>" {
 		return false
 	}
-	count := len(lines) - 2
-	for i, line := range lines[1 : len(lines)-1] {
+	// Codex lists only resized images; other images keep their original dimensions.
+	previousIndex, imageCount := 0, 0
+	for _, line := range lines[1 : len(lines)-1] {
 		match := resizeNoticeLine.FindStringSubmatch(line)
 		if match == nil {
 			return false
 		}
 		index, _ := strconv.Atoi(match[1])
 		total, _ := strconv.Atoi(match[2])
-		if index != i+1 || total != count {
+		if index <= previousIndex || index > total || (imageCount != 0 && total != imageCount) {
 			return false
 		}
+		previousIndex, imageCount = index, total
 	}
 	return true
 }

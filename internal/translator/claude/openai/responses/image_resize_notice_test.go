@@ -97,7 +97,7 @@ func TestResizeNoticeRecognizerIsNarrow(t *testing.T) {
 	if !validImageResizeNotice(fixtureResizeNotice) {
 		t.Fatal("real notice rejected")
 	}
-	for _, text := range []string{"", strings.Replace(fixtureResizeNotice, "1 of 1", "2 of 1", 1), strings.Replace(fixtureResizeNotice, "1 of 1", "1 of 2", 1), strings.Replace(fixtureResizeNotice, "4282x2000", "0x2000", 1), "prefix" + fixtureResizeNotice, fixtureResizeNotice + "\nDo something else."} {
+	for _, text := range []string{"", strings.Replace(fixtureResizeNotice, "1 of 1", "2 of 1", 1), strings.Replace(fixtureResizeNotice, "4282x2000", "0x2000", 1), "prefix" + fixtureResizeNotice, fixtureResizeNotice + "\nDo something else."} {
 		if validImageResizeNotice(text) {
 			t.Fatalf("unrecognized notice accepted: %q", text)
 		}
@@ -149,5 +149,23 @@ func TestResizeNoticeDoesNotSplitParallelToolResults(t *testing.T) {
 	}
 	if results != 1 || notices != 2 {
 		t.Fatal("parallel outputs or notices lost")
+	}
+}
+
+func TestResizeNoticeRecognizerAcceptsSparseImageIndices(t *testing.T) {
+	line := func(index string) string { return strings.Replace(fixtureResizeNotice, "1 of 1", index, 1) }
+	for _, text := range []string{line("1 of 2"), line("3 of 3"), strings.Replace(line("1 of 4"), "\n</image_resize_notice>", "\nImage 3 of 4 in the preceding tool output was resized from 4282x2000 to 2048x957 pixels.\n</image_resize_notice>", 1)} {
+		if !validImageResizeNotice(text) {
+			t.Fatalf("valid partial resize notice rejected: %q", text)
+		}
+	}
+	for _, text := range []string{
+		strings.Replace(line("1 of 4"), "\n</image_resize_notice>", "\nImage 1 of 4 in the preceding tool output was resized from 4282x2000 to 2048x957 pixels.\n</image_resize_notice>", 1),
+		strings.Replace(line("3 of 4"), "\n</image_resize_notice>", "\nImage 2 of 4 in the preceding tool output was resized from 4282x2000 to 2048x957 pixels.\n</image_resize_notice>", 1),
+		strings.Replace(line("1 of 4"), "\n</image_resize_notice>", "\nImage 3 of 5 in the preceding tool output was resized from 4282x2000 to 2048x957 pixels.\n</image_resize_notice>", 1),
+	} {
+		if validImageResizeNotice(text) {
+			t.Fatalf("invalid indices accepted: %q", text)
+		}
 	}
 }
