@@ -28,7 +28,8 @@ const (
 // into a Claude Messages API request using only gjson/sjson for JSON handling.
 // It supports:
 //   - instructions, input[].role==system and input[].role==developer -> separate
-//     top-level system blocks, in source order
+//     top-level system blocks, in source order; recognized runtime resize notices
+//     after tool results retain chronological system authority on modern models
 //   - input[].type==message with input_text/output_text -> user/assistant messages
 //   - function_call/custom_tool_call -> assistant tool_use
 //   - function_call_output/custom_tool_call_output -> user tool_result
@@ -74,6 +75,7 @@ func convertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 	out, _ = sjson.SetBytes(out, "max_tokens", defaultClaudeResponsesMaxTokensForModel(modelName))
 
 	root := gjson.ParseBytes(rawJSON)
+	inlineResizeNotices := responsesInlineImageResizeNotices(modelName, root.Get("input"))
 
 	// Convert OpenAI Responses reasoning.effort to Claude thinking config.
 	if v := root.Get("reasoning.effort"); v.Exists() {
@@ -172,6 +174,9 @@ func convertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 	}
 	if input := root.Get("input"); input.IsArray() {
 		input.ForEach(func(_, item gjson.Result) bool {
+			if _, inline := inlineResizeNotices[item.Index]; inline {
+				return true
+			}
 			if !isResponsesSystemLevelRole(item.Get("role").String()) {
 				return true
 			}
@@ -330,13 +335,39 @@ func convertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 	emittedToolResults := map[string]struct{}{}
 	emittedRawToolUses := map[string]struct{}{}
 	unmappedItemTypes := map[string]int{}
+	var pendingResizeNotices []string
+	flushResizeNotices := func() {
+		if len(pendingResizeNotices) == 0 {
+			return
+		}
+		// Complete the tool-result batch before inserting system turns, so a
+		// notice between parallel outputs cannot break tool_use/result pairing.
+		flushPendingMessage()
+		for _, text := range pendingResizeNotices {
+			block := []byte(`{"type":"text","text":""}`)
+			block, _ = sjson.SetBytes(block, "text", text)
+			message := []byte(`{"role":"system","content":[]}`)
+			message, _ = sjson.SetRawBytes(message, "content", common.JoinRawArray([][]byte{block}))
+			appendMessage(message)
+		}
+		pendingResizeNotices = nil
+	}
 
 	for _, item := range inputItems {
+		if text, inline := inlineResizeNotices[item.Index]; inline {
+			// This runtime notice belongs to the preceding tool result, not the
+			// global prompt. Preserve its authority and chronological position.
+			pendingResizeNotices = append(pendingResizeNotices, text)
+			continue
+		}
 		// System-level items already became top-level system blocks.
 		if isResponsesSystemLevelRole(item.Get("role").String()) {
 			continue
 		}
 		typ := item.Get("type").String()
+		if typ != "function_call_output" && typ != "custom_tool_call_output" {
+			flushResizeNotices()
+		}
 		if typ == "" && item.Get("role").String() != "" {
 			typ = "message"
 		}
@@ -600,6 +631,7 @@ func convertOpenAIResponsesRequestToClaude(modelName string, inputRawJSON []byte
 			}
 		}
 	}
+	flushResizeNotices()
 	flushPendingMessage()
 	if len(unmappedItemTypes) > 0 {
 		log.Warnf("responses->claude: dropped input items of unmapped types %v (model=%s)", unmappedItemTypes, modelName)

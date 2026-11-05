@@ -69,6 +69,11 @@ func readWorkBuddyCredits(parent context.Context, path string, now time.Time, cl
 	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
 	for _, region := range []string{"cn", "intl"} {
+		if configured {
+			if _, exists := access[region]; !exists {
+				continue
+			}
+		}
 		item := map[string]any{"region": region, "prefix": "workbuddy-" + region, "status": "unavailable", "remaining_credits": nil, "total_credits": nil, "updated_at": nil, "stale": true, "checkin_supported": region == "cn"}
 		accounts = append(accounts, item)
 		if !configured {

@@ -86,7 +86,6 @@ func (h UnixHelper) Call(ctx context.Context, op string, payload map[string]any)
 
 type Options struct {
 	Data, Usage, Quota, Exposed, Origin string
-	History                             string
 	Helper                              Helper
 	TrustedPeers                        []string
 	Now                                 func() time.Time
@@ -98,7 +97,6 @@ type Server struct {
 	mu         sync.Mutex
 	trusted    map[netip.Addr]bool
 	slots      chan struct{}
-	fitCache   quotaFitCache
 	resetCache resetCreditCache
 	usageCache usageProjectionCache
 	stateFault func(string) error
@@ -122,7 +120,6 @@ func New(options Options) (*Server, error) {
 	}
 	s := &Server{options: options, trusted: map[netip.Addr]bool{}, slots: make(chan struct{}, 8)}
 	s.auth = authStore{config: filepath.Join(options.Data, "gui.json"), sessions: filepath.Join(options.Data, "sessions.json"), now: options.Now, failures: map[string][]int64{}}
-	s.fitCache.compute = s.computeQuotaFit
 	if _, err := s.auth.load(); err != nil {
 		return nil, err
 	}
@@ -267,6 +264,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reject(w, 403, "csrf rejected")
 		return
 	}
+	// Compress only read-only inventories/statistics. Login, CSRF and key
+	// issuance responses retain their existing uncompressed secret handling.
+	if r.Method == http.MethodGet && compressedReadRoute(path) {
+		w.Header().Add("Vary", "Accept-Encoding")
+		if acceptsGzip(r.Header.Get("Accept-Encoding")) {
+			writer, _ := gzip.NewWriterLevel(w, gzip.BestSpeed)
+			defer writer.Close()
+			w.Header().Set("Content-Encoding", "gzip")
+			w = gzipJSONWriter{ResponseWriter: w, writer: writer}
+		}
+	}
 	switch {
 	case path == "/api/logout" && r.Method == "POST":
 		if s.auth.logout(token) != nil {
@@ -313,6 +321,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.forward(w, r, "sync_codex", body)
 	case path == "/api/oauth-resets/consume" && r.Method == "POST":
 		s.forward(w, r, "consume_oauth_reset_credit", body)
+	case path == "/api/providers/probe" && r.Method == "POST":
+		s.draftProviderProbe(w, r, body)
 	case path == "/api/providers" || strings.HasPrefix(path, "/api/providers/"):
 		s.providers(w, r, path, body)
 	case path == "/api/prices":
@@ -321,17 +331,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.usageResponse(w, r)
 	case path == "/api/oauth-accounts" && r.Method == "GET":
 		s.accountResponse(w, r)
+	case path == "/api/claude-account" && r.Method == "GET":
+		s.claudeAccountResponse(w, r)
 	case path == "/api/workbuddy-credits" && r.Method == "GET":
 		s.forward(w, r, "workbuddy_credits", nil)
 	case path == "/api/oauth-reset-credits" && r.Method == "GET":
 		s.resetCreditResponse(w, r)
-	case path == "/api/quota-model" && r.Method == "GET":
-		window := "recent"
-		if r.URL.Query().Get("window") == "all" {
-			window = "all"
-		}
-		cycles := int(max(1, min(integerQuery(r.URL.Query(), "cycles", 6), 24)))
-		respond(w, 200, s.quotaFitReport(window, cycles, r.URL.Query().Get("fresh") == "1"))
+	case path == "/api/quota-model":
+		reject(w, http.StatusGone, "feature removed")
 	default:
 		reject(w, 503, "Go migration for this operation is not complete")
 	}

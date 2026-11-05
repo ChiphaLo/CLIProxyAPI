@@ -17,6 +17,24 @@ type workBuddyRoundTrip func(*http.Request) (*http.Response, error)
 
 func (f workBuddyRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
+func TestWorkBuddyRemovedRegionIsNotDisplayedOrQueried(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.json")
+	if err := os.WriteFile(path, []byte(`{"cn":{"port":8331,"management_key":"private-cn"}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: workBuddyRoundTrip(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Port() != "8331" {
+			t.Fatal("removed international account was queried")
+		}
+		return &http.Response{StatusCode: 503, Body: io.NopCloser(strings.NewReader(`{}`)), Header: http.Header{}}, nil
+	})}
+	value := readWorkBuddyCredits(t.Context(), path, time.Unix(1800000000, 0), client)
+	rows := value["accounts"].([]map[string]any)
+	if len(rows) != 1 || rows[0]["region"] != "cn" {
+		t.Fatalf("removed region is still displayed: %+v", rows)
+	}
+}
+
 func TestWorkBuddyProjectionKeepsRegionsAndZeroBalancesAndSecretsPrivate(t *testing.T) {
 	now := time.Unix(1800000000, 0)
 	path := filepath.Join(t.TempDir(), "access.json")

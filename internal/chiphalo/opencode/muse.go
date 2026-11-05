@@ -67,7 +67,21 @@ func (s *MuseReferences) remember(scope string, ids []string) {
 type museTool struct {
 	name, namespace string
 	custom          bool
+	inputField      string
 }
+
+func museWireToolName(name, namespace string) string {
+	internal := name
+	if namespace != "" {
+		internal = namespace + "__" + name
+	}
+	if !museName.MatchString(internal) {
+		sum := sha256.Sum256([]byte(namespace + "\x00" + name))
+		internal = "cpa_tool_" + hex.EncodeToString(sum[:16])
+	}
+	return internal
+}
+
 type museCall struct {
 	tool        museTool
 	arguments   string
@@ -79,6 +93,7 @@ type museCall struct {
 // MuseBridge changes only the native tool envelopes. General protocol
 // translation stays in the upstream SDK; this adapter never evaluates tools.
 type MuseBridge struct {
+	native     bool
 	tools      map[string]museTool
 	names      map[string]string
 	final      map[string]json.RawMessage
@@ -93,10 +108,20 @@ type MuseBridge struct {
 // PrepareMuse runs BEFORE the final payload rules. BindFinal subsequently reads
 // the actual final declarations and validates them without rewriting anything.
 func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseBridge, error) {
+	return prepareNativeTools(raw, refs, scope, false)
+}
+
+// PrepareNativeResponses shares the reversible namespace/custom-tool envelope
+// adapter, without Muse's provider-specific replay and tool-choice restrictions.
+func PrepareNativeResponses(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseBridge, error) {
+	return prepareNativeTools(raw, refs, scope, true)
+}
+
+func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native bool) ([]byte, *MuseBridge, error) {
 	if refs == nil {
 		refs = NewMuseReferences()
 	}
-	b := &MuseBridge{tools: map[string]museTool{}, names: map[string]string{}, final: map[string]json.RawMessage{}, calls: map[string]*museCall{}, refs: refs, scope: scope}
+	b := &MuseBridge{native: native, tools: map[string]museTool{}, names: map[string]string{}, final: map[string]json.RawMessage{}, calls: map[string]*museCall{}, refs: refs, scope: scope}
 	// Admission may already have normalized the public model. Executors receive
 	// the routed model, so use a temporary public prefix only for this shared gate.
 	model := gjson.GetBytes(raw, "model").String()
@@ -109,10 +134,10 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 		return nil, nil, err
 	}
 	raw, _ = sjson.SetBytes(public, "model", model)
-	if prev := gjson.GetBytes(raw, "previous_response_id"); prev.Exists() && prev.Type != gjson.Null && prev.String() != "" {
+	if prev := gjson.GetBytes(raw, "previous_response_id"); !native && prev.Exists() && prev.Type != gjson.Null && prev.String() != "" {
 		return nil, nil, fmt.Errorf("Muse continuation requires the CPA scoped full-context replay; resend full context")
 	}
-	var flattened []json.RawMessage
+	flattened := make([]json.RawMessage, 0)
 	var flatten func(gjson.Result, string, int) error
 	flatten = func(list gjson.Result, ns string, depth int) error {
 		if !list.IsArray() || depth > 16 {
@@ -127,6 +152,10 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 				continue
 			}
 			if kind != "function" && kind != "custom" {
+				if native {
+					flattened = append(flattened, json.RawMessage(tool.Raw))
+					continue
+				}
 				return fmt.Errorf("Muse accepts only function/custom tool declarations")
 			}
 			name := tool.Get("name").String()
@@ -141,27 +170,28 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 			if _, exists := b.names[key]; exists {
 				return fmt.Errorf("duplicate Muse tool declaration")
 			}
-			internal := name
-			if toolNS != "" {
-				internal = toolNS + "__" + name
-			}
-			if !museName.MatchString(internal) {
-				sum := sha256.Sum256([]byte(key))
-				internal = "cpa_tool_" + hex.EncodeToString(sum[:16])
-			}
+			internal := museWireToolName(name, toolNS)
 			if _, exists := b.tools[internal]; exists {
 				return fmt.Errorf("colliding Muse tool names")
 			}
-			b.names[key], b.tools[internal] = internal, museTool{name, toolNS, kind == "custom"}
+			inputField := "input"
+			if native {
+				inputField = "value"
+			}
+			b.names[key], b.tools[internal] = internal, museTool{name: name, namespace: toolNS, custom: kind == "custom", inputField: inputField}
 			out := []byte(tool.Raw)
 			out, _ = sjson.SetBytes(out, "name", internal)
 			out, _ = sjson.DeleteBytes(out, "namespace")
+			description := tool.Get("description").String()
+			if native && toolNS != "" {
+				description = "Tool " + toolNS + "." + name + ". " + description
+				out, _ = sjson.SetBytes(out, "description", description)
+			}
 			if kind == "custom" {
-				description := tool.Get("description").String()
 				if grammar := tool.Get("format.definition").String(); tool.Get("format.type").String() == "grammar" && grammar != "" {
 					description += "\nRaw input must follow this grammar:\n" + grammar
 				}
-				out, _ = json.Marshal(map[string]any{"type": "function", "name": internal, "description": description, "parameters": map[string]any{"type": "object", "properties": map[string]any{"input": map[string]any{"type": "string"}}, "required": []string{"input"}, "additionalProperties": false}})
+				out, _ = json.Marshal(map[string]any{"type": "function", "name": internal, "description": description, "parameters": map[string]any{"type": "object", "properties": map[string]any{inputField: map[string]any{"type": "string"}}, "required": []string{inputField}, "additionalProperties": false}})
 			}
 			flattened = append(flattened, out)
 			if len(flattened) > 512 {
@@ -177,7 +207,25 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 		raw, _ = sjson.SetBytes(raw, "tools", flattened)
 	}
 	choice := gjson.GetBytes(raw, "tool_choice")
-	if choice.Exists() {
+	if choice.Exists() && native && choice.IsObject() && (choice.Get("type").String() == "function" || choice.Get("type").String() == "custom") {
+		name := b.names[choice.Get("namespace").String()+"\x00"+choice.Get("name").String()]
+		// Native clients may qualify a named tool as namespace.name instead of
+		// using separate fields. Resolve only against the declared tool map;
+		// an exact unqualified declaration always takes precedence.
+		if name == "" && choice.Get("namespace").String() == "" {
+			qualified := choice.Get("name").String()
+			if dot := strings.LastIndexByte(qualified, '.'); dot > 0 {
+				name = b.names[qualified[:dot]+"\x00"+qualified[dot+1:]]
+			}
+		}
+		if name == "" {
+			return nil, nil, fmt.Errorf("named Responses tool is not declared")
+		}
+		raw, _ = sjson.SetBytes(raw, "tool_choice.name", name)
+		raw, _ = sjson.DeleteBytes(raw, "tool_choice.namespace")
+		raw, _ = sjson.SetBytes(raw, "tool_choice.type", "function")
+	}
+	if choice.Exists() && !native {
 		if choice.Type != gjson.String {
 			return nil, nil, fmt.Errorf("Muse does not support required or named tool selection")
 		}
@@ -194,6 +242,9 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 		path := fmt.Sprintf("input.%d", i)
 		switch item.Get("type").String() {
 		case "reasoning":
+			if native {
+				continue
+			}
 			id := item.Get("id").String()
 			if !refs.known(scope, id) {
 				if item.Get("encrypted_content").String() != "" {
@@ -214,8 +265,19 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 					}
 				}
 			}
+			inputField := b.tools[internal].inputField
 			if internal == "" {
-				return nil, nil, fmt.Errorf("Muse history tool is not declared in this request")
+				if !native {
+					return nil, nil, fmt.Errorf("Muse history tool is not declared in this request")
+				}
+				if name == "" {
+					return nil, nil, fmt.Errorf("Responses history tool name is required")
+				}
+				// Completed history can reference tools removed from the current
+				// declaration set. Keep replay identities without authorizing new
+				// calls to those tools through the response validation maps.
+				internal = museWireToolName(name, ns)
+				inputField = "value"
 			}
 			raw, _ = sjson.SetBytes(raw, path+".name", internal)
 			raw, _ = sjson.DeleteBytes(raw, path+".namespace")
@@ -224,7 +286,7 @@ func PrepareMuse(raw []byte, refs *MuseReferences, scope string) ([]byte, *MuseB
 				if item.Get("input").Type != gjson.String {
 					return nil, nil, fmt.Errorf("invalid custom tool history input")
 				}
-				args, _ := json.Marshal(map[string]string{"input": item.Get("input").String()})
+				args, _ := json.Marshal(map[string]string{inputField: item.Get("input").String()})
 				raw, _ = sjson.SetBytes(raw, path+".type", "function_call")
 				raw, _ = sjson.SetBytes(raw, path+".arguments", string(args))
 				raw, _ = sjson.DeleteBytes(raw, path+".input")
@@ -241,10 +303,16 @@ func (b *MuseBridge) BindFinal(raw []byte) error {
 		return fmt.Errorf("final Muse tools must be an array")
 	}
 	choice := gjson.GetBytes(raw, "tool_choice")
-	if choice.Exists() && (choice.Type != gjson.String || choice.String() != "auto") {
+	if !b.native && choice.Exists() && (choice.Type != gjson.String || choice.String() != "auto") {
 		return fmt.Errorf("final Muse payload requires auto tool_choice; user payload rules were not overridden")
 	}
 	for _, tool := range gjson.GetBytes(raw, "tools").Array() {
+		if b.native && tool.Get("type").String() == "custom" {
+			return fmt.Errorf("native custom tools require the prepared function envelope")
+		}
+		if b.native && tool.Get("type").String() != "function" {
+			continue
+		}
 		name := tool.Get("name").String()
 		if tool.Get("type").String() != "function" || !museName.MatchString(name) || !tool.Get("parameters").IsObject() {
 			return fmt.Errorf("final Muse tool declaration is invalid")
@@ -262,6 +330,9 @@ func (b *MuseBridge) BindFinal(raw []byte) error {
 			return fmt.Errorf("final Muse payload contains unsupported additional_tools")
 		}
 		if item.Get("type").String() == "reasoning" && item.Get("id").String() != "" && !b.refs.known(b.scope, item.Get("id").String()) {
+			if b.native {
+				continue
+			}
 			return fmt.Errorf("final Muse payload contains an unowned reasoning reference")
 		}
 	}
@@ -269,6 +340,9 @@ func (b *MuseBridge) BindFinal(raw []byte) error {
 }
 
 func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
+	if b.native && gjson.GetBytes(raw, "type").String() == "custom_tool_call" {
+		return nil, fmt.Errorf("upstream returned an undeclared native custom call type")
+	}
 	if gjson.GetBytes(raw, "type").String() != "function_call" {
 		return raw, nil
 	}
@@ -341,7 +415,7 @@ func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
 			if !ok {
 				return nil, fmt.Errorf("invalid Muse custom tool envelope")
 			}
-			input, ok = object["input"].(string)
+			input, ok = object[info.inputField].(string)
 			if !ok || len(object) != 1 {
 				return nil, fmt.Errorf("invalid Muse custom tool input")
 			}
@@ -391,6 +465,9 @@ func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
 		}
 	}
 	id := gjson.GetBytes(raw, "item_id").String()
+	if b.native && strings.HasPrefix(kind, "response.custom_tool_call_input.") {
+		return nil, fmt.Errorf("upstream emitted a custom event for a function envelope")
+	}
 	if call := b.calls[id]; call != nil && strings.HasPrefix(kind, "response.function_call_arguments.") {
 		if call.done {
 			return nil, fmt.Errorf("Muse call emitted arguments after completion")

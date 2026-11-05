@@ -38,13 +38,15 @@ type draft struct {
 	Managed   []string   `json:"managedPrefixes"`
 }
 type provider struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	Prefix  string  `json:"prefix"`
-	Base    string  `json:"baseUrl"`
-	Proxy   string  `json:"proxyUrl"`
-	Enabled *bool   `json:"enabled"`
-	Models  []model `json:"models"`
+	Kind     string  `json:"type,omitempty"`
+	Protocol string  `json:"upstreamProtocol"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Prefix   string  `json:"prefix"`
+	Base     string  `json:"baseUrl"`
+	Proxy    string  `json:"proxyUrl"`
+	Enabled  *bool   `json:"enabled"`
+	Models   []model `json:"models"`
 }
 type model struct {
 	Client   string   `json:"clientName"`
@@ -385,6 +387,46 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 			}
 		}
 	}
+	claudeParent, claudeKey, err := family(root, "claude-api-key", "claude")
+	if err != nil {
+		return nil, err
+	}
+	claudeEntries, err := seq(get(claudeParent, claudeKey))
+	if err != nil {
+		return nil, err
+	}
+	claudePrevious := map[string]*yaml.Node{}
+	claudePreserved := []*yaml.Node{}
+	for _, entry := range claudeEntries {
+		if !owned(entry) {
+			claudePreserved = append(claudePreserved, entry)
+			if prefix := scalar(entry, "prefix"); prefix != "" {
+				used[prefix] = true
+			}
+			continue
+		}
+		id, err := claudeID(entry)
+		if err != nil {
+			return nil, err
+		}
+		projection, err := claudeProjection(entry, id, credentialField)
+		if err != nil {
+			return nil, err
+		}
+		name := scalar(projection, "name")
+		if old[name] != nil {
+			return nil, errors.New("provider exists in multiple credential families")
+		}
+		old[name] = projection
+		claudePrevious[id] = entry
+		models, err := seq(get(entry, "models"))
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range models {
+			replacement[publicID(entry, m)] = true
+		}
+	}
 	// Other API credential families are never deleted by a GUI bundle.
 	parsedOriginal, err := config.ParseConfigBytes(in.Config)
 	if err != nil {
@@ -423,6 +465,20 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 		p.Prefix = strings.TrimSpace(p.Prefix)
 		p.Base = strings.TrimRight(strings.TrimSpace(p.Base), "/")
 		p.Proxy = strings.TrimSpace(p.Proxy)
+		p.Protocol = strings.TrimSpace(p.Protocol)
+		if err := normalizeProviderKind(p); err != nil {
+			return nil, err
+		}
+		if p.Kind == "anthropic" && claudePrevious[p.ID] == nil {
+			if err := validateFamilyMigration(old["cpa-gui-"+p.ID+"-chat"]); err != nil {
+				return nil, err
+			}
+		}
+		if p.Kind != "anthropic" && claudePrevious[p.ID] != nil {
+			if err := validateClaudeMigration(claudePrevious[p.ID]); err != nil {
+				return nil, err
+			}
+		}
 		if p.Prefix == "" {
 			p.Prefix = p.ID
 		}
@@ -472,6 +528,7 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 		}
 	}
 	compiled := []*yaml.Node{}
+	compiledClaude := []*yaml.Node{}
 	modelsSet := map[string]bool{}
 	count := 0
 	for _, p := range state.Providers {
@@ -494,6 +551,7 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 		put(entry, "name", node(name))
 		put(entry, "prefix", node(p.Prefix))
 		put(entry, "base-url", node(p.Base))
+		put(entry, "upstream-protocol", node(p.Protocol))
 		// OpenCode Go requires a conversation identity on every request, not
 		// just Muse's native Responses path. The executor expands this value
 		// from the ingress session or stable request-root fallback.
@@ -571,11 +629,17 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 			put(n, "thinking", thinking)
 			modelNodes = append(modelNodes, n)
 			protocol := "chat"
+			if p.Protocol == "responses" {
+				protocol = "responses"
+			}
+			if p.Kind == "anthropic" {
+				protocol = "messages"
+			}
 			if p.ID == "opencode" && p.Prefix == "opencode" && p.Base == "https://opencode.ai/zen/go/v1" && strings.HasPrefix(m.Upstream, "muse-spark-") {
 				protocol = "responses"
 			}
-			if protocol == "chat" {
-				chat = append(chat, node(map[string]any{"id": id, "upstream": m.Upstream, "provider": p.ID, "protocol": "chat", "endpoint": "/chat/completions", "status": 200}))
+			if protocol == "chat" || p.Protocol == "responses" || p.Kind == "anthropic" {
+				chat = append(chat, node(map[string]any{"id": id, "upstream": m.Upstream, "provider": p.ID, "protocol": protocol, "endpoint": "/chat/completions", "status": 200}))
 			}
 			responses = append(responses, node(map[string]any{"id": id, "upstream": m.Upstream, "provider": p.ID, "protocol": protocol, "endpoint": "/responses", "status": 200}))
 			levels := []map[string]string{}
@@ -599,9 +663,20 @@ func Build(ctx context.Context, in Input) (*Output, error) {
 			contextModels[id] = raw
 		}
 		put(entry, "models", &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: modelNodes})
-		compiled = append(compiled, entry)
+		if p.Kind == "anthropic" {
+			native, err := buildClaudeEntry(entry, claudePrevious[p.ID], credentialField, claudeParent != root)
+			if err != nil {
+				return nil, err
+			}
+			compiledClaude = append(compiledClaude, native)
+		} else {
+			compiled = append(compiled, entry)
+		}
 	}
 	put(parent, key, &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: append(compiled, preserved...)})
+	if len(claudeEntries) > 0 || len(compiledClaude) > 0 {
+		put(claudeParent, claudeKey, &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: append(compiledClaude, claudePreserved...)})
+	}
 	put(gen, "chat_models", &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: chat})
 	put(gen, "responses_models", &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: responses})
 	put(gen, "generated_at", node(in.Now.UTC().Format(time.RFC3339)))
@@ -652,6 +727,22 @@ func Verify(out *Output) error {
 		}
 		for _, m := range p.Models {
 			id := p.Prefix + "/" + m.Alias
+			if m.Alias == "" || declared[id] != "" {
+				return invalid()
+			}
+			declared[id] = m.Name
+		}
+	}
+	expected := map[string]bool{}
+	for _, id := range out.Models {
+		expected[id] = true
+	}
+	for _, p := range cfg.ClaudeKey {
+		for _, m := range p.Models {
+			id := p.Prefix + "/" + m.Alias
+			if !expected[id] {
+				continue
+			}
 			if m.Alias == "" || declared[id] != "" {
 				return invalid()
 			}

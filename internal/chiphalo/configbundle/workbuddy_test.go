@@ -19,7 +19,7 @@ func TestWorkBuddyLocalOriginsAreExactDirectOnly(t *testing.T) {
 			t.Fatal("fixed worker rejected")
 		}
 	}
-	for _, base := range []string{"http://127.0.0.1:8331", "http://127.0.0.1:8331/v1/", "http://127.0.0.1:8331/v1?x=1", "http://127.0.0.1:8331/v1#x", "http://127.0.0.1:8331/v1/../admin", "http://127.0.0.1:8333/v1", "http://localhost:8331/v1", "http://[::1]:8331/v1", "http://127.0.0.1:8320/v1", "http://user@127.0.0.1:8331/v1", "https://example.com/v1"} {
+	for _, base := range []string{"http://127.0.0.1:8331", "http://127.0.0.1:8331/v1/", "http://127.0.0.1:8331/v1?x=1", "http://127.0.0.1:8331/v1#x", "http://127.0.0.1:8331/v1/../admin", "http://127.0.0.1:8335/v1", "http://localhost:8331/v1", "http://[::1]:8331/v1", "http://127.0.0.1:8320/v1", "http://user@127.0.0.1:8331/v1", "https://example.com/v1"} {
 		if WorkBuddyLocalOrigin(base, "direct") || ValidateProviderOrigin(t.Context(), base, "direct") == nil {
 			t.Fatalf("arbitrary origin/proxy accepted: %s", base)
 		}

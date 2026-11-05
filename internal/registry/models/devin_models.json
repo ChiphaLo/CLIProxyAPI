@@ -263,6 +263,18 @@
       }
     },
     {
+      "id": "swe-2-flash",
+      "object": "model",
+      "type": "devin",
+      "owned_by": "cognition",
+      "display_name": "SWE-2 Flash",
+      "context_length": 262144,
+      "max_completion_tokens": 131072,
+      "supportedInputModalities": ["text"],
+      "supportedOutputModalities": ["text"],
+      "thinking": {"levels": ["medium", "high", "max"]}
+    },
+    {
       "id": "swe-2",
       "object": "model",
       "type": "devin",

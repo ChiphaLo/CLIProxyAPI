@@ -6,6 +6,9 @@ package config
 
 // Config represents the application's configuration, loaded from a YAML file.
 type Config struct {
+	// ClaudeQuotaEndpoint enables a read-only, API-key-authenticated quota
+	// projection for the isolated single-account Claude core. Disabled by default.
+	ClaudeQuotaEndpoint bool `yaml:"claude-quota-endpoint,omitempty" json:"-"`
 	// Models selects optional catalog sources independently for each catalog.
 	Models ModelCatalogs `yaml:"models" json:"models"`
 

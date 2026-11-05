@@ -66,6 +66,9 @@ func (s *Server) setupRoutes() {
 	v1.Use(s.proxyMiddleware...)
 	{
 		v1.GET("/models", s.unifiedModelsHandler(openaiHandlers, claudeCodeHandlers))
+		if s.cfg.ClaudeQuotaEndpoint {
+			v1.GET("/claude/usage", s.claudeQuotaHandler())
+		}
 		v1.GET("/models/*model", func(c *gin.Context) {
 			c.Set(handlers.ModelDetailIDContextKey, strings.TrimPrefix(c.Param("model"), "/"))
 			s.unifiedModelsHandler(openaiHandlers, claudeCodeHandlers)(c)

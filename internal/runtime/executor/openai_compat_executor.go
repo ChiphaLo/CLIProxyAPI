@@ -87,6 +87,9 @@ func (e *OpenAICompatExecutor) HttpRequest(ctx context.Context, auth *cliproxyau
 }
 
 func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resp cliproxyexecutor.Response, err error) {
+	if usesNativeResponses(auth) && opts.Alt == "" {
+		return e.executeNativeResponses(ctx, auth, req, opts)
+	}
 	if isOpenCodeMuse(auth, req) {
 		return e.executeMuse(ctx, auth, req, opts)
 	}
@@ -332,6 +335,9 @@ func (e *OpenAICompatExecutor) executeImages(ctx context.Context, auth *cliproxy
 }
 
 func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth, req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (_ *cliproxyexecutor.StreamResult, err error) {
+	if usesNativeResponses(auth) && opts.Alt == "" {
+		return e.executeNativeResponsesStream(ctx, auth, req, opts)
+	}
 	if isOpenCodeMuse(auth, req) {
 		return e.executeMuseStream(ctx, auth, req, opts)
 	}

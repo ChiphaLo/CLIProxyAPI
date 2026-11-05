@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
 )
@@ -115,7 +116,77 @@ func TestUsageProjectionCapacityDoesNotDropRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	seen := 0
-	if err := s.visitUsage(func(usageRecord) error { seen++; return nil }, nil); err != nil || seen != count || len(s.usageCache.blocks) != 0 {
-		t.Fatalf("capacity dropped rows or retained oversized cache: seen=%d count=%d err=%v", seen, count, err)
+	if err := s.visitUsage(func(usageRecord) error { seen++; return nil }, nil); err != nil || seen != count || len(s.usageCache.blocks) == 0 {
+		t.Fatalf("capacity dropped rows or discarded the bounded cache: seen=%d count=%d err=%v", seen, count, err)
+	}
+	bytes, rows := 0, 0
+	for _, block := range s.usageCache.blocks {
+		bytes += block.bytes
+		rows += len(block.rows)
+	}
+	if bytes > usageCacheBytes || rows > usageCacheRows || rows >= count {
+		t.Fatalf("cache budget not enforced: bytes=%d rows=%d count=%d", bytes, rows, count)
+	}
+	old := &s.usageCache.blocks[0].rows[0]
+	assertUsageProjectionParity(t, s)
+	if old != &s.usageCache.blocks[0].rows[0] {
+		t.Fatal("overflow discarded verified historical blocks on the next poll")
+	}
+	// Both cached and uncached corrections must remain visible at capacity.
+	f, err := os.OpenFile(s.options.Usage, os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(line, `"input":1`, `"input":7`, 1)
+	_, firstErr := f.WriteAt([]byte(changed), 0)
+	_, lastErr := f.WriteAt([]byte(changed), int64((count-1)*len(line)))
+	closeErr := f.Close()
+	if firstErr != nil || lastErr != nil || closeErr != nil {
+		t.Fatal("cannot correct overflow fixture")
+	}
+	assertUsageProjectionParity(t, s)
+	if s.usageCache.blocks[0].rows[0].Row.Input != 7 {
+		t.Fatal("cached correction hidden at capacity")
+	}
+}
+
+func TestUsageProjectionRowCapacityRetainsBoundedCache(t *testing.T) {
+	s, _ := fixtureServer(t)
+	line := "{\"ts\":1}\n"
+	count := usageCacheRows + 1000
+	if err := os.WriteFile(s.options.Usage, []byte(strings.Repeat(line, count)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for pass := 0; pass < 2; pass++ {
+		seen := 0
+		if err := s.visitUsage(func(usageRecord) error { seen++; return nil }, nil); err != nil || seen != count {
+			t.Fatalf("row capacity lost records: %d, %v", seen, err)
+		}
+		rows := 0
+		for _, block := range s.usageCache.blocks {
+			rows += len(block.rows)
+		}
+		if rows <= 0 || rows > usageCacheRows {
+			t.Fatalf("row budget not enforced: %d", rows)
+		}
+	}
+}
+
+func BenchmarkUsageProjectionOverflow(b *testing.B) {
+	s := &Server{options: Options{Usage: b.TempDir() + "/usage.jsonl", Now: time.Now}}
+	line := `{"ts":1791892000,"model":"opencode/deepseek-v4.1-flash","routed_model":"opencode/deepseek-v4.1-flash","key_id":"fixture","input":1000,"cached":900,"output":20,"request_id":"fixture-request","upstream_reported_model":"deepseek-v4.1-flash","path":"/v1/responses"}` + "\n"
+	if err := os.WriteFile(s.options.Usage, []byte(strings.Repeat(line, 110000)), 0600); err != nil {
+		b.Fatal(err)
+	}
+	visit := func(usageRecord) error { return nil }
+	if err := s.visitUsage(visit, nil); err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := s.visitUsage(visit, nil); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

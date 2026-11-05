@@ -52,6 +52,17 @@ func ValidateConfig(config ThinkingConfig, modelInfo *registry.ModelInfo, fromFo
 		}
 		return &config, nil
 	}
+	if support.StrictLevels {
+		level := string(config.Level)
+		if config.Mode == ModeNone {
+			level = string(LevelNone)
+		} else if config.Mode == ModeAuto {
+			level = string(LevelAuto)
+		}
+		if config.Mode != ModeBudget && !isLevelSupported(level, support.Levels) {
+			return nil, NewThinkingErrorWithModel(ErrLevelNotSupported, fmt.Sprintf("reasoning effort %q is not supported; supported levels: %v", level, support.Levels), model)
+		}
+	}
 
 	// allowClampUnsupported determines whether to clamp unsupported levels instead of returning an error.
 	// This applies when crossing provider families (e.g., openai→gemini, claude→gemini) and the target

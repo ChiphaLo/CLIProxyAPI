@@ -4,18 +4,9 @@ package webgui
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"syscall"
 )
-
-func quotaFileIdentity(info os.FileInfo) string {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return "unknown"
-	}
-	return fmt.Sprintf("%d:%d", stat.Dev, stat.Ino)
-}
 
 func preserveFileOwner(file *os.File, info os.FileInfo) error {
 	stat, ok := info.Sys().(*syscall.Stat_t)

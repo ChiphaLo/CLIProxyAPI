@@ -49,6 +49,7 @@ type oaiToResponsesState struct {
 	// message item state per output index
 	MsgItemAdded    map[int]bool // whether response.output_item.added emitted for message
 	MsgContentAdded map[int]bool // whether response.content_part.added emitted for message
+	MsgPhases       map[int]string
 	MsgItemDone     map[int]bool // whether message done events were emitted
 	// function item state
 	FuncItemAdded  map[string]bool
@@ -196,6 +197,7 @@ func buildResponsesCompletedEvent(st *oaiToResponsesState, requestRawJSON []byte
 			item, _ = sjson.SetBytes(item, "id", fmt.Sprintf("msg_%s_%d", st.ResponseID, i))
 			item, _ = sjson.SetBytes(item, "status", msgStatus)
 			item, _ = sjson.SetBytes(item, "content.0.text", txt)
+			item, _ = sjson.SetBytes(item, "phase", st.MsgPhases[i])
 			outputItems = append(outputItems, completedOutputItem{index: st.MsgOutputIx[i], raw: item})
 		}
 	}
@@ -481,6 +483,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 		st.NextOutputIx = 0
 		st.MsgItemAdded = make(map[int]bool)
 		st.MsgContentAdded = make(map[int]bool)
+		st.MsgPhases = make(map[int]string)
 		st.MsgItemDone = make(map[int]bool)
 		st.FuncItemAdded = make(map[string]bool)
 		st.FuncItemCustom = make(map[string]bool)
@@ -581,6 +584,12 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 		itemDone, _ = sjson.SetBytes(itemDone, "item.id", fmt.Sprintf("msg_%s_%d", st.ResponseID, idx))
 		itemDone, _ = sjson.SetBytes(itemDone, "item.status", msgStatus)
 		itemDone, _ = sjson.SetBytes(itemDone, "item.content.0.text", fullText)
+		phase := "commentary"
+		if st.FinishReason == "stop" && len(st.FuncArgsBuf) == 0 {
+			phase = "final_answer"
+		}
+		st.MsgPhases[idx] = phase
+		itemDone, _ = sjson.SetBytes(itemDone, "item.phase", phase)
 		out = append(out, emitRespEvent("response.output_item.done", itemDone))
 		st.MsgItemDone[idx] = true
 	}
@@ -803,7 +812,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponses(ctx context.Context, 
 					}
 					msgOutputIndex := st.MsgOutputIx[idx]
 					if !st.MsgItemAdded[idx] {
-						item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant"}}`)
+						item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant","phase":"commentary"}}`)
 						item, _ = sjson.SetBytes(item, "sequence_number", nextSeq())
 						item, _ = sjson.SetBytes(item, "output_index", msgOutputIndex)
 						item, _ = sjson.SetBytes(item, "item.id", fmt.Sprintf("msg_%s_%d", st.ResponseID, idx))
@@ -1148,7 +1157,7 @@ func ConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream(_ context.Co
 		}
 	}
 
-	return resp
+	return translatorcommon.SetResponseMessagePhases(resp)
 }
 
 func (st *oaiToResponsesState) canFinalizeResponse() bool {

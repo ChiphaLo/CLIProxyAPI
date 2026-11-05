@@ -90,6 +90,8 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 		raw, err = billing.ChatUsage(raw)
 	case "gemini":
 		raw, err = billing.GeminiUsage(raw)
+	case "claude":
+		raw, err = billing.ClaudeUsage(raw)
 	case "responses":
 	default:
 		err = fmt.Errorf("raw upstream usage unavailable")

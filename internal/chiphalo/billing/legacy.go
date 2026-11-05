@@ -16,10 +16,11 @@ const Version = "cpa-legacy-go/1"
 
 // Rates are configured USD prices per million tokens, not provider prices.
 type Rates struct {
-	Input  float64 `json:"input"`
-	Cached float64 `json:"cached"`
-	Write  float64 `json:"write"`
-	Output float64 `json:"output"`
+	Input              float64 `json:"input"`
+	Cached             float64 `json:"cached"`
+	Write              float64 `json:"write"`
+	Output             float64 `json:"output"`
+	SeparateCacheWrite bool    `json:"separate_cache_write,omitempty"`
 }
 
 // Row is the existing usage.jsonl schema. Output already includes any hidden
@@ -66,6 +67,12 @@ func Cost(row Row, prices map[string]*Rates) float64 {
 	input, cached := max(row.Input, 0), max(row.Cached, 0)
 	uncached := max(input-cached, 0)
 	output, write := max(row.Output, 0), max(row.Write, 0)
+	if rate.SeparateCacheWrite {
+		// Claude's normalized input includes cache creation. Bill that disjoint
+		// bucket at its full write rate, not at input plus the write rate.
+		write = min(write, uncached)
+		uncached -= write
+	}
 	amount := float64(float64(uncached) * rate.Input)
 	amount = float64(amount + float64(float64(cached)*rate.Cached))
 	amount = float64(amount + float64(float64(write)*rate.Write))
@@ -238,6 +245,13 @@ func LoadPrices(raw []byte) (map[string]*Rates, error) {
 			continue
 		}
 		rate, valid := new(Rates), true
+		if v, exists := object["separate_cache_write"]; exists {
+			var ok bool
+			rate.SeparateCacheWrite, ok = v.(bool)
+			if !ok {
+				valid = false
+			}
+		}
 		for key, target := range map[string]*float64{"input": &rate.Input, "cached": &rate.Cached, "write": &rate.Write, "output": &rate.Output} {
 			value := object[key]
 			if value == nil || value == "" {

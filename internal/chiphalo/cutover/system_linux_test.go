@@ -156,6 +156,23 @@ func TestSystemServiceSandboxAndRebootOwnership(t *testing.T) {
 		t.Fatal("unit path injection accepted")
 	}
 }
+
+func TestHelperAtomicKeyDirectoryAndProtectedBusinessData(t *testing.T) {
+	s, _, _ := systemFixture(t)
+	body := string(s.serviceBody("cpa-admin-helper"))
+	data := filepath.Join(s.Manifest.BusinessRoot, "data")
+	if !strings.Contains(body, "ReadWritePaths="+s.Manifest.RuntimeRoot+" "+s.Manifest.StateRoot+" "+s.Manifest.AdminRoot+" "+filepath.Join(s.Manifest.BusinessRoot, "config")+" "+data+"\n") {
+		t.Fatal("atomic key writer lacks writable directory")
+	}
+	if strings.Contains(body, data+"/api-keys.json") {
+		t.Fatal("single-file mount prevents atomic key replacement")
+	}
+	for _, name := range []string{"usage.jsonl", "audit.jsonl", "oauth-quota-history.jsonl", "quota-model-exclusions.json", "oauth-accounts.json", ".cpa-quota-collector.lock", "opencode-debug", "opencode-reasoning"} {
+		if !strings.Contains(body, "-"+filepath.Join(data, name)) {
+			t.Errorf("helper can write protected business data %s", name)
+		}
+	}
+}
 func TestSystemPartialMetadataRecovery(t *testing.T) {
 	s, old, _ := systemFixture(t)
 	_ = s.installDrain()

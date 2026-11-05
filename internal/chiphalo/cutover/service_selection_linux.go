@@ -159,6 +159,7 @@ func (s *System) serviceBody(role string) []byte {
 		cap = ""
 	}
 	write := m.RuntimeRoot + " " + m.StateRoot
+	readOnly := ""
 	if role == "cpa-gateway" {
 		write += " " + filepath.Join(m.BusinessRoot, "auth") + " " + filepath.Join(m.BusinessRoot, "data")
 	}
@@ -166,13 +167,24 @@ func (s *System) serviceBody(role string) []byte {
 		write = filepath.Join(m.GUIRoot, "data")
 	}
 	if role == "cpa-admin-helper" {
-		write += " " + m.AdminRoot + " " + filepath.Join(m.BusinessRoot, "config") + " " + filepath.Join(m.BusinessRoot, "data/api-keys.json")
+		// Atomic key publication needs a writable parent, not a single-file bind
+		// mount. Keep the other business data mounts read-only in this namespace.
+		data := filepath.Join(m.BusinessRoot, "data")
+		write += " " + m.AdminRoot + " " + filepath.Join(m.BusinessRoot, "config") + " " + data
+		protected := []string{"usage.jsonl", "audit.jsonl", "oauth-quota-history.jsonl", "quota-model-exclusions.json", "oauth-accounts.json", ".cpa-quota-collector.lock", "opencode-debug", "opencode-reasoning"}
+		for _, name := range protected {
+			readOnly += " -" + filepath.Join(data, name)
+		}
 	}
 	if role == "cpa-quota-collector" {
 		typ, extra = "oneshot", " --once"
 		write = filepath.Join(m.BusinessRoot, "data")
 	}
-	return []byte(fmt.Sprintf("[Service]\nType=%s\nPIDFile=\nExecStart=\nExecStartPre=\nExecStartPost=\nExecStop=\nExecStopPost=\nExecReload=\nExecStart=%s --hosting-manifest %s%s\nUser=%s\nGroup=%s\nSupplementaryGroups=\nSupplementaryGroups=%s\nEnvironment=\nEnvironmentFile=\nProtectSystem=strict\nReadWritePaths=\nReadWritePaths=%s\nCapabilityBoundingSet=\nCapabilityBoundingSet=%s\nAmbientCapabilities=\nNoNewPrivileges=true\nPrivateTmp=true\nPrivateDevices=true\nProtectHome=true\nProtectKernelTunables=true\nProtectKernelModules=true\nProtectControlGroups=true\nRestrictSUIDSGID=true\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK\nUMask=0027\nTimeoutStopSec=infinity\nKillMode=control-group\nSendSIGKILL=no\n", typ, filepath.Join(m.ProgramRoot, role), s.HostingPath, extra, user, group, supp, write, cap))
+	body := fmt.Sprintf("[Service]\nType=%s\nPIDFile=\nExecStart=\nExecStartPre=\nExecStartPost=\nExecStop=\nExecStopPost=\nExecReload=\nExecStart=%s --hosting-manifest %s%s\nUser=%s\nGroup=%s\nSupplementaryGroups=\nSupplementaryGroups=%s\nEnvironment=\nEnvironmentFile=\nProtectSystem=strict\nReadWritePaths=\nReadWritePaths=%s\nCapabilityBoundingSet=\nCapabilityBoundingSet=%s\nAmbientCapabilities=\nNoNewPrivileges=true\nPrivateTmp=true\nPrivateDevices=true\nProtectHome=true\nProtectKernelTunables=true\nProtectKernelModules=true\nProtectControlGroups=true\nRestrictSUIDSGID=true\nRestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK\nUMask=0027\nTimeoutStopSec=infinity\nKillMode=control-group\nSendSIGKILL=no\n", typ, filepath.Join(m.ProgramRoot, role), s.HostingPath, extra, user, group, supp, write, cap)
+	if readOnly != "" {
+		body += "ReadOnlyPaths=" + strings.TrimSpace(readOnly) + "\n"
+	}
+	return []byte(body)
 }
 func (s *System) bundleRoot(kind string) string { return filepath.Join(s.Root, "services-"+kind) }
 func (s *System) selectionTarget() (string, error) {

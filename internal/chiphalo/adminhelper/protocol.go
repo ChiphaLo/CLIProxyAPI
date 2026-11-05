@@ -27,6 +27,7 @@ var operations = map[string]bool{
 	"update_api_key": true, "delete_api_key": true, "read_api_keys": true, "gateway_models": true,
 	"gui_provider_seed": true, "oauth_reset_credits": true, "consume_oauth_reset_credit": true,
 	"workbuddy_credits": true,
+	"claude_usage": true,
 }
 
 type Result map[string]any

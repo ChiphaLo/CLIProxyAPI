@@ -50,6 +50,7 @@ func TestStoredProviderProbeRequiresPublishedOriginAndProxy(t *testing.T) {
 	s, calls := probeFixture(t)
 	vault, _ := os.ReadFile(s.paths.Vault)
 	for _, payload := range []map[string]any{
+		{"provider_id": "fixture", "base_url": "https://api.example/v1", "api_format": "messages"},
 		{"provider_id": "fixture", "base_url": "https://different.example/v1"},
 		{"provider_id": "other", "base_url": "https://api.example/v1"},
 		{"provider_id": "fixture", "base_url": "https://api.example/v1", "proxy_policy": "cpa-egress"},

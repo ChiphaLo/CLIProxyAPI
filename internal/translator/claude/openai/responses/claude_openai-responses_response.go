@@ -86,6 +86,7 @@ func (item *claudeResponsesWebSearchItem) render() []byte {
 }
 
 type claudeResponsesMessageItem struct {
+	Phase       string
 	ID          string
 	OutputIndex int
 	Text        string
@@ -586,6 +587,10 @@ func (st *claudeToResponsesState) finalizeAssistantMessage(nextSeq func() int) [
 	fullText := st.TextBuf.String()
 	outputIndex := st.messageOutputIndex()
 	status := claudeResponsesOutputStatus(st.StopReason)
+	phase := "commentary"
+	if (st.StopReason == "end_turn" || st.StopReason == "stop_sequence") && len(st.FuncCallIDs) == 0 {
+		phase = "final_answer"
+	}
 	var out [][]byte
 	done := []byte(`{"type":"response.output_text.done","sequence_number":0,"item_id":"","output_index":0,"content_index":0,"text":"","logprobs":[]}`)
 	done, _ = sjson.SetBytes(done, "sequence_number", nextSeq())
@@ -610,12 +615,14 @@ func (st *claudeToResponsesState) finalizeAssistantMessage(nextSeq func() int) [
 	final, _ = sjson.SetBytes(final, "item.id", st.CurrentMsgID)
 	final, _ = sjson.SetBytes(final, "item.status", status)
 	final, _ = sjson.SetBytes(final, "item.content.0.text", fullText)
+	final, _ = sjson.SetBytes(final, "item.phase", phase)
 	if len(st.MessageAnnotations) > 0 {
 		final, _ = sjson.SetBytes(final, "item.content.0.annotations", st.MessageAnnotations)
 	}
 	out = append(out, emitEvent("response.output_item.done", final))
 
 	st.MessageItems = append(st.MessageItems, claudeResponsesMessageItem{
+		Phase:       phase,
 		ID:          st.CurrentMsgID,
 		OutputIndex: outputIndex,
 		Text:        fullText,
@@ -791,7 +798,7 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 				st.CurrentMsgID = fmt.Sprintf("msg_%s_%d", st.ResponseID, len(st.MessageItems))
 			}
 			if !st.MessageOpen {
-				item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant"}}`)
+				item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant","phase":"commentary"}}`)
 				item, _ = sjson.SetBytes(item, "sequence_number", nextSeq())
 				item, _ = sjson.SetBytes(item, "output_index", outputIndex)
 				item, _ = sjson.SetBytes(item, "item.id", st.CurrentMsgID)
@@ -1097,6 +1104,7 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 			item, _ = sjson.SetBytes(item, "id", message.ID)
 			item, _ = sjson.SetBytes(item, "status", message.Status)
 			item, _ = sjson.SetBytes(item, "content.0.text", message.Text)
+			item, _ = sjson.SetBytes(item, "phase", message.Phase)
 			if len(message.Annotations) > 0 {
 				item, _ = sjson.SetBytes(item, "content.0.annotations", message.Annotations)
 			}
@@ -1185,6 +1193,9 @@ func ConvertClaudeResponseToOpenAIResponses(ctx context.Context, modelName strin
 			inputTokens, outputTokens, totalTokens, cachedTokens := st.Usage.OpenAIResponsesUsage()
 			completed, _ = sjson.SetBytes(completed, "response.usage.input_tokens", inputTokens)
 			completed, _ = sjson.SetBytes(completed, "response.usage.input_tokens_details.cached_tokens", cachedTokens)
+			if st.Usage.CacheCreationInputTokens > 0 {
+				completed, _ = sjson.SetBytes(completed, "response.usage.input_tokens_details.cache_write_tokens", st.Usage.CacheCreationInputTokens)
+			}
 			completed, _ = sjson.SetBytes(completed, "response.usage.output_tokens", outputTokens)
 			completed, _ = sjson.SetBytes(completed, "response.usage.output_tokens_details.reasoning_tokens", reasoningTokens)
 			if totalTokens > 0 || st.Usage.HasUsage {
@@ -1611,6 +1622,9 @@ func ConvertClaudeResponseToOpenAIResponsesNonStream(ctx context.Context, _ stri
 
 	// Usage
 	inputTokens, outputTokens, totalTokens, cachedTokens := usageTokens.OpenAIResponsesUsage()
+	if usageTokens.CacheCreationInputTokens > 0 {
+		out, _ = sjson.SetBytes(out, "usage.input_tokens_details.cache_write_tokens", usageTokens.CacheCreationInputTokens)
+	}
 	if inputTokens != 0 {
 		out, _ = sjson.SetBytes(out, "usage.input_tokens", inputTokens)
 	}
@@ -1637,7 +1651,7 @@ func ConvertClaudeResponseToOpenAIResponsesNonStream(ctx context.Context, _ stri
 		}
 	}
 
-	return out
+	return translatorcommon.SetResponseMessagePhases(out)
 }
 
 // FinalizeToolInput rejects a patch-enabled stream lacking its source terminator.

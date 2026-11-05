@@ -12,8 +12,8 @@ import (
 )
 
 const usageBlockBytes = 256 * 1024
-const usageCacheBytes = 48 * 1024 * 1024
-const usageCacheRows = 131072
+const usageCacheBytes = 96 * 1024 * 1024
+const usageCacheRows = 262144
 
 type usageRecord struct {
 	Row    billing.Row
@@ -27,8 +27,10 @@ type usageBlock struct {
 	bytes      int
 }
 type usageProjectionCache struct {
-	mu     sync.Mutex
-	blocks []usageBlock
+	mu       sync.Mutex
+	blocks   []usageBlock
+	file     os.FileInfo
+	complete bool
 }
 type pendingUsage struct {
 	offset        int64
@@ -61,6 +63,22 @@ func (s *Server) visitUsage(visit func(usageRecord) error, finish func(*os.File)
 	cache := &s.usageCache
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
+	// Normal appends, corrections and rotations change identity, size or mtime.
+	// An unchanged, fully retained snapshot needs neither disk hashing nor JSON
+	// decoding. Prices and quota boundaries are still evaluated by each visitor.
+	if cache.complete && cache.file != nil && os.SameFile(cache.file, opened) && cache.file.Size() == opened.Size() && cache.file.ModTime().Equal(opened.ModTime()) {
+		for _, block := range cache.blocks {
+			for _, entry := range block.rows {
+				if err := visit(entry); err != nil {
+					return err
+				}
+			}
+		}
+		if finish != nil {
+			return finish(file)
+		}
+		return nil
+	}
 	old := cache.blocks
 	var next []usageBlock
 	reader := bufio.NewReaderSize(io.NewSectionReader(file, 0, opened.Size()), 64*1024)
@@ -98,7 +116,9 @@ func (s *Server) visitUsage(visit func(usageRecord) error, finish func(*os.File)
 			next = append(next, block)
 		} else {
 			cacheable = false
-			next = nil
+			// Keep the verified prefix within budget. Discarding it here makes
+			// every subsequent poll decode the entire file once capacity is hit.
+			// Overflow blocks are still decoded and visited, never omitted.
 		}
 		start = offset
 		hash.Reset()
@@ -138,6 +158,8 @@ func (s *Server) visitUsage(visit func(usageRecord) error, finish func(*os.File)
 		return errors.New("usage file changed during read")
 	}
 	cache.blocks = next
+	cache.file = opened
+	cache.complete = cacheable
 	if finish != nil {
 		return finish(file)
 	}

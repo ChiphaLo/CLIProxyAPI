@@ -72,6 +72,9 @@ func uniqueOpenAICompatKey(existing map[string]config.OpenAICompatibility, entry
 }
 
 func describeOpenAICompatibilityUpdate(oldEntry, newEntry config.OpenAICompatibility) string {
+	if oldEntry.UpstreamProtocol != newEntry.UpstreamProtocol {
+		return "upstream protocol changed"
+	}
 	oldKeyCount := countAPIKeys(oldEntry)
 	newKeyCount := countAPIKeys(newEntry)
 	oldModelCount := countOpenAIModels(oldEntry.Models)

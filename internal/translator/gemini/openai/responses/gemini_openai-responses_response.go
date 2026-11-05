@@ -22,6 +22,7 @@ type geminiDetachedReasoningItem struct {
 }
 
 type geminiCompletedMessageItem struct {
+	Phase       string
 	ID          string
 	Text        string
 	Status      string
@@ -539,7 +540,7 @@ func ConvertGeminiResponseToOpenAIResponses(_ context.Context, modelName string,
 			st.MsgIndex = st.NextIndex
 			st.NextIndex++
 			st.CurrentMsgID = fmt.Sprintf("msg_%s_%d", st.ResponseID, st.MsgIndex)
-			item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant"}}`)
+			item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant","phase":"commentary"}}`)
 			item, _ = sjson.SetBytes(item, "sequence_number", nextSeq())
 			item, _ = sjson.SetBytes(item, "output_index", st.MsgIndex)
 			item, _ = sjson.SetBytes(item, "item.id", st.CurrentMsgID)
@@ -641,6 +642,11 @@ func ConvertGeminiResponseToOpenAIResponses(_ context.Context, modelName string,
 		final, _ = sjson.SetBytes(final, "item.id", st.CurrentMsgID)
 		final, _ = sjson.SetBytes(final, "item.status", messageStatus)
 		final, _ = sjson.SetBytes(final, "item.content.0.text", fullText)
+		phase := "commentary"
+		if st.FinishReason == "STOP" && len(st.FuncArgsBuf) == 0 {
+			phase = "final_answer"
+		}
+		final, _ = sjson.SetBytes(final, "item.phase", phase)
 		if len(msgCitations) > 0 {
 			final, _ = sjson.SetRawBytes(final, "item.content.0.annotations", translatorcommon.JoinRawArray(msgCitations))
 			st.WebSearchAnnotationsAttached = true
@@ -648,6 +654,7 @@ func ConvertGeminiResponseToOpenAIResponses(_ context.Context, modelName string,
 		out = append(out, emitEvent("response.output_item.done", final))
 
 		st.CompletedMessages[st.MsgIndex] = geminiCompletedMessageItem{
+			Phase:       phase,
 			ID:          st.CurrentMsgID,
 			Text:        fullText,
 			Status:      messageStatus,
@@ -1070,7 +1077,7 @@ func ConvertGeminiResponseToOpenAIResponses(_ context.Context, modelName string,
 					st.MsgIndex = st.NextIndex
 					st.NextIndex++
 					st.CurrentMsgID = fmt.Sprintf("msg_%s_%d", st.ResponseID, st.MsgIndex)
-					item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant"}}`)
+					item := []byte(`{"type":"response.output_item.added","sequence_number":0,"output_index":0,"item":{"id":"","type":"message","status":"in_progress","content":[],"role":"assistant","phase":"commentary"}}`)
 					item, _ = sjson.SetBytes(item, "sequence_number", nextSeq())
 					item, _ = sjson.SetBytes(item, "output_index", st.MsgIndex)
 					item, _ = sjson.SetBytes(item, "item.id", st.CurrentMsgID)
@@ -1469,6 +1476,7 @@ func ConvertGeminiResponseToOpenAIResponses(_ context.Context, modelName string,
 				item, _ = sjson.SetBytes(item, "id", completedMessage.ID)
 				item, _ = sjson.SetBytes(item, "status", completedMessage.Status)
 				item, _ = sjson.SetBytes(item, "content.0.text", completedMessage.Text)
+				item, _ = sjson.SetBytes(item, "phase", completedMessage.Phase)
 				if len(completedMessage.Annotations) > 0 {
 					item, _ = sjson.SetRawBytes(item, "content.0.annotations", translatorcommon.JoinRawArray(completedMessage.Annotations))
 				}
@@ -2030,7 +2038,7 @@ func ConvertGeminiResponseToOpenAIResponsesNonStream(_ context.Context, _ string
 		resp, _ = sjson.SetRawBytes(resp, "usage", usage.JSON())
 	}
 
-	return resp
+	return translatorcommon.SetResponseMessagePhases(resp)
 }
 
 // Full snapshots are evidence, never source prefixes. Stable IDs and explicit

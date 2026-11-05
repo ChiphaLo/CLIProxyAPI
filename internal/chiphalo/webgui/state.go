@@ -193,11 +193,26 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
 	s.forward(w, r, "apply_bundle", map[string]any{"state": map[string]any{"providers": state["providers"], "managedPrefixes": state["managedPrefixes"]}})
 }
 func (s *Server) normalizeProvider(ctx context.Context, p map[string]any, old map[string]any) error {
+	for _, field := range []string{"type", "upstreamProtocol"} {
+		if value, exists := p[field]; exists {
+			if _, ok := value.(string); !ok {
+				return errors.New("invalid provider protocol")
+			}
+		}
+	}
+	kind, protocol, err := configbundle.NormalizeProviderProtocol(stringValue(p["type"]), stringValue(p["upstreamProtocol"]))
+	if err != nil {
+		return errors.New("unsupported provider type or upstream protocol")
+	}
+	p["type"], p["upstreamProtocol"] = kind, protocol
 	id, prefix := stringValue(p["id"]), stringValue(p["prefix"])
 	if !identifier.MatchString(id) || !identifier.MatchString(prefix) || prefix == "codex" || prefix == "codex2" {
 		return errors.New("invalid or reserved provider identity")
 	}
 	base, proxy := strings.TrimRight(stringValue(p["baseUrl"]), "/"), stringValue(p["proxyUrl"])
+	if kind == "anthropic" {
+		base = configbundle.NormalizeMessagesBase(base)
+	}
 	if old == nil || base != stringValue(old["baseUrl"]) || proxy != stringValue(old["proxyUrl"]) {
 		if err := configbundle.ValidateProviderOriginWithResolver(ctx, base, proxy, s.options.Resolve); err != nil {
 			return errors.New("provider URL or proxy rejected")
@@ -298,7 +313,7 @@ func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, 
 			}
 		}
 		if key := stringValue(body["apiKey"]); key != "" {
-			value, err := s.call(r.Context(), "set_provider_secret", map[string]any{"provider_id": id, "secret": key})
+			value, err := s.call(r.Context(), "set_provider_secret", providerSecretPayload(p, key))
 			if err != nil || value["ok"] != true {
 				reject(w, 503, "provider secret update failed")
 				return
@@ -349,7 +364,15 @@ func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, 
 		if proxy != "" {
 			policy = "cpa-egress"
 		}
-		payload := map[string]any{"provider_id": id, "base_url": base, "proxy_policy": policy, "proxy_url": proxy}
+		format := stringValue(original["upstreamProtocol"])
+		if body["upstreamProtocol"] != nil {
+			format = stringValue(body["upstreamProtocol"])
+		}
+		if format != "" && format != "chat" && format != "responses" && format != "messages" {
+			reject(w, 400, "unsupported upstream protocol")
+			return
+		}
+		payload := map[string]any{"provider_id": id, "base_url": base, "proxy_policy": policy, "proxy_url": proxy, "api_format": format}
 		if key := stringValue(body["apiKey"]); key != "" {
 			payload["api_key"] = key
 		}
@@ -366,7 +389,7 @@ func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, 
 	}
 	if r.Method == "PUT" {
 		p := clone(original)
-		for _, key := range []string{"name", "prefix", "baseUrl", "proxyUrl", "enabled", "models"} {
+		for _, key := range []string{"name", "prefix", "baseUrl", "proxyUrl", "enabled", "models", "upstreamProtocol", "type"} {
 			if value, ok := body[key]; ok {
 				p[key] = value
 			}
@@ -386,7 +409,7 @@ func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, 
 		payload := map[string]any{"provider_id": id}
 		if key := stringValue(body["apiKey"]); key != "" {
 			op = "set_provider_secret"
-			payload["secret"] = key
+			payload = providerSecretPayload(p, key)
 		} else if body["clearApiKey"] == true {
 			op = "delete_provider_secret"
 		}
@@ -423,6 +446,11 @@ func (s *Server) providers(w http.ResponseWriter, r *http.Request, path string, 
 		return
 	}
 	reject(w, 405, "method not allowed")
+}
+
+func providerSecretPayload(p map[string]any, secret string) map[string]any {
+	return map[string]any{"provider_id": p["id"], "secret": secret,
+		"base_url": p["baseUrl"], "proxy_url": p["proxyUrl"], "api_format": p["upstreamProtocol"]}
 }
 
 func clearTombstone(state map[string]any, id string) {

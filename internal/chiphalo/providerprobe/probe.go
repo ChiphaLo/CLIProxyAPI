@@ -19,7 +19,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/proxyutil"
 )
 
-type Input struct{ Base, Proxy, Secret string }
+type Input struct{ Base, Proxy, Secret, Format string }
 type Result struct {
 	OK        bool     `json:"ok"`
 	Models    []string `json:"models,omitempty"`
@@ -85,6 +85,12 @@ func pinnedTransport(input Input, addresses []netip.Addr) (http.RoundTripper, er
 
 func (f Fetcher) Fetch(ctx context.Context, input Input) Result {
 	fail := func(message string, status int) Result { return Result{Error: message, Status: status} }
+	if input.Format != "" && input.Format != "chat" && input.Format != "responses" && input.Format != "messages" {
+		return fail("provider_protocol_rejected", 0)
+	}
+	if input.Format == "messages" {
+		input.Base = configbundle.NormalizeMessagesBase(input.Base)
+	}
 	if input.Secret == "" || len(input.Secret) > 4096 || strings.IndexFunc(input.Secret, unicode.IsControl) >= 0 {
 		return fail("invalid provider secret", 0)
 	}
@@ -110,7 +116,7 @@ func (f Fetcher) Fetch(ctx context.Context, input Input) Result {
 	if configbundle.ValidateProviderOriginWithResolver(ctx, input.Base, input.Proxy, validateResolve) != nil {
 		return fail("provider_url_rejected", 0)
 	}
-	if configbundle.WorkBuddyLocalOrigin(input.Base, input.Proxy) {
+	if configbundle.WorkBuddyLocalOrigin(input.Base, input.Proxy) || configbundle.DevinLocalOrigin(input.Base, input.Proxy) || configbundle.ClaudeLocalOrigin(input.Base, input.Proxy) {
 		addresses = []netip.Addr{netip.MustParseAddr("127.0.0.1")}
 	}
 	factory := f.Transport
@@ -125,6 +131,9 @@ func (f Fetcher) Fetch(ctx context.Context, input Input) Result {
 		defer idle.CloseIdleConnections()
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/models"
+	if input.Format == "messages" {
+		u.Path = strings.TrimSuffix(u.Path, "/models") + "/v1/models"
+	}
 	u.RawPath = ""
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
@@ -132,6 +141,13 @@ func (f Fetcher) Fetch(ctx context.Context, input Input) Result {
 	}
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Authorization", "Bearer "+input.Secret)
+	if input.Format == "messages" {
+		request.Header.Set("Anthropic-Version", "2023-06-01")
+		if strings.EqualFold(u.Hostname(), "api.anthropic.com") {
+			request.Header.Del("Authorization")
+			request.Header.Set("x-api-key", input.Secret)
+		}
+	}
 	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {

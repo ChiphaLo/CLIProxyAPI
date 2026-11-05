@@ -158,6 +158,8 @@ type ThinkingSupport struct {
 	// Levels defines discrete reasoning effort levels (e.g., "low", "medium", "high").
 	// When set, the model uses level-based reasoning instead of token budgets.
 	Levels []string `json:"levels,omitempty" yaml:"levels,omitempty"`
+	// StrictLevels rejects explicit unsupported levels before cross-family clamping.
+	StrictLevels bool `json:"strict_levels,omitempty" yaml:"strict-levels,omitempty"`
 }
 
 // ModelRegistration tracks a model's availability

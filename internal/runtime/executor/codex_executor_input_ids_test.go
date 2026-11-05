@@ -40,7 +40,8 @@ func TestCodexExecutorExecuteStreamSanitizesOverlongInputItemIDs(t *testing.T) {
 			`{"type":"reasoning","id":"` + longReasoningItemID + `","encrypted_content":"` + encryptedContent + `","summary":[]},` +
 			`{"type":"function_call","id":"` + longCallItemID + `","call_id":"call-1","name":"lookup","arguments":"{}"},` +
 			`{"type":"function_call_output","id":"` + longOutputItemID + `","call_id":"call-1","output":"ok"},` +
-			`{"type":"message","id":"item_74ec40c883248ebb4885ec84","role":"user","content":"continue"}]}`),
+			`{"type":"message","id":"item_74ec40c883248ebb4885ec84","role":"user","content":"continue"},` +
+			`{"type":"web_search_call","id":"ws_web_search:1#8db94bd3f9624d7f99283c23186af7cf","status":"completed","action":{"type":"search","query":"fixture"}}]}`),
 	}, cliproxyexecutor.Options{
 		SourceFormat: sdktranslator.FromString("openai-response"),
 		Stream:       true,
@@ -51,8 +52,8 @@ func TestCodexExecutorExecuteStreamSanitizesOverlongInputItemIDs(t *testing.T) {
 	for range result.Chunks {
 	}
 
-	if input := gjson.GetBytes(gotBody, "input").Array(); len(input) != 3 {
-		t.Fatalf("upstream input length = %d, want 3: %s", len(input), gotBody)
+	if input := gjson.GetBytes(gotBody, "input").Array(); len(input) != 4 {
+		t.Fatalf("upstream input length = %d, want 4: %s", len(input), gotBody)
 	}
 	if gotType := gjson.GetBytes(gotBody, "input.0.type").String(); gotType != "function_call" {
 		t.Fatalf("input.0.type = %q, want function_call: %s", gotType, gotBody)
@@ -78,5 +79,8 @@ func TestCodexExecutorExecuteStreamSanitizesOverlongInputItemIDs(t *testing.T) {
 	}
 	if got := gjson.GetBytes(gotBody, "input.2.id").String(); got != "msg_item_74ec40c883248ebb4885ec84" {
 		t.Fatalf("message input item ID was not normalized: %q", got)
+	}
+	if id := gjson.GetBytes(gotBody, "input.3.id").String(); id == "" || strings.ContainsAny(id, ":#") || len(id) > 64 {
+		t.Fatalf("Devin search ID was not sanitized: %q", id)
 	}
 }

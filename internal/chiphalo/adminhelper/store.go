@@ -57,6 +57,12 @@ func (s *Service) dispatch(op string, payload map[string]json.RawMessage) Result
 	return s.dispatchContext(ctx, op, payload)
 }
 func (s *Service) dispatchContext(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
+	if op == "claude_usage" {
+		if len(payload) != 0 {
+			return failure("Claude usage lookup does not accept parameters")
+		}
+		return s.claudeUsage(ctx)
+	}
 	if op == "workbuddy_credits" {
 		if len(payload) != 0 {
 			return failure("WorkBuddy credit lookup does not accept parameters")
@@ -127,7 +133,7 @@ func (s *Service) dispatchContext(ctx context.Context, op string, payload map[st
 		return failure("control operation canceled before mutation")
 	}
 	if op == "set_provider_secret" || op == "delete_provider_secret" {
-		return s.secret(op, payload)
+		return s.secret(ctx, op, payload)
 	}
 	return s.keys(op, payload)
 }
@@ -416,10 +422,10 @@ func (s *Service) keys(op string, payload map[string]json.RawMessage) Result {
 	return result
 }
 
-func (s *Service) secret(op string, payload map[string]json.RawMessage) Result {
+func (s *Service) secret(ctx context.Context, op string, payload map[string]json.RawMessage) Result {
 	fields := []string{"provider_id"}
 	if op == "set_provider_secret" {
-		fields = append(fields, "secret")
+		fields = append(fields, "secret", "base_url", "proxy_url", "api_format")
 	}
 	if err := allowed(payload, fields...); err != nil {
 		return failure(err.Error())
@@ -436,14 +442,32 @@ func (s *Service) secret(op string, payload map[string]json.RawMessage) Result {
 	if err != nil {
 		return failure("invalid provider vault")
 	}
+	bindings, err := readProbeBindings(doc)
+	if err != nil {
+		return failure("invalid provider credential bindings")
+	}
 	if op == "set_provider_secret" {
 		secret, err := text(payload, "secret", 4097)
 		if err != nil || secret == "" || len(secret) > 4096 {
 			return failure("invalid provider secret request")
 		}
+		binding, err := s.probeBinding(ctx, payload)
+		if err != nil {
+			return failure(err.Error())
+		}
 		doc[id] = set(secret)
+		delete(bindings, id)
+		if binding != nil {
+			bindings[id] = *binding
+		}
 	} else {
 		delete(doc, id)
+		delete(bindings, id)
+	}
+	if len(bindings) > 0 {
+		doc[probeBindingsKey] = set(bindings)
+	} else {
+		delete(doc, probeBindingsKey)
 	}
 	if err := replaceJSON(s.paths.Vault, doc); err != nil {
 		return failure(err.Error())

@@ -41,7 +41,7 @@ func TestResponsesCompatibilityDigest(t *testing.T) {
 		}
 	}
 	got := fmt.Sprintf("%x", hash.Sum(nil))
-	const want = "be3fc19eade4e6aff373fdfdd0192d586b5aa83e01a6b22884456396443f8411"
+	const want = "e22a152e119b6346a5488e1746e3b14847443c42f1d34aed3171cebba2be68fc"
 	if got != want {
 		t.Fatalf("compatibility digest: got %s, want %s", got, want)
 	}

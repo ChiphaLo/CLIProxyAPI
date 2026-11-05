@@ -2,7 +2,9 @@ package helps
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -18,14 +20,17 @@ const (
 	codexFunctionCallItemIDPrefix         = "fc"
 	codexCustomToolCallItemIDPrefix       = "ctc"
 	codexCustomToolCallOutputItemIDPrefix = "ctco"
+	codexWebSearchItemIDPrefix            = "ws"
 
 	codexInputItemIDOccupied  uint8 = 1 << 0
 	codexInputItemIDPreserved uint8 = 1 << 1
 )
 
-// SanitizeCodexInputItemIDs normalizes supported input item IDs for Codex, removes encrypted
+// SanitizeCodexInputItemIDs normalizes input item ID characters and prefixes for Codex, removes encrypted
 // reasoning items whose IDs exceed the Codex limit, and deterministically shortens
-// other overlong input item IDs.
+// other overlong input item IDs. Client tool call IDs and their results share
+// one portable mapping. Foreign search result records are preserved as
+// historical text beside their native search action and source URLs.
 func SanitizeCodexInputItemIDs(body []byte) []byte {
 	input := util.GetGJSONBytesNoCopy(body, "input")
 	if !input.IsArray() {
@@ -33,10 +38,18 @@ func SanitizeCodexInputItemIDs(body []byte) []byte {
 	}
 
 	items := input.Array()
+	hasReferences := false
+	callIDUsed := make(map[string]bool)
 	idStates := make(map[string]uint8, len(items))
 	for _, item := range items {
+		if item.Get("type").String() == "item_reference" {
+			hasReferences = true
+		}
 		if shouldDropCodexEncryptedReasoningItem(item) {
 			continue
+		}
+		if callID := item.Get("call_id"); callID.Type == gjson.String && isPortableToolCallID(callID.String()) && len(callID.String()) <= codexInputItemIDLimit {
+			callIDUsed[callID.String()] = true
 		}
 		itemID := item.Get("id")
 		if itemID.Type != gjson.String {
@@ -58,6 +71,8 @@ func SanitizeCodexInputItemIDs(body []byte) []byte {
 
 	var mapped map[string]string
 	var collisionMapped map[string]string
+	var aliases map[string]string
+	var callIDs map[string]string
 	rebuilt := make([]string, 0, len(items))
 	changed := false
 	for _, item := range items {
@@ -67,6 +82,31 @@ func SanitizeCodexInputItemIDs(body []byte) []byte {
 		}
 
 		raw := item.Raw
+		if field := item.Get("call_id"); field.Type == gjson.String && field.String() != "" {
+			original := field.String()
+			if !isPortableToolCallID(original) || len(original) > codexInputItemIDLimit {
+				id := callIDs[original]
+				if id == "" {
+					normalized := original
+					if !isPortableToolCallID(original) {
+						normalized = "call_" + base64.RawURLEncoding.EncodeToString([]byte(original))
+					}
+					id = shortenCodexInputItemID(normalized)
+					for attempt := 0; callIDUsed[id]; attempt++ {
+						id = codexInputItemIDWithHashSuffix(normalized, attempt)
+					}
+					if callIDs == nil {
+						callIDs = make(map[string]string)
+					}
+					callIDs[original] = id
+					callIDUsed[id] = true
+				}
+				if next, errSet := sjson.Set(raw, "call_id", id); errSet == nil {
+					raw = next
+					changed = true
+				}
+			}
+		}
 		itemID := item.Get("id")
 		if itemID.Type == gjson.String {
 			originalID := itemID.String()
@@ -113,13 +153,66 @@ func SanitizeCodexInputItemIDs(body []byte) []byte {
 				if errSet == nil {
 					raw = string(next)
 					changed = true
+					if hasReferences && item.Get("type").String() != "item_reference" {
+						if aliases == nil {
+							aliases = make(map[string]string)
+						}
+						aliases[originalID] = id
+					}
 				}
 			}
 		}
 		rebuilt = append(rebuilt, raw)
+		// Foreign search adapters expose untyped result records. Keep the native
+		// search action and preserve their complete payload as historical text;
+		// OpenAI validates results against its own typed result schema.
+		results := item.Get("results")
+		if item.Get("type").String() == "web_search_call" && results.IsArray() {
+			foreign := false
+			for _, result := range results.Array() {
+				if !result.Get("type").Exists() {
+					foreign = true
+					break
+				}
+			}
+			if foreign {
+				raw, _ = sjson.Delete(raw, "results")
+				if item.Get("action.type").String() == "search" && !item.Get("action.sources").Exists() {
+					sources := []map[string]string{}
+					for _, result := range results.Array() {
+						if url := result.Get("url").String(); url != "" {
+							sources = append(sources, map[string]string{"type": "url", "url": url})
+						}
+					}
+					if len(sources) > 0 {
+						raw, _ = sjson.Set(raw, "action.sources", sources)
+					}
+				}
+				rebuilt[len(rebuilt)-1] = raw
+				message, _ := json.Marshal(map[string]any{
+					"type": "message", "role": "assistant", "phase": "commentary",
+					"content": []map[string]string{{"type": "output_text", "text": "Historical web search results:\n" + results.Raw}},
+				})
+				rebuilt = append(rebuilt, string(message))
+				changed = true
+			}
+		}
 	}
 	if !changed {
 		return body
+	}
+	if len(aliases) > 0 {
+		for i, raw := range rebuilt {
+			item := gjson.Parse(raw)
+			if item.Get("type").String() != "item_reference" {
+				continue
+			}
+			if id := aliases[item.Get("id").String()]; id != "" {
+				if next, errSet := sjson.Set(raw, "id", id); errSet == nil {
+					rebuilt[i] = next
+				}
+			}
+		}
 	}
 
 	updated, errSet := sjson.SetRawBytes(body, "input", []byte("["+strings.Join(rebuilt, ",")+"]"))
@@ -142,10 +235,22 @@ func normalizeCodexInputItemID(item gjson.Result, id string) string {
 		prefix = codexCustomToolCallItemIDPrefix
 	case "custom_tool_call_output":
 		prefix = codexCustomToolCallOutputItemIDPrefix
-	default:
+	case "web_search_call":
+		if id == "" || isPortableToolCallID(id) {
+			return id
+		}
+		prefix = codexWebSearchItemIDPrefix
+	case "item_reference":
 		return id
 	}
-	if id == "" || strings.HasPrefix(id, prefix) {
+	if id != "" && !isPortableToolCallID(id) {
+		encoded := base64.RawURLEncoding.EncodeToString([]byte(id))
+		if prefix == "" {
+			return "item_" + encoded
+		}
+		return prefix + "_" + encoded
+	}
+	if prefix == "" || id == "" || strings.HasPrefix(id, prefix) {
 		return id
 	}
 	return prefix + "_" + id

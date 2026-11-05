@@ -59,6 +59,19 @@ func ApplyPayloadConfigWithTrackedPathsForExecutor(cfg *config.Config, targetExe
 	if IsCodexUserAgent(headers) && !isCodexTargetExecutor(targetExecutor) {
 		payload = NormalizeCodexToolIntegerTypes(payload, headers)
 	}
+	payload = applyDeepSeekMilestoneGuidance(payload, model, protocol, root)
+	payload = applySWEMilestoneGuidance(payload, model, protocol, root)
+	if IsCodexUserAgent(headers) && !isCodexTargetExecutor(targetExecutor) {
+		name := strings.ToLower(thinking.ParseSuffix(model).ModelName)
+		name = name[strings.LastIndex(name, "/")+1:]
+		if !strings.HasPrefix(name, "gpt-") {
+			if protocol == "devin" {
+				payload = appendMilestoneContent(payload, buildPayloadPath(root, "system_prompt"))
+			} else {
+				payload = applyMilestoneGuidance(payload, protocol, root)
+			}
+		}
+	}
 	if cfg == nil {
 		return payload, touched
 	}

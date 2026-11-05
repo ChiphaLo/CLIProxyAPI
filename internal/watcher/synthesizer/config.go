@@ -326,6 +326,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				"config_index": strconv.Itoa(i),
 			}
 			metadata := map[string]any{}
+			attrs["upstream_protocol"] = compat.UpstreamProtocol
 			if disableCooling != nil {
 				metadata["disable_cooling"] = *disableCooling
 			}
@@ -378,6 +379,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				"config_index": strconv.Itoa(i),
 			}
 			metadata := map[string]any{}
+			attrs["upstream_protocol"] = compat.UpstreamProtocol
 			if disableCooling != nil {
 				metadata["disable_cooling"] = *disableCooling
 			}

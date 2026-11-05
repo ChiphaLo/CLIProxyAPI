@@ -871,6 +871,9 @@ func (m GeminiModel) GetThinking() *registry.ThinkingSupport { return m.Thinking
 // OpenAICompatibility represents the configuration for OpenAI API compatibility
 // with external providers, allowing model aliases to be routed through OpenAI API format.
 type OpenAICompatibility struct {
+	// UpstreamProtocol selects a verified wire format without inference from model names.
+	// Empty or chat uses Chat Completions; responses preserves native Responses events.
+	UpstreamProtocol string `yaml:"upstream-protocol,omitempty" json:"upstream-protocol,omitempty"`
 	// Name is the identifier for this OpenAI compatibility configuration.
 	Name string `yaml:"name" json:"name"`
 

@@ -11,7 +11,8 @@ import (
 // Inventory projects only GUI-owned routes. Credential/header/transport
 // extensions are deliberately omitted, not returned through a generic map.
 func Inventory(raw, contextRaw, exposedRaw []byte) (map[string]any, error) {
-	if _, err := parseYAML(raw); err != nil {
+	root, err := parseYAML(raw)
+	if err != nil {
 		return nil, err
 	}
 	cfg, err := config.ParseConfigBytes(raw)
@@ -46,7 +47,7 @@ func Inventory(raw, contextRaw, exposedRaw []byte) (map[string]any, error) {
 		if len(source.APIKeyEntries) > 0 {
 			proxy = source.APIKeyEntries[0].ProxyURL
 		}
-		p := provider{ID: id, Name: id, Prefix: source.Prefix, Base: source.BaseURL, Proxy: proxy, Enabled: new(!source.Disabled), Models: []model{}}
+		p := provider{Kind: "openai-compatible", Protocol: source.UpstreamProtocol, ID: id, Name: id, Prefix: source.Prefix, Base: source.BaseURL, Proxy: proxy, Enabled: new(!source.Disabled), Models: []model{}}
 		for _, m := range source.Models {
 			client := m.Alias
 			if client == "" {
@@ -73,6 +74,66 @@ func Inventory(raw, contextRaw, exposedRaw []byte) (map[string]any, error) {
 			providers = append(providers, p)
 			prefixes = append(prefixes, p.Prefix)
 		}
+	}
+	claudeParent, claudeKey, err := family(root, "claude-api-key", "claude")
+	if err != nil {
+		return nil, err
+	}
+	claudeRows, err := seq(get(claudeParent, claudeKey))
+	if err != nil {
+		return nil, err
+	}
+	claudeIDs := map[string]string{}
+	for _, row := range claudeRows {
+		if !owned(row) {
+			continue
+		}
+		id, err := claudeID(row)
+		if err != nil {
+			return nil, err
+		}
+		prefix := scalar(row, "prefix")
+		if prefix == "" || claudeIDs[prefix] != "" {
+			return nil, invalid()
+		}
+		claudeIDs[prefix] = id
+	}
+	for _, source := range cfg.ClaudeKey {
+		id := claudeIDs[source.Prefix]
+		if id == "" {
+			continue
+		}
+		if _, exists := byID[id]; exists {
+			return nil, invalid()
+		}
+		p := provider{Kind: "anthropic", Protocol: "messages", ID: id, Name: id, Prefix: source.Prefix, Base: source.BaseURL, Proxy: source.ProxyURL, Enabled: new(true), Models: []model{}}
+		for _, m := range source.Models {
+			client := m.Alias
+			if client == "" {
+				client = m.Name
+			}
+			levels := []string{}
+			if m.Thinking != nil {
+				levels = append(levels, m.Thinking.Levels...)
+			}
+			inputs := []string{"text"}
+			var meta struct {
+				Input []string `json:"input_modalities"`
+			}
+			if raw, exists := ctx.Models[p.Prefix+"/"+client]; exists {
+				if decodeJSON(raw, &meta) != nil {
+					return nil, invalid()
+				}
+				if len(meta.Input) > 0 {
+					inputs = meta.Input
+				}
+			}
+			p.Models = append(p.Models, model{Client: client, Upstream: m.Name, Enabled: new(true), Context: m.MaxContextLength, Thinking: levels, Input: inputs})
+			ids[p.Prefix+"/"+client] = true
+		}
+		byID[id] = len(providers)
+		providers = append(providers, p)
+		prefixes = append(prefixes, p.Prefix)
 	}
 	slices.Sort(prefixes)
 	prefixes = slices.Compact(prefixes)

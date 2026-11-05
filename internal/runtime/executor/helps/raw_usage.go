@@ -23,6 +23,9 @@ func (r *UsageReporter) observeRawUsage(payload []byte) {
 		return
 	}
 	root := gjson.ParseBytes(payload)
+	if r.provider == "claude" && r.observeClaudeRawUsage(root) {
+		return
+	}
 	value := lastJSONProperty(lastJSONProperty(root, "response"), "usage")
 	format := "responses"
 	gemini := lastJSONProperty(lastJSONProperty(root, "response"), "usageMetadata")

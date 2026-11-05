@@ -61,7 +61,7 @@ func samePublished(p provider, previous *yaml.Node) bool {
 	return true
 }
 func validateOrigin(ctx context.Context, p provider, previous *yaml.Node, resolve Resolver) error {
-	if WorkBuddyLocalOrigin(p.Base, p.Proxy) {
+	if WorkBuddyLocalOrigin(p.Base, p.Proxy) || DevinLocalOrigin(p.Base, p.Proxy) || ClaudeLocalOrigin(p.Base, p.Proxy) {
 		return nil
 	}
 	if !permittedProxy(p.Proxy) {
@@ -114,6 +114,18 @@ func validateOrigin(ctx context.Context, p provider, previous *yaml.Node, resolv
 // Direct transport is mandatory so a global SOCKS proxy cannot redirect it.
 func WorkBuddyLocalOrigin(base, proxy string) bool {
 	return proxy == "direct" && (base == "http://127.0.0.1:8331/v1" || base == "http://127.0.0.1:8332/v1")
+}
+
+// DevinLocalOrigin allows only the authenticated local Devin adapter, never
+// arbitrary loopback ports, alternate paths or proxy-routed private targets.
+func DevinLocalOrigin(base, proxy string) bool {
+	return proxy == "direct" && base == "http://127.0.0.1:8333/v1"
+}
+
+// ClaudeLocalOrigin permits only the authenticated, isolated Claude OAuth core.
+// The parent must use direct loopback; the core enforces its own egress proxy.
+func ClaudeLocalOrigin(base, proxy string) bool {
+	return proxy == "direct" && base == "http://127.0.0.1:8334/v1"
 }
 
 // ValidateProviderOrigin validates a new management URL without trusting GUI drafts.
