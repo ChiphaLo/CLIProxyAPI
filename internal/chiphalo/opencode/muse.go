@@ -17,6 +17,8 @@ import (
 
 const MuseFormatError = "Upstream Muse returned an invalid, conflicting or undeclared tool call; this response cannot be completed safely."
 
+const nativeCodeModeInstructions = `CODE-MODE TOOL ROUTING: Invoke only tools explicitly declared in the request's tools array. APIs documented as tools.* are JavaScript members, not additional top-level tool declarations. For shell commands, call functions__exec (client name functions.exec), with a single value string containing JavaScript that invokes tools.exec_command. Never emit exec_command as a top-level call based on its documentation inside functions.exec. Example arguments: {"value":"const r = await tools.exec_command({cmd: 'echo hello'}); text(r.output);"}. Results must be emitted with text(...); a last expression is not displayed. console.log and print are unavailable. Do not throw an error to display a successful tool result. Follow the same code-mode routing for other documented tools.* APIs; keep all other explicitly declared tools available.`
+
 var museName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // MuseReferences retains only successful provider item identities, not content.
@@ -138,6 +140,7 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 		return nil, nil, fmt.Errorf("Muse continuation requires the CPA scoped full-context replay; resend full context")
 	}
 	flattened := make([]json.RawMessage, 0)
+	codeMode := false
 	var flatten func(gjson.Result, string, int) error
 	flatten = func(list gjson.Result, ns string, depth int) error {
 		if !list.IsArray() || depth > 16 {
@@ -191,6 +194,11 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 				if grammar := tool.Get("format.definition").String(); tool.Get("format.type").String() == "grammar" && grammar != "" {
 					description += "\nRaw input must follow this grammar:\n" + grammar
 				}
+				if native && toolNS == "functions" && name == "exec" && strings.Contains(description, "tools.exec_command") && strings.Contains(description, "text(") {
+					codeMode = true
+					// Nested code-mode APIs are documentation, not callable wire tools.
+					description = "CODE-MODE CALL CONTRACT: Call this declared tool using the single value string containing raw JavaScript. APIs documented as tools.* (including tools.exec_command) must be invoked inside that JavaScript; never emit them as separate top-level tool calls. Emit results explicitly with text(...). The last expression is not displayed. console.log and print are unavailable; do not throw errors to display successful results. Example value: const r = await tools.exec_command({cmd: 'echo hello'}); text(r.output);\n\n" + description
+				}
 				out, _ = json.Marshal(map[string]any{"type": "function", "name": internal, "description": description, "parameters": map[string]any{"type": "object", "properties": map[string]any{inputField: map[string]any{"type": "string"}}, "required": []string{inputField}, "additionalProperties": false}})
 			}
 			flattened = append(flattened, out)
@@ -205,6 +213,15 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 			return nil, nil, err
 		}
 		raw, _ = sjson.SetBytes(raw, "tools", flattened)
+	}
+	if codeMode {
+		instructions := gjson.GetBytes(raw, "instructions").String()
+		if !strings.Contains(instructions, nativeCodeModeInstructions) {
+			if instructions != "" {
+				instructions = "\n\n" + instructions
+			}
+			raw, _ = sjson.SetBytes(raw, "instructions", nativeCodeModeInstructions+instructions)
+		}
 	}
 	choice := gjson.GetBytes(raw, "tool_choice")
 	if choice.Exists() && native && choice.IsObject() && (choice.Get("type").String() == "function" || choice.Get("type").String() == "custom") {

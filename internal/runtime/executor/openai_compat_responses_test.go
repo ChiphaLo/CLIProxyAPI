@@ -130,3 +130,18 @@ func TestNativeResponsesPayloadRulesAreFinal(t *testing.T) {
 		t.Fatal("inferred protocol from caller model prefix")
 	}
 }
+
+func TestNativeResponsesCodeModePayloadRulesAreFinal(t *testing.T) {
+	cfg := &config.Config{Payload: config.PayloadConfig{Override: []config.PayloadRule{{Models: []config.PayloadModelRule{{Name: "fixture", Protocol: "openai-response"}}, Params: map[string]any{"tools.0.description": "Operator tool documentation.", "instructions": "Operator instructions."}}}}}
+	e := NewOpenAICompatExecutor("fixture", cfg)
+	request := []byte(`{"model":"fixture","input":"hello","tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"exec","description":"Run tools.exec_command inside JavaScript and text(value) for output."}]}]}`)
+	for _, stream := range []bool{false, true} {
+		prepared, err := e.prepareNativeResponses(context.Background(), coreexecutor.Request{Model: "fixture", Payload: request}, coreexecutor.Options{SourceFormat: sdktranslator.FormatOpenAIResponse}, stream)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gjson.GetBytes(prepared.body, "tools.0.description").String() != "Operator tool documentation." || gjson.GetBytes(prepared.body, "instructions").String() != "Operator instructions." {
+			t.Fatal("code-mode guidance overwrote final user payload rules")
+		}
+	}
+}
