@@ -1055,7 +1055,13 @@ select.form-input,select{
 .reasoning-badge.hi{background:var(--accent-tint);color:var(--accent)}
 .key-reveal{margin-top:16px;padding:14px;border:1px solid var(--separator);border-radius:var(--radius-md);background:var(--surface-subtle);font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
 #toasts{position:fixed;z-index:120;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast{max-width:360px;padding:11px 14px;border:1px solid var(--separator);border-radius:var(--radius-md);background:var(--surface-elevated);box-shadow:var(--shadow-2);font-size:12.5px;animation:toast-in .2s var(--ease)}
+.toast{max-width:360px;padding:11px 14px;border:1px solid var(--separator);border-radius:var(--radius-md);background:var(--surface-elevated);box-shadow:var(--shadow-2);font-size:12.5px;animation:toast-in .2s var(--ease);color:var(--text);min-height:20px}
+.key-edit{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;min-height:56px;margin:-10px -12px;padding:10px 12px;border:0;border-radius:var(--radius-sm);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.key-edit:hover{background:var(--surface-subtle)}
+.key-edit:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.key-edit .kname{color:var(--accent)}
+.key-item{cursor:pointer}
+#nkModels{max-height:min(46dvh,480px)!important}
 .toast.err{border-color:color-mix(in srgb,var(--danger) 36%,var(--separator));background:var(--surface-elevated);color:var(--danger)}
 @keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
@@ -2207,7 +2213,7 @@ async function renderKeys(){
   $("#pageActions").innerHTML=`<button class="btn btn-primary btn-sm" id="newKey" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>签发新 Key</button>`;
   main.innerHTML=`<section class="page">
     <div class="section">
-      <div class="section-head"><h2>已签发密钥</h2><p>点击名称编辑模型与限流；开关即时生效，撤销后立即失去访问权限。</p></div>
+      <div class="section-head"><h2>已签发密钥</h2><p>点击密钥行编辑模型与限流；开关即时生效，撤销后立即失去访问权限。</p></div>
       <div class="datagrid">
         <div class="datagrid-head key-cols" aria-hidden="true"><span>名称</span><span>Key</span><span>状态</span><span>启用</span><span></span></div>
         <div id="keyList"></div>
@@ -2228,9 +2234,11 @@ function renderKeyList(keys){
   el.innerHTML=keys.map(k=>`
     <div class="datagrid-row key-cols key-item" data-key="${esc(k.id)}">
       <span class="row-main">
-        <button class="kname row-title" type="button" data-role="edit" title="编辑模型权限与限流" style="background:none;border:0;padding:0;text-align:left;color:var(--accent);cursor:pointer">${esc(k.name)} <span class="row-sub">编辑</span></button>
-        <span class="row-sub">创建于 ${dateStr(k.createdAt)} · ${timeAgo(k.lastUsedAt)}${k.note?" · "+esc(k.note):""}</span>
-        <span class="row-sub">RPM ${esc(k.rpm||120)} · 并发 ${esc(k.maxConcurrent||8)}</span>
+        <button class="key-edit" type="button" data-role="edit" title="编辑模型权限与限流">
+          <span class="kname row-title">${esc(k.name)} <span class="row-sub">编辑</span></span>
+          <span class="row-sub">创建于 ${dateStr(k.createdAt)} · ${timeAgo(k.lastUsedAt)}${k.note?" · "+esc(k.note):""}</span>
+          <span class="row-sub">RPM ${esc(k.rpm||120)} · 并发 ${esc(k.maxConcurrent||8)}</span>
+        </button>
       </span>
       <span class="kmask" data-role="value">${esc(revealedKeys[k.id]||keyMask(k))}</span>
       <span class="state"><i class="dot ${k.enabled?(k.expiresAt?"warn":"on"):""}"></i>${k.enabled?(k.expiresAt?new Date(k.expiresAt*1000).toLocaleDateString("zh-CN")+" 到期":"生效中"):"已停用"}</span>
@@ -2249,6 +2257,7 @@ function renderKeyList(keys){
       }catch(err){ toast(err.message,"err"); }
       finally{ button.disabled=false; }
     };
+    row.onclick=e=>{ if(!e.target.closest("button,a,input,select,textarea")&&!getSelection().toString()) row.querySelector('[data-role="edit"]').click(); };
     row.querySelector('[data-role="toggle"]').onclick=async e=>{
       e.currentTarget.classList.toggle("on");
       try{ await api("/keys/"+encodeURIComponent(k.id),{method:"PATCH",body:JSON.stringify({enabled:e.currentTarget.classList.contains("on")})}); toast("Key 已"+(e.currentTarget.classList.contains("on")?"启用":"停用")); }catch(err){ e.currentTarget.classList.toggle("on"); toast(err.message,"err"); }
