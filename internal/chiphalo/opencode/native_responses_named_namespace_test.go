@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func TestNativeResponsesNamedNamespaceChoice(t *testing.T) {
@@ -22,15 +22,15 @@ func TestNativeResponsesNamedNamespaceChoice(t *testing.T) {
 		if err := bridge.BindFinal(out); err != nil {
 			t.Fatal(err)
 		}
-		name := gjson.GetBytes(out, "tool_choice.name").String()
-		if name == "" || name != gjson.GetBytes(out, "tools.0.name").String() {
+		name := ojson.GetBytes(out, "tool_choice.name").String()
+		if name == "" || name != ojson.GetBytes(out, "tools.0.name").String() {
 			t.Fatal("named selection did not match the declared wire tool")
 		}
 		if selected != "" && name != selected {
 			t.Fatal("split and qualified names selected different tools")
 		}
 		selected = name
-		if !strings.HasSuffix(gjson.GetBytes(out, "tools.0.description").String(), "PROBE_FREEFORM_OK") {
+		if !strings.HasSuffix(ojson.GetBytes(out, "tools.0.description").String(), "PROBE_FREEFORM_OK") {
 			t.Fatal("literal tool description changed")
 		}
 	}

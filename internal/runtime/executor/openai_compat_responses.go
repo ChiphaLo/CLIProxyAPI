@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/compat"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
@@ -16,8 +17,6 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 // Only the selected credential's explicit capability selects this endpoint.
@@ -56,10 +55,10 @@ func (e *OpenAICompatExecutor) prepareNativeResponses(ctx context.Context, req c
 	body = helps.SetBoolIfDifferent(body, "stream", stream)
 	// A stateless proxy does not opt users into provider response storage. An
 	// explicitly configured or requested value is still owned by the caller.
-	if !gjson.GetBytes(body, "store").Exists() {
+	if !ojson.GetBytes(body, "store").Exists() {
 		body = helps.SetBoolIfDifferent(body, "store", false)
 	}
-	body, _ = sjson.DeleteBytes(body, "stream_options")
+	body, _ = ojson.DeleteBytes(body, "stream_options")
 	body, bridge, err := opencode.PrepareNativeResponses(body, nil, "")
 	if err != nil {
 		return nil, statusErr{code: 400, msg: err.Error()}
@@ -121,8 +120,8 @@ func (e *OpenAICompatExecutor) executeNativeResponses(ctx context.Context, auth 
 	if err != nil || len(data) > 64<<20 {
 		return result, statusErr{code: 502, msg: "Responses body disconnected or exceeded 64 MiB"}
 	}
-	status := gjson.GetBytes(data, "status").String()
-	if !gjson.ValidBytes(data) || gjson.GetBytes(data, "object").String() != "response" || !gjson.GetBytes(data, "output").IsArray() || (status != "completed" && status != "incomplete") {
+	status := ojson.GetBytes(data, "status").String()
+	if !ojson.ValidBytes(data) || ojson.GetBytes(data, "object").String() != "response" || !ojson.GetBytes(data, "output").IsArray() || (status != "completed" && status != "incomplete") {
 		return result, statusErr{code: 502, msg: "Upstream did not return a successful Responses object"}
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
@@ -195,11 +194,11 @@ func (e *OpenAICompatExecutor) executeNativeResponsesStream(ctx context.Context,
 				}
 				return true
 			}
-			if !gjson.ValidBytes(data) {
+			if !ojson.ValidBytes(data) {
 				fail("Upstream returned invalid Responses SSE JSON")
 				return false
 			}
-			kind := gjson.GetBytes(data, "type").String()
+			kind := ojson.GetBytes(data, "type").String()
 			if kind == "" || terminal {
 				fail("Upstream returned invalid Responses event ordering")
 				return false

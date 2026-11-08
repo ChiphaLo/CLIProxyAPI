@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 const fixtureResizeNotice = "<image_resize_notice>\nImage 1 of 1 in the preceding tool output was resized from 4282x2000 to 2048x957 pixels.\n</image_resize_notice>"
@@ -35,7 +35,7 @@ func TestResizeNoticeKeepsChronologyAndSystemAuthority(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				root := gjson.ParseBytes(body)
+				root := ojson.ParseBytes(body)
 				if strings.Contains(root.Get("system").Raw, "image_resize_notice") {
 					t.Fatal("notice hoisted into global prompt")
 				}
@@ -60,7 +60,7 @@ func TestResizeNoticeKeepsChronologyAndSystemAuthority(t *testing.T) {
 	}
 }
 
-func rawMessageSlices(messages []gjson.Result) [][]byte {
+func rawMessageSlices(messages []ojson.Result) [][]byte {
 	out := make([][]byte, len(messages))
 	for i, m := range messages {
 		out[i] = []byte(m.Raw)
@@ -77,18 +77,24 @@ func TestResizeNoticeDoesNotRewriteOtherAuthorityOrLegacyModels(t *testing.T) {
 		{"unknown-model", "developer", fixtureResizeNotice},
 	} {
 		raw := resizeNoticePayload(tt.model, "function_call_output", tt.role, tt.text)
-		if len(responsesInlineImageResizeNotices(tt.model, gjson.GetBytes(raw, "input"))) != 0 {
+		if len(responsesInlineImageResizeNotices(tt.model, ojson.GetBytes(raw, "input"))) != 0 {
 			t.Fatal("non-target message selected")
 		}
 		body, err := ConvertOpenAIResponsesRequestToClaude(tt.model, raw, true)
 		var systemText strings.Builder
-		gjson.GetBytes(body, "system").ForEach(func(_, part gjson.Result) bool { systemText.WriteString(part.Get("text").String()); return true })
+		ojson.GetBytes(body, "system").ForEach(func(_, part ojson.Result) bool { systemText.WriteString(part.Get("text").String()); return true })
+		ojson.GetBytes(body, "messages").ForEach(func(_, message ojson.Result) bool {
+			if message.Get("role").String() == "system" {
+				message.Get("content").ForEach(func(_, part ojson.Result) bool { systemText.WriteString(part.Get("text").String()); return true })
+			}
+			return true
+		})
 		if err != nil || !strings.Contains(systemText.String(), tt.text) {
 			t.Fatalf("existing system behavior changed for %s/%s: %v", tt.model, tt.role, err)
 		}
 	}
 	raw := resizeNoticePayload("claude-opus-5-5", "function_call_output", "user", fixtureResizeNotice)
-	if len(responsesInlineImageResizeNotices("claude-opus-5-5", gjson.GetBytes(raw, "input"))) != 0 {
+	if len(responsesInlineImageResizeNotices("claude-opus-5-5", ojson.GetBytes(raw, "input"))) != 0 {
 		t.Fatal("user content promoted")
 	}
 }
@@ -120,7 +126,7 @@ func TestResizeNoticeDoesNotSplitParallelToolResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	messages := gjson.GetBytes(body, "messages").Array()
+	messages := ojson.GetBytes(body, "messages").Array()
 	if problems := claudeMessageInvariantProblems(rawMessageSlices(messages)); len(problems) > 0 {
 		t.Fatal(problems)
 	}

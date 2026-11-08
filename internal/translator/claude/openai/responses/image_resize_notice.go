@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 var resizeNoticeLine = regexp.MustCompile(`^Image ([1-9][0-9]{0,6}) of ([1-9][0-9]{0,6}) in the preceding tool output was resized from [1-9][0-9]{0,6}x[1-9][0-9]{0,6} to [1-9][0-9]{0,6}x[1-9][0-9]{0,6} pixels\.$`)
@@ -13,7 +13,7 @@ var resizeNoticeLine = regexp.MustCompile(`^Image ([1-9][0-9]{0,6}) of ([1-9][0-
 // Only verified modern families accept chronological role=system turns. Keep
 // legacy/unknown model behavior, generic developer authority and explicit cache
 // placement unchanged. The notification itself is never demoted or discarded.
-func responsesInlineImageResizeNotices(model string, input gjson.Result) map[int]string {
+func responsesInlineImageResizeNotices(model string, input ojson.Result) map[int]string {
 	model = strings.ToLower(strings.TrimSpace(model))
 	model = model[strings.LastIndexByte(model, '/')+1:]
 	switch model {
@@ -36,7 +36,7 @@ func responsesInlineImageResizeNotices(model string, input gjson.Result) map[int
 		}
 		content := item.Get("content")
 		text := ""
-		if content.Type == gjson.String {
+		if content.Type == ojson.String {
 			text = content.String()
 		} else if content.IsArray() && len(content.Array()) == 1 {
 			part := content.Array()[0]

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 const maxRawUsageBytes = 64 * 1024
@@ -19,10 +19,10 @@ func (r *UsageReporter) observeRawUsage(payload []byte) {
 	if bytes.HasPrefix(payload, []byte("data:")) {
 		payload = bytes.TrimSpace(bytes.TrimPrefix(payload, []byte("data:")))
 	}
-	if !gjson.ValidBytes(payload) {
+	if !ojson.ValidBytes(payload) {
 		return
 	}
-	root := gjson.ParseBytes(payload)
+	root := ojson.ParseBytes(payload)
 	if r.provider == "claude" && r.observeClaudeRawUsage(root) {
 		return
 	}
@@ -75,7 +75,7 @@ func (r *UsageReporter) observeRawUsage(payload []byte) {
 // OpenAI usage.attribution can exceed the entire capture bound on long Codex
 // histories. Preserve raw billing values, not SDK-normalized counts, while
 // omitting the per-message attribution that CPA's billing never consumes.
-func boundedBillingUsage(value gjson.Result, format string) []byte {
+func boundedBillingUsage(value ojson.Result, format string) []byte {
 	if len(value.Raw) <= maxRawUsageBytes {
 		return []byte(value.Raw)
 	}
@@ -130,10 +130,10 @@ func boundedBillingUsage(value gjson.Result, format string) []byte {
 
 // The deployed json.loads decoder used last-key-wins. Avoid changing receipt
 // values merely because the upstream GJSON path lookup picks the first key.
-func lastJSONProperty(object gjson.Result, name string) gjson.Result {
-	var result gjson.Result
+func lastJSONProperty(object ojson.Result, name string) ojson.Result {
+	var result ojson.Result
 	if object.IsObject() {
-		object.ForEach(func(key, value gjson.Result) bool {
+		object.ForEach(func(key, value ojson.Result) bool {
 			if key.String() == name {
 				result = value
 			}

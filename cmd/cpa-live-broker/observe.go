@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 // Only protocol shape and usage are retained. Content, reasoning text, tool
@@ -18,7 +18,7 @@ func requestMetadata(raw []byte) map[string]any {
 	calls, outputs, reasoning := 0, 0, 0
 	missing := 0
 	pending := map[string]bool{}
-	for _, message := range gjson.GetBytes(raw, "messages").Array() {
+	for _, message := range ojson.GetBytes(raw, "messages").Array() {
 		if message.Get("reasoning_content").String() != "" {
 			reasoning++
 		}
@@ -42,8 +42,8 @@ func requestMetadata(raw []byte) map[string]any {
 
 func responsesRequestMetadata(raw []byte) map[string]any {
 	tools := []map[string]string{}
-	var collect func(gjson.Result, string)
-	collect = func(list gjson.Result, namespace string) {
+	var collect func(ojson.Result, string)
+	collect = func(list ojson.Result, namespace string) {
 		for _, tool := range list.Array() {
 			name, kind := tool.Get("name").String(), tool.Get("type").String()
 			if !safeLabel(name) || !safeLabel(kind) {
@@ -55,9 +55,9 @@ func responsesRequestMetadata(raw []byte) map[string]any {
 			}
 		}
 	}
-	collect(gjson.GetBytes(raw, "tools"), "")
+	collect(ojson.GetBytes(raw, "tools"), "")
 	types := map[string]bool{}
-	for _, item := range gjson.GetBytes(raw, "input").Array() {
+	for _, item := range ojson.GetBytes(raw, "input").Array() {
 		kind := item.Get("type").String()
 		if kind == "" && item.Get("role").Exists() {
 			kind = "message"
@@ -153,11 +153,11 @@ func (o *responseObserver) frame(raw []byte) {
 		return
 	}
 	o.frames++
-	data := gjson.ParseBytes(raw)
+	data := ojson.ParseBytes(raw)
 	if kind := data.Get("type").String(); safeLabel(kind) {
 		o.events[kind] = true
 	}
-	for _, item := range []gjson.Result{data.Get("item"), data.Get("output_item")} {
+	for _, item := range []ojson.Result{data.Get("item"), data.Get("output_item")} {
 		if kind := item.Get("type").String(); kind == "function_call" || kind == "custom_tool_call" {
 			name := item.Get("name").String()
 			if namespace := item.Get("namespace").String(); safeLabel(namespace) {
@@ -178,7 +178,7 @@ func (o *responseObserver) frame(raw []byte) {
 		if usage := response.Get("usage"); usage.IsObject() {
 			o.usage = map[string]int64{}
 			for _, name := range []string{"input_tokens", "output_tokens", "total_tokens", "input_tokens_details.cached_tokens", "output_tokens_details.reasoning_tokens"} {
-				if value := usage.Get(name); value.Type == gjson.Number {
+				if value := usage.Get(name); value.Type == ojson.Number {
 					o.usage[name] = value.Int()
 				}
 			}
@@ -191,7 +191,7 @@ func (o *responseObserver) frame(raw []byte) {
 		if reason := choice.Get("finish_reason").String(); safeLabel(reason) {
 			o.finishes[reason] = true
 		}
-		for _, message := range []gjson.Result{choice.Get("delta"), choice.Get("message")} {
+		for _, message := range []ojson.Result{choice.Get("delta"), choice.Get("message")} {
 			o.reasoning += len(message.Get("reasoning_content").String())
 			for _, call := range message.Get("tool_calls").Array() {
 				if name := call.Get("function.name").String(); safeLabel(name) {
@@ -210,7 +210,7 @@ func (o *responseObserver) frame(raw []byte) {
 			fields = []string{"input_tokens", "output_tokens", "total_tokens", "input_tokens_details.cached_tokens", "output_tokens_details.reasoning_tokens"}
 		}
 		for _, name := range fields {
-			if value := usage.Get(name); value.Type == gjson.Number {
+			if value := usage.Get(name); value.Type == ojson.Number {
 				o.usage[name] = value.Int()
 			}
 		}

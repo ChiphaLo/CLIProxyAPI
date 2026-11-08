@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 const nativeResponsesTool = `{"type":"function","name":"ping","strict":true,"parameters":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false}}`
@@ -30,10 +30,10 @@ func TestNativeResponsesToolRoundTripAndEarlyFlush(t *testing.T) {
 				if r.URL.Path != "/responses" || r.Header.Get("Authorization") != "Bearer fixture-key" || r.Header.Get("x-opencode-session") != "" {
 					t.Error("wrong native transport")
 				}
-				if gjson.GetBytes(raw, "reasoning.effort").String() != "low" || gjson.GetBytes(raw, "store").Bool() || !gjson.GetBytes(raw, "store").Exists() || gjson.GetBytes(raw, "tools.0.name").String() != "ping" || gjson.GetBytes(raw, "tool_choice").String() != "required" {
+				if ojson.GetBytes(raw, "reasoning.effort").String() != "low" || ojson.GetBytes(raw, "store").Bool() || !ojson.GetBytes(raw, "store").Exists() || ojson.GetBytes(raw, "tools.0.name").String() != "ping" || ojson.GetBytes(raw, "tool_choice").String() != "required" {
 					t.Errorf("payload semantics lost: %s", raw)
 				}
-				if len(gjson.GetBytes(raw, "tools").Array()) != 1 || gjson.GetBytes(raw, "input.0.name").String() != "retired__exec" || gjson.GetBytes(raw, "input.0.call_id").String() != "call_prior" || gjson.GetBytes(raw, "input.1.call_id").String() != "call_prior" {
+				if len(ojson.GetBytes(raw, "tools").Array()) != 1 || ojson.GetBytes(raw, "input.0.name").String() != "retired__exec" || ojson.GetBytes(raw, "input.0.call_id").String() != "call_prior" || ojson.GetBytes(raw, "input.1.call_id").String() != "call_prior" {
 					t.Errorf("retired history was lost or reauthorized: %s", raw)
 				}
 				if !stream {
@@ -123,7 +123,7 @@ func TestNativeResponsesPayloadRulesAreFinal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !gjson.GetBytes(p.body, "store").Bool() || gjson.GetBytes(p.body, "model").String() != "overridden" || gjson.GetBytes(p.body, "reasoning.effort").String() != "high" || gjson.GetBytes(p.body, "tools").Exists() {
+	if !ojson.GetBytes(p.body, "store").Bool() || ojson.GetBytes(p.body, "model").String() != "overridden" || ojson.GetBytes(p.body, "reasoning.effort").String() != "high" || ojson.GetBytes(p.body, "tools").Exists() {
 		t.Fatalf("payload rules overwritten: %s", p.body)
 	}
 	if usesNativeResponses(&coreauth.Auth{Prefix: "steal1"}) || usesNativeResponses(nil) {
@@ -140,7 +140,7 @@ func TestNativeResponsesCodeModePayloadRulesAreFinal(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if gjson.GetBytes(prepared.body, "tools.0.description").String() != "Operator tool documentation." || gjson.GetBytes(prepared.body, "instructions").String() != "Operator instructions." {
+		if ojson.GetBytes(prepared.body, "tools.0.description").String() != "Operator tool documentation." || ojson.GetBytes(prepared.body, "instructions").String() != "Operator instructions." {
 			t.Fatal("code-mode guidance overwrote final user payload rules")
 		}
 	}

@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	responsesclaude "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/claude/openai/responses"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 func TestClaudeResizeNoticeFullStreamingExecutorWire(t *testing.T) {
@@ -56,7 +56,7 @@ func TestClaudeResizeNoticeFullStreamingExecutorWire(t *testing.T) {
 						t.Fatal(chunk.Err)
 					}
 				}
-				messages := gjson.GetBytes(seen, "messages").Array()
+				messages := ojson.GetBytes(seen, "messages").Array()
 				index := -1
 				for i, m := range messages {
 					if m.Get("content.0.text").String() == notice {
@@ -89,7 +89,7 @@ func TestClaudeResizeNoticePreservesNativeCachePrefix(t *testing.T) {
 					map[string]any{"type": "function_call", "call_id": "call_resize", "name": "fixture", "arguments": "{}"},
 					map[string]any{"type": "function_call_output", "call_id": "call_resize", "output": "tool result"},
 				}
-				wire := func(withNotice bool) gjson.Result {
+				wire := func(withNotice bool) ojson.Result {
 					input := append([]any{}, items...)
 					if withNotice {
 						input = append(input, map[string]any{"type": "message", "role": "developer", "content": []any{map[string]any{"type": "input_text", "text": notice}}})
@@ -103,7 +103,7 @@ func TestClaudeResizeNoticePreservesNativeCachePrefix(t *testing.T) {
 					body = ensureCacheControl(body)
 					body = enforceCacheControlLimit(body, 4)
 					body = upgradeClaudeCacheControlTTL(body, "1h")
-					return gjson.ParseBytes(body)
+					return ojson.ParseBytes(body)
 				}
 				before, after := wire(false), wire(true)
 				if before.Get("system").Raw != after.Get("system").Raw {

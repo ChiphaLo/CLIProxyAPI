@@ -7,13 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/compat"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
@@ -55,13 +54,13 @@ func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
 		if keyID() == "" {
 			return &handlers.AdmissionError{Status: 403, Message: "CPA key no longer active"}
 		}
-		if !gjson.ValidBytes(body) || !gjson.ParseBytes(body).IsObject() || strictContinuationFields(body) != nil {
+		if !ojson.ValidBytes(body) || !ojson.ParseBytes(body).IsObject() || strictContinuationFields(body) != nil {
 			return &handlers.AdmissionError{Status: 400, Message: "ambiguous websocket request"}
 		}
-		if gjson.GetBytes(body, "stream_id").Exists() {
+		if ojson.GetBytes(body, "stream_id").Exists() {
 			return &handlers.AdmissionError{Status: 400, Message: "multiplexed websocket lanes are not supported by this CPA profile"}
 		}
-		switch gjson.GetBytes(body, "type").String() {
+		switch ojson.GetBytes(body, "type").String() {
 		case "response.create", "response.interrupt":
 			return nil
 		default:
@@ -76,7 +75,7 @@ func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
 			return nil, nil, "", err
 		}
 		model := lastModel
-		if raw := gjson.GetBytes(body, "model"); raw.Exists() {
+		if raw := ojson.GetBytes(body, "model"); raw.Exists() {
 			var err error
 			model, err = requestModel(body)
 			if err != nil {
@@ -98,12 +97,12 @@ func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
 				return deny(400, "CPA websocket model route unavailable")
 			}
 		}
-		previous := gjson.GetBytes(body, "previous_response_id")
-		if previous.Type == gjson.String && previous.String() != "" && (model != lastModel || authID != lastAuth) {
+		previous := ojson.GetBytes(body, "previous_response_id")
+		if previous.Type == ojson.String && previous.String() != "" && (model != lastModel || authID != lastAuth) {
 			return deny(409, "continuation cannot change CPA model or account; replay full context")
 		}
 		var err error
-		body, err = sjson.SetBytes(body, "model", routed)
+		body, err = ojson.SetBytes(body, "model", routed)
 		if err != nil {
 			return deny(400, "cannot resolve websocket model")
 		}

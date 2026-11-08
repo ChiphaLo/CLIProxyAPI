@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/api"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
@@ -24,7 +25,6 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
-	"github.com/tidwall/gjson"
 )
 
 const geminiFixtureModel = "gemini-native-fixture"
@@ -78,7 +78,7 @@ func TestNativeGeminiActualServerExecutorToolsStreamAndBilling(t *testing.T) {
 			t.Errorf("account prefix leaked into upstream URL: %s", r.URL.Path)
 		}
 		if strings.HasSuffix(r.URL.Path, ":countTokens") {
-			if nested := gjson.GetBytes(raw, "generateContentRequest.model"); nested.Exists() && nested.String() != "models/"+geminiFixtureModel {
+			if nested := ojson.GetBytes(raw, "generateContentRequest.model"); nested.Exists() && nested.String() != "models/"+geminiFixtureModel {
 				t.Errorf("public account prefix leaked into embedded upstream model: %s", nested.String())
 			}
 			w.Header().Set("Content-Type", "application/json")

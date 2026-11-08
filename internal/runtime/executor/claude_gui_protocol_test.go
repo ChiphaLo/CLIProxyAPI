@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/watcher/synthesizer"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 // Exercise the GUI compiler, parsed credential, auth synthesizer and existing
@@ -41,10 +41,10 @@ func TestGUIClaudeNativeStreamingToolCycle(t *testing.T) {
 				if r.URL.Path != "/v1/messages" || r.Header.Get("Authorization") != "Bearer fixture-key" {
 					t.Error("wrong Messages transport or credential")
 				}
-				if r.Header.Get("User-Agent") != "cpa-interoperability-fixture/1" || strings.Contains(string(raw), "Claude Code") || gjson.GetBytes(raw, "metadata.user_id").String() != "fixture-user" {
-					t.Errorf("native API path identity: ua=%q cli_marker=%v user_id=%v", r.Header.Get("User-Agent"), strings.Contains(string(raw), "Claude Code"), gjson.GetBytes(raw, "metadata.user_id").String() != "fixture-user")
+				if r.Header.Get("User-Agent") != "cpa-interoperability-fixture/1" || strings.Contains(string(raw), "Claude Code") || ojson.GetBytes(raw, "metadata.user_id").String() != "fixture-user" {
+					t.Errorf("native API path identity: ua=%q cli_marker=%v user_id=%v", r.Header.Get("User-Agent"), strings.Contains(string(raw), "Claude Code"), ojson.GetBytes(raw, "metadata.user_id").String() != "fixture-user")
 				}
-				if !strings.Contains(gjson.GetBytes(raw, "system").Raw, "Preserve fixture system.") {
+				if !strings.Contains(ojson.GetBytes(raw, "system").Raw, "Preserve fixture system.") {
 					t.Error("caller system instruction lost")
 				}
 				w.Header().Set("Content-Type", "text/event-stream")
@@ -52,7 +52,7 @@ func TestGUIClaudeNativeStreamingToolCycle(t *testing.T) {
 				emit(`{"type":"message_start","message":{"id":"msg_fixture","type":"message","role":"assistant","model":"claude-fixture","content":[],"usage":{"input_tokens":12,"output_tokens":0}}}`)
 				if rounds.Add(1) == 1 {
 					<-release
-					name := gjson.GetBytes(raw, "tools.0.name").String()
+					name := ojson.GetBytes(raw, "tools.0.name").String()
 					if name == "" {
 						t.Error("compiled tool missing")
 					}
@@ -66,7 +66,7 @@ func TestGUIClaudeNativeStreamingToolCycle(t *testing.T) {
 					emit(`{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":7}}`)
 				} else {
 					foundCall, foundResult := false, false
-					for _, message := range gjson.GetBytes(raw, "messages").Array() {
+					for _, message := range ojson.GetBytes(raw, "messages").Array() {
 						for _, block := range message.Get("content").Array() {
 							if block.Get("type").String() == "tool_use" && block.Get("id").String() == "toolu_fixture" {
 								foundCall = true
@@ -145,11 +145,11 @@ func TestGUIClaudeNativeStreamingToolCycle(t *testing.T) {
 					}
 					all = append(all, c.Payload...)
 				}
-				var final gjson.Result
+				var final ojson.Result
 				for _, line := range bytes.Split(all, []byte("\n")) {
 					line = bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
-					if gjson.GetBytes(line, "type").String() == "response.completed" {
-						final = gjson.GetBytes(line, "response")
+					if ojson.GetBytes(line, "type").String() == "response.completed" {
+						final = ojson.GetBytes(line, "response")
 					}
 				}
 				if !final.Exists() || !final.Get("usage").Exists() {

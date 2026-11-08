@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
-	"github.com/tidwall/gjson"
 )
 
 func TestRawUsageCaptureIsOptIn(t *testing.T) {
@@ -64,7 +64,7 @@ func TestRawOversizedAttributionPreservesOriginalBillingFields(t *testing.T) {
 			if format == "chat" {
 				key = "prompt_tokens"
 			}
-			if gjson.GetBytes(record.RawUsage, key).Raw != `"4107"` {
+			if ojson.GetBytes(record.RawUsage, key).Raw != `"4107"` {
 				t.Fatal("original numeric representation was normalized")
 			}
 			raw := record.RawUsage

@@ -20,7 +20,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func run() error {
@@ -150,7 +150,7 @@ func run() error {
 		}
 		if downstream != nil && r.Method == http.MethodPost && r.URL.Path == "/v1/responses" && r.Header.Get("Authorization") == "Bearer wire-client-test-only" {
 			raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 2*1024*1024))
-			if err != nil || !json.Valid(raw) || gjson.GetBytes(raw, "model").String() != *prefix+"/"+*model || observed.Add(1) > *budget {
+			if err != nil || !json.Valid(raw) || ojson.GetBytes(raw, "model").String() != *prefix+"/"+*model || observed.Add(1) > *budget {
 				http.Error(w, "downstream observation outside test scope", http.StatusBadRequest)
 				return
 			}
@@ -168,7 +168,7 @@ func run() error {
 			return
 		}
 		raw, wireBytes, encoding, err := readTestRequest(w, r)
-		if err != nil || !json.Valid(raw) || gjson.GetBytes(raw, "model").String() != *model {
+		if err != nil || !json.Valid(raw) || ojson.GetBytes(raw, "model").String() != *model {
 			http.Error(w, "model or payload outside test scope", http.StatusBadRequest)
 			return
 		}
@@ -178,7 +178,7 @@ func run() error {
 		}
 		// Metadata only: no secret, request text, tool arguments or model output.
 		names := []string{}
-		for _, tool := range gjson.GetBytes(raw, "tools").Array() {
+		for _, tool := range ojson.GetBytes(raw, "tools").Array() {
 			name := tool.Get("function.name").String()
 			if name == "" {
 				name = tool.Get("name").String()
@@ -189,7 +189,7 @@ func run() error {
 		if *nativeMuse {
 			meta = responsesRequestMetadata(raw)
 			calls, outputs := 0, 0
-			for _, item := range gjson.GetBytes(raw, "input").Array() {
+			for _, item := range ojson.GetBytes(raw, "input").Array() {
 				switch item.Get("type").String() {
 				case "function_call":
 					calls++
@@ -203,9 +203,9 @@ func run() error {
 		meta["event"] = "live_upstream_request"
 		meta["request"] = admitted.Load()
 		meta["model"] = *model
-		meta["stream"] = gjson.GetBytes(raw, "stream").Bool()
+		meta["stream"] = ojson.GetBytes(raw, "stream").Bool()
 		meta["tool_names"] = names
-		meta["message_count"] = gjson.GetBytes(raw, "messages.#").Int()
+		meta["message_count"] = ojson.GetBytes(raw, "messages.#").Int()
 		meta["request_identity_bytes"], meta["request_wire_bytes"], meta["request_content_encoding"] = len(raw), wireBytes, encoding
 		meta["provider_request_compression"] = *upstreamCompression
 		_ = json.NewEncoder(os.Stdout).Encode(meta)

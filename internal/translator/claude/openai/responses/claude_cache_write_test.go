@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func TestClaudeResponsesRetainCacheWrites(t *testing.T) {
@@ -15,12 +15,12 @@ func TestClaudeResponsesRetainCacheWrites(t *testing.T) {
 		`data: {"type":"message_stop"}`,
 	}
 	var param any
-	var completed gjson.Result
+	var completed ojson.Result
 	for _, line := range lines {
 		for _, out := range ConvertClaudeResponseToOpenAIResponses(context.Background(), "claude-sonnet-5-5", nil, nil, []byte(line), &param) {
 			for _, part := range strings.Split(string(out), "\n") {
 				if strings.HasPrefix(part, "data:") {
-					r := gjson.Parse(strings.TrimSpace(strings.TrimPrefix(part, "data:")))
+					r := ojson.Parse(strings.TrimSpace(strings.TrimPrefix(part, "data:")))
 					if r.Get("type").String() == "response.completed" {
 						completed = r.Get("response")
 					}
@@ -32,7 +32,7 @@ func TestClaudeResponsesRetainCacheWrites(t *testing.T) {
 		t.Fatalf("stream cache writes lost: %s", completed.Raw)
 	}
 	out := ConvertClaudeResponseToOpenAIResponsesNonStream(context.Background(), "claude-sonnet-5-5", nil, nil, []byte(strings.Join(lines, "\n")), nil)
-	if gjson.GetBytes(out, "usage.input_tokens_details.cache_write_tokens").Int() != 31 {
+	if ojson.GetBytes(out, "usage.input_tokens_details.cache_write_tokens").Int() != 31 {
 		t.Fatal("nonstream cache writes lost")
 	}
 }

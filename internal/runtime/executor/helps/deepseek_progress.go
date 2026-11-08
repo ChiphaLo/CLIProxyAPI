@@ -5,9 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 const deepSeekMilestoneGuidance = `<cpa-progress-policy version="1">
@@ -34,27 +33,32 @@ func applySWEMilestoneGuidance(payload []byte, model, protocol, root string) []b
 	if name != "swe" && !strings.HasPrefix(name, "swe-") {
 		return payload
 	}
-	if protocol == "devin" && gjson.ValidBytes(payload) && gjson.ParseBytes(payload).IsObject() {
+	if protocol == "devin" && ojson.ValidBytes(payload) && ojson.ParseBytes(payload).IsObject() {
 		return appendMilestoneContent(payload, buildPayloadPath(root, "system_prompt"))
 	}
 	return applyMilestoneGuidance(payload, protocol, root)
 }
 
 func applyMilestoneGuidance(payload []byte, protocol, root string) []byte {
-	if !gjson.ValidBytes(payload) || !gjson.ParseBytes(payload).IsObject() {
-		return payload
+	doc := ojson.NewDoc(payload)
+	if applyMilestoneGuidanceDoc(doc, protocol, root) {
+		return doc.Bytes()
 	}
+	return payload
+}
+
+func applyMilestoneGuidanceDoc(doc *ojson.Doc, protocol, root string) bool {
 	switch strings.ToLower(protocol) {
 	case "openai", "chat", "chat-completions":
 		path := buildPayloadPath(root, "messages")
-		messages := gjson.GetBytes(payload, path)
+		messages := doc.Get(path)
 		if !messages.IsArray() {
-			return payload
+			return false
 		}
 		items := messages.Array()
 		for i, message := range items {
 			if message.Get("role").String() == "system" {
-				return appendMilestoneContent(payload, path+"."+strconv.Itoa(i)+".content")
+				return appendMilestoneContentDoc(doc, path+"."+strconv.Itoa(i)+".content")
 			}
 		}
 		system, _ := json.Marshal(map[string]string{"role": "system", "content": deepSeekMilestoneGuidance})
@@ -63,57 +67,58 @@ func applyMilestoneGuidance(payload []byte, protocol, root string) []byte {
 			body = append(body, ',')
 		}
 		body = append(body, messages.Raw[1:]...)
-		if out, err := sjson.SetRawBytes(payload, path, body); err == nil {
-			return out
-		}
+		return doc.SetRawBytes(path, body) == nil
 	case "openai-response", "responses":
-		return appendMilestoneContent(payload, buildPayloadPath(root, "instructions"))
+		return appendMilestoneContentDoc(doc, buildPayloadPath(root, "instructions"))
 	case "claude":
-		return appendMilestoneContent(payload, buildPayloadPath(root, "system"))
+		return appendMilestoneContentDoc(doc, buildPayloadPath(root, "system"))
 	case "gemini":
 		key := "systemInstruction"
-		if gjson.GetBytes(payload, buildPayloadPath(root, "system_instruction")).Exists() {
+		if doc.Get(buildPayloadPath(root, "system_instruction")).Exists() {
 			key = "system_instruction"
 		}
 		path := buildPayloadPath(root, key+".parts")
-		parts := gjson.GetBytes(payload, path)
+		parts := doc.Get(path)
 		if parts.Exists() && !parts.IsArray() {
-			return payload
+			return false
 		}
 		for _, part := range parts.Array() {
 			if strings.Contains(part.Get("text").String(), deepSeekMilestoneGuidance) {
-				return payload
+				return false
 			}
 		}
-		if out, err := sjson.SetBytes(payload, path+".-1", map[string]string{"text": deepSeekMilestoneGuidance}); err == nil {
-			return out
-		}
+		return doc.Set(path+".-1", map[string]string{"text": deepSeekMilestoneGuidance}) == nil
+	}
+	return false
+}
+
+func appendMilestoneContent(payload []byte, path string) []byte {
+	doc := ojson.NewDoc(payload)
+	if appendMilestoneContentDoc(doc, path) {
+		return doc.Bytes()
 	}
 	return payload
 }
 
-func appendMilestoneContent(payload []byte, path string) []byte {
-	content := gjson.GetBytes(payload, path)
-	if !content.Exists() || content.Type == gjson.Null || content.Type == gjson.String {
+func appendMilestoneContentDoc(doc *ojson.Doc, path string) bool {
+	content := doc.Get(path)
+	if !content.Exists() || content.Type == ojson.Null || content.Type == ojson.String {
 		text := content.String()
 		if strings.Contains(text, deepSeekMilestoneGuidance) {
-			return payload
+			return false
 		}
 		if text != "" {
 			text += "\n\n"
 		}
-		if out, err := sjson.SetBytes(payload, path, text+deepSeekMilestoneGuidance); err == nil {
-			return out
-		}
-	} else if content.IsArray() {
+		return doc.Set(path, text+deepSeekMilestoneGuidance) == nil
+	}
+	if content.IsArray() {
 		for _, part := range content.Array() {
 			if strings.Contains(part.Get("text").String(), deepSeekMilestoneGuidance) {
-				return payload
+				return false
 			}
 		}
-		if out, err := sjson.SetBytes(payload, path+".-1", map[string]string{"type": "text", "text": deepSeekMilestoneGuidance}); err == nil {
-			return out
-		}
+		return doc.Set(path+".-1", map[string]string{"type": "text", "text": deepSeekMilestoneGuidance}) == nil
 	}
-	return payload
+	return false
 }

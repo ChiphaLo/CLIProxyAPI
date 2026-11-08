@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func collectDevinStreamEvents(t *testing.T, chunks [][]byte) [][]byte {
@@ -31,7 +31,7 @@ func messagePhasesInCompleted(t *testing.T, out [][]byte) map[int]string {
 		t.Fatal("missing terminal response event")
 	}
 	phases := make(map[int]string)
-	gjson.GetBytes(payload, "response.output").ForEach(func(key, item gjson.Result) bool {
+	ojson.GetBytes(payload, "response.output").ForEach(func(key, item ojson.Result) bool {
 		if item.Get("type").String() == "message" {
 			phases[int(key.Int())] = item.Get("phase").String()
 		}
@@ -58,13 +58,13 @@ func TestDevinStreamMessagePhaseWithToolCall(t *testing.T) {
 	var sawDelta, sawItemDoneBeforeTerminal bool
 	for _, raw := range out {
 		data := ssePayload(raw)
-		eventType := gjson.GetBytes(data, "type").String()
+		eventType := ojson.GetBytes(data, "type").String()
 		if eventType == "response.output_text.delta" {
 			sawDelta = true
 		}
-		if eventType == "response.output_item.done" && gjson.GetBytes(data, "item.type").String() == "message" {
+		if eventType == "response.output_item.done" && ojson.GetBytes(data, "item.type").String() == "message" {
 			sawItemDoneBeforeTerminal = true
-			if got := gjson.GetBytes(data, "item.phase").String(); got != "commentary" {
+			if got := ojson.GetBytes(data, "item.phase").String(); got != "commentary" {
 				t.Fatalf("message phase = %q, want commentary", got)
 			}
 		}
@@ -104,18 +104,18 @@ func TestDevinStreamMessagePhaseFinalAnswer(t *testing.T) {
 	count := 0
 	for _, raw := range out {
 		data := ssePayload(raw)
-		if gjson.GetBytes(data, "type").String() != "response.output_item.done" {
+		if ojson.GetBytes(data, "type").String() != "response.output_item.done" {
 			continue
 		}
-		if gjson.GetBytes(data, "item.type").String() != "message" {
+		if ojson.GetBytes(data, "item.type").String() != "message" {
 			continue
 		}
 		count++
 		want := "commentary"
-		if gjson.GetBytes(data, "output_index").Int() == 1 {
+		if ojson.GetBytes(data, "output_index").Int() == 1 {
 			want = "final_answer"
 		}
-		if got := gjson.GetBytes(data, "item.phase").String(); got != want {
+		if got := ojson.GetBytes(data, "item.phase").String(); got != want {
 			t.Fatalf("message phase = %q, want %s", got, want)
 		}
 	}
@@ -141,12 +141,12 @@ func TestDevinStreamMessagePhaseFailed(t *testing.T) {
 	found := false
 	for _, raw := range out {
 		data := ssePayload(raw)
-		if gjson.GetBytes(data, "type").String() != "response.output_item.done" {
+		if ojson.GetBytes(data, "type").String() != "response.output_item.done" {
 			continue
 		}
-		if gjson.GetBytes(data, "item.type").String() == "message" {
+		if ojson.GetBytes(data, "item.type").String() == "message" {
 			found = true
-			if got := gjson.GetBytes(data, "item.phase").String(); got != "commentary" {
+			if got := ojson.GetBytes(data, "item.phase").String(); got != "commentary" {
 				t.Fatalf("failed message phase = %q, want commentary", got)
 			}
 		}
@@ -182,7 +182,7 @@ func TestDevinNonStreamMessagePhases(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			out := ConvertInteractionsResponseToOpenAIResponsesNonStream(context.Background(), "devin/swe-2", []byte(`{"model":"devin/swe-2"}`), nil, []byte(test.raw), nil)
 			var phases []string
-			gjson.GetBytes(out, "output").ForEach(func(_, item gjson.Result) bool {
+			ojson.GetBytes(out, "output").ForEach(func(_, item ojson.Result) bool {
 				if item.Get("type").String() == "message" {
 					phases = append(phases, item.Get("phase").String())
 				}
@@ -217,12 +217,12 @@ func TestNonDevinStreamUnphased(t *testing.T) {
 	found := false
 	for _, raw := range out {
 		data := ssePayload(raw)
-		if gjson.GetBytes(data, "type").String() != "response.output_item.done" {
+		if ojson.GetBytes(data, "type").String() != "response.output_item.done" {
 			continue
 		}
-		if gjson.GetBytes(data, "item.type").String() == "message" {
+		if ojson.GetBytes(data, "item.type").String() == "message" {
 			found = true
-			if gjson.GetBytes(data, "item.phase").Exists() {
+			if ojson.GetBytes(data, "item.phase").Exists() {
 				t.Fatal("non-Devin message item must not carry a phase")
 			}
 		}

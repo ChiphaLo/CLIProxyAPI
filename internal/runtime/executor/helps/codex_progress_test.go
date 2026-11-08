@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
-	"github.com/tidwall/gjson"
 )
 
 func TestCodexProgressPolicyIsStableAndPrecedesPayloadRules(t *testing.T) {
@@ -20,7 +20,7 @@ func TestCodexProgressPolicyIsStableAndPrecedesPayloadRules(t *testing.T) {
 	} {
 		body := []byte(tc.body)
 		out := ApplyPayloadConfigWithRequest(nil, tc.model, tc.protocol, "openai-response", "", body, body, tc.model, "/v1/responses", headers)
-		if strings.Count(gjson.GetBytes(out, tc.path).String(), deepSeekMilestoneGuidance) != 1 {
+		if strings.Count(ojson.GetBytes(out, tc.path).String(), deepSeekMilestoneGuidance) != 1 {
 			t.Fatalf("missing progress policy: %s", out)
 		}
 		if again := ApplyPayloadConfigWithRequest(nil, tc.model, tc.protocol, "openai-response", "", out, body, tc.model, "/v1/responses", headers); !bytes.Equal(again, out) {
@@ -36,7 +36,7 @@ func TestCodexProgressPolicyIsStableAndPrecedesPayloadRules(t *testing.T) {
 	}
 	cfg := &config.Config{Payload: config.PayloadConfig{Filter: []config.PayloadFilterRule{{Models: []config.PayloadModelRule{{Name: "claude-*"}}, Params: []string{"instructions"}}}}}
 	out := ApplyPayloadConfigWithRequest(cfg, "claude-opus-5-5", "openai-response", "openai-response", "", body, body, "claude-opus-5-5", "/v1/responses", headers)
-	if gjson.GetBytes(out, "instructions").Exists() {
+	if ojson.GetBytes(out, "instructions").Exists() {
 		t.Fatal("built-in prompt restored a user-filtered field")
 	}
 }

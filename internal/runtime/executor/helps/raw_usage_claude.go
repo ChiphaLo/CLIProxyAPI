@@ -3,12 +3,12 @@ package helps
 import (
 	"encoding/json"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 // Messages SSE usage is split between message_start and cumulative
 // message_delta updates. Retain original billing fields, not SDK Detail.
-func (r *UsageReporter) observeClaudeRawUsage(root gjson.Result) bool {
+func (r *UsageReporter) observeClaudeRawUsage(root ojson.Result) bool {
 	kind := root.Get("type").String()
 	if kind != "message" && kind != "message_start" && kind != "message_delta" {
 		return false

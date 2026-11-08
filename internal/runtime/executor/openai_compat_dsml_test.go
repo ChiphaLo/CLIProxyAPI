@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 func TestOpenAICompatDSMLHonorsFinalPayloadBarrier(t *testing.T) {
@@ -80,13 +80,13 @@ func TestOpenAICompatDSMLHonorsFinalPayloadBarrier(t *testing.T) {
 				if !strings.Contains(result.String(), opencode.FormatError) || strings.Contains(result.String(), `"tool_calls"`) {
 					t.Fatalf("final user rules were bypassed: %s", result.String())
 				}
-				if policy == "none" && gjson.GetBytes(finalPayload, "tool_choice").String() != "none" {
+				if policy == "none" && ojson.GetBytes(finalPayload, "tool_choice").String() != "none" {
 					t.Fatal("tool_choice override lost")
 				}
-				if policy == "filtered-tools" && gjson.GetBytes(finalPayload, "tools").Exists() {
+				if policy == "filtered-tools" && ojson.GetBytes(finalPayload, "tools").Exists() {
 					t.Fatal("filtered tools restored")
 				}
-				if policy == "overridden-schema" && gjson.GetBytes(finalPayload, "tools.0.function.parameters.properties.input.type").String() != "integer" {
+				if policy == "overridden-schema" && ojson.GetBytes(finalPayload, "tools.0.function.parameters.properties.input.type").String() != "integer" {
 					t.Fatal("schema override lost")
 				}
 			})
@@ -105,7 +105,7 @@ func TestOpenAICompatStepRepeatedTerminalUsageResponses(t *testing.T) {
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				final, _ := io.ReadAll(r.Body)
-				name := gjson.GetBytes(final, "tools.0.function.name").String()
+				name := ojson.GetBytes(final, "tools.0.function.name").String()
 				if name == "" {
 					t.Error("tool declaration lost")
 					w.WriteHeader(400)
@@ -144,7 +144,7 @@ func TestOpenAICompatStepRepeatedTerminalUsageResponses(t *testing.T) {
 					if !strings.HasPrefix(line, "data: ") {
 						continue
 					}
-					root := gjson.Parse(strings.TrimPrefix(line, "data: "))
+					root := ojson.Parse(strings.TrimPrefix(line, "data: "))
 					switch root.Get("type").String() {
 					case "response.output_item.done":
 						done++

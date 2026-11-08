@@ -10,13 +10,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/modelidentity"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/nativegemini"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
-	"github.com/tidwall/gjson"
 )
 
 // URL model identity is authoritative. Reject duplicate and conflicting body
@@ -53,7 +53,7 @@ func validateGeminiBody(raw []byte, model, action string) error {
 				return fmt.Errorf("Gemini body model conflicts with URL resource")
 			}
 		} else {
-			if action != "countTokens" || !gjson.ParseBytes(value).IsObject() {
+			if action != "countTokens" || !ojson.ParseBytes(value).IsObject() {
 				return fmt.Errorf("invalid embedded Gemini generation request")
 			}
 			if err := validateGeminiBody(value, model, "generateContent"); err != nil {

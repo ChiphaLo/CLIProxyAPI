@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
@@ -17,8 +18,6 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 var museReferences = opencode.NewMuseReferences()
@@ -58,7 +57,7 @@ func (e *OpenAICompatExecutor) prepareMuse(ctx context.Context, auth *coreauth.A
 	body = helps.SetStringIfDifferent(body, "model", model)
 	body = helps.SetBoolIfDifferent(body, "stream", stream)
 	for _, field := range []string{"stream_options", "generate", "client_metadata"} {
-		body, _ = sjson.DeleteBytes(body, field)
+		body, _ = ojson.DeleteBytes(body, field)
 	}
 	session := ""
 	for _, header := range []string{"x-opencode-session", "session_id", "x-codex-session-id", "x-claude-code-session-id"} {
@@ -68,10 +67,10 @@ func (e *OpenAICompatExecutor) prepareMuse(ctx context.Context, auth *coreauth.A
 		}
 	}
 	if session == "" {
-		session = gjson.GetBytes(body, "prompt_cache_key").String()
+		session = ojson.GetBytes(body, "prompt_cache_key").String()
 	}
 	if session == "" {
-		for _, item := range gjson.GetBytes(body, "input").Array() {
+		for _, item := range ojson.GetBytes(body, "input").Array() {
 			if item.Get("role").String() == "user" {
 				session = item.Raw
 				break
@@ -150,11 +149,11 @@ func (e *OpenAICompatExecutor) executeMuse(ctx context.Context, auth *coreauth.A
 	if err != nil || len(data) > 64<<20 {
 		return result, statusErr{code: 502, msg: "Muse response read failed or exceeded 64 MiB"}
 	}
-	if !gjson.ValidBytes(data) || gjson.GetBytes(data, "object").String() != "response" {
+	if !ojson.ValidBytes(data) || ojson.GetBytes(data, "object").String() != "response" {
 		return result, statusErr{code: 502, msg: "Muse did not return a Responses object"}
 	}
-	status := gjson.GetBytes(data, "status").String()
-	if (status != "completed" && status != "incomplete") || !gjson.GetBytes(data, "output").IsArray() {
+	status := ojson.GetBytes(data, "status").String()
+	if (status != "completed" && status != "incomplete") || !ojson.GetBytes(data, "output").IsArray() {
 		return result, statusErr{code: 502, msg: "Muse returned a failed or invalid response"}
 	}
 	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
@@ -225,11 +224,11 @@ func (e *OpenAICompatExecutor) executeMuseStream(ctx context.Context, auth *core
 				}
 				return true
 			}
-			if !gjson.ValidBytes(data) {
+			if !ojson.ValidBytes(data) {
 				fail("Muse returned an invalid SSE event")
 				return false
 			}
-			kind := gjson.GetBytes(data, "type").String()
+			kind := ojson.GetBytes(data, "type").String()
 			if terminal {
 				fail("Muse emitted data after a terminal response")
 				return false

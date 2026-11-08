@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func TestCodexHistoryCallIDsStayPaired(t *testing.T) {
@@ -20,15 +20,15 @@ func TestCodexHistoryCallIDsStayPaired(t *testing.T) {
 					map[string]any{"role": "user", "content": id},
 				}})
 				out := SanitizeCodexInputItemIDs(body)
-				callID := gjson.GetBytes(out, "input.0.call_id").String()
-				if !isPortableToolCallID(callID) || len(callID) > 64 || callID != gjson.GetBytes(out, "input.1.call_id").String() {
+				callID := ojson.GetBytes(out, "input.0.call_id").String()
+				if !isPortableToolCallID(callID) || len(callID) > 64 || callID != ojson.GetBytes(out, "input.1.call_id").String() {
 					t.Fatalf("tool call/result IDs are invalid or unmatched: %s", out)
 				}
 				if len(id) <= 64 && isPortableToolCallID(id) && callID != id {
 					t.Fatal("existing legal call ID changed")
 				}
 				for _, path := range []string{"input.0.arguments", "input.1.output", "input.2"} {
-					if gjson.GetBytes(body, path).Raw != gjson.GetBytes(out, path).Raw {
+					if ojson.GetBytes(body, path).Raw != ojson.GetBytes(out, path).Raw {
 						t.Fatalf("content changed at %s", path)
 					}
 				}
@@ -46,11 +46,11 @@ func TestCodexHistoryCallIDsAvoidNativeCollisions(t *testing.T) {
 	other := "call_" + strings.Repeat("d", 72) + "e"
 	body := []byte(fmt.Sprintf(`{"input":[{"type":"function_call_output","call_id":%q,"output":"first"},{"type":"function_call","call_id":%q,"name":"probe","arguments":"{}"},{"type":"function_call","call_id":%q,"name":"probe","arguments":"{}"},{"type":"function_call","call_id":%q,"name":"probe","arguments":"{}"}]}`, long, native, long, other))
 	out := SanitizeCodexInputItemIDs(body)
-	first := gjson.GetBytes(out, "input.0.call_id").String()
-	if first != gjson.GetBytes(out, "input.2.call_id").String() || first == native || first == gjson.GetBytes(out, "input.3.call_id").String() {
+	first := ojson.GetBytes(out, "input.0.call_id").String()
+	if first != ojson.GetBytes(out, "input.2.call_id").String() || first == native || first == ojson.GetBytes(out, "input.3.call_id").String() {
 		t.Fatal("call ID mapping collided or depended on call/result ordering")
 	}
-	if gjson.GetBytes(out, "input.1.call_id").String() != native {
+	if ojson.GetBytes(out, "input.1.call_id").String() != native {
 		t.Fatal("existing native call ID was changed")
 	}
 }

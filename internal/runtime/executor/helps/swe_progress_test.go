@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
-	"github.com/tidwall/gjson"
 )
 
 func TestSWEMilestoneGuidance(t *testing.T) {
@@ -19,11 +19,11 @@ func TestSWEMilestoneGuidance(t *testing.T) {
 			t.Run(model+"/"+tc.protocol, func(t *testing.T) {
 				body := []byte(tc.body)
 				out := ApplyPayloadConfigWithRequest(nil, model, tc.protocol, "openai-response", "", body, body, model, "/v1/responses", nil)
-				if !strings.Contains(gjson.GetBytes(out, tc.path).String(), deepSeekMilestoneGuidance) {
+				if !strings.Contains(ojson.GetBytes(out, tc.path).String(), deepSeekMilestoneGuidance) {
 					t.Fatal("milestone policy absent")
 				}
 				for _, path := range []string{tc.preserve, "tools", "reasoning", "reasoning_effort", "stream", "model"} {
-					if gjson.GetBytes(out, path).Raw != gjson.GetBytes(body, path).Raw {
+					if ojson.GetBytes(out, path).Raw != ojson.GetBytes(body, path).Raw {
 						t.Fatalf("policy changed %s", path)
 					}
 				}
@@ -49,12 +49,12 @@ func TestSWEMilestoneScopeAndPayloadBarrier(t *testing.T) {
 		}
 		cfg := &config.Config{Payload: config.PayloadConfig{Override: []config.PayloadRule{{Models: []config.PayloadModelRule{{Name: "swe-*"}}, Params: map[string]any{path: "administrator override"}}}}}
 		out := ApplyPayloadConfigWithRequest(cfg, "swe-2", protocol, "openai-response", "", body, body, "devin/swe-2", "/v1/responses", nil)
-		if gjson.GetBytes(out, path).String() != "administrator override" || bytes.Contains(out, []byte("cpa-progress-policy")) {
+		if ojson.GetBytes(out, path).String() != "administrator override" || bytes.Contains(out, []byte("cpa-progress-policy")) {
 			t.Fatal("built-in policy overwrote final user rules")
 		}
 		cfg.Payload = config.PayloadConfig{Filter: []config.PayloadFilterRule{{Models: []config.PayloadModelRule{{Name: "swe-*"}}, Params: []string{path}}}}
 		out = ApplyPayloadConfigWithRequest(cfg, "swe-2", protocol, "openai-response", "", body, body, "devin/swe-2", "/v1/responses", nil)
-		if gjson.GetBytes(out, path).Exists() {
+		if ojson.GetBytes(out, path).Exists() {
 			t.Fatal("filtered instructions restored")
 		}
 	}

@@ -10,9 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/compat"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 const MuseFormatError = "Upstream Muse returned an invalid, conflicting or undeclared tool call; this response cannot be completed safely."
@@ -128,8 +127,8 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 	b := &MuseBridge{native: native, tools: map[string]museTool{}, names: map[string]string{}, final: map[string]json.RawMessage{}, calls: map[string]*museCall{}, refs: refs, scope: scope}
 	// Admission may already have normalized the public model. Executors receive
 	// the routed model, so use a temporary public prefix only for this shared gate.
-	model := gjson.GetBytes(raw, "model").String()
-	public, err := sjson.SetBytes(raw, "model", "opencode/"+strings.TrimPrefix(model, "opencode/"))
+	model := ojson.GetBytes(raw, "model").String()
+	public, err := ojson.SetBytes(raw, "model", "opencode/"+strings.TrimPrefix(model, "opencode/"))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,15 +136,15 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 	if err != nil {
 		return nil, nil, err
 	}
-	raw, _ = sjson.SetBytes(public, "model", model)
-	if prev := gjson.GetBytes(raw, "previous_response_id"); !native && prev.Exists() && prev.Type != gjson.Null && prev.String() != "" {
+	raw, _ = ojson.SetBytes(public, "model", model)
+	if prev := ojson.GetBytes(raw, "previous_response_id"); !native && prev.Exists() && prev.Type != ojson.Null && prev.String() != "" {
 		return nil, nil, fmt.Errorf("Muse continuation requires the CPA scoped full-context replay; resend full context")
 	}
 	flattened := make([]json.RawMessage, 0)
 	codeMode := false
 	codeModeImages := false
-	var flatten func(gjson.Result, string, int) error
-	flatten = func(list gjson.Result, ns string, depth int) error {
+	var flatten func(ojson.Result, string, int) error
+	flatten = func(list ojson.Result, ns string, depth int) error {
 		if !list.IsArray() || depth > 16 {
 			return fmt.Errorf("invalid Muse tool declarations")
 		}
@@ -186,12 +185,12 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 			}
 			b.names[key], b.tools[internal] = internal, museTool{name: name, namespace: toolNS, custom: kind == "custom", inputField: inputField}
 			out := []byte(tool.Raw)
-			out, _ = sjson.SetBytes(out, "name", internal)
-			out, _ = sjson.DeleteBytes(out, "namespace")
+			out, _ = ojson.SetBytes(out, "name", internal)
+			out, _ = ojson.DeleteBytes(out, "namespace")
 			description := tool.Get("description").String()
 			if native && toolNS != "" {
 				description = "Tool " + toolNS + "." + name + ". " + description
-				out, _ = sjson.SetBytes(out, "description", description)
+				out, _ = ojson.SetBytes(out, "description", description)
 			}
 			if kind == "custom" {
 				if grammar := tool.Get("format.definition").String(); tool.Get("format.type").String() == "grammar" && grammar != "" {
@@ -212,14 +211,14 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 		}
 		return nil
 	}
-	if tools := gjson.GetBytes(raw, "tools"); tools.Exists() {
+	if tools := ojson.GetBytes(raw, "tools"); tools.Exists() {
 		if err := flatten(tools, "", 0); err != nil {
 			return nil, nil, err
 		}
-		raw, _ = sjson.SetBytes(raw, "tools", flattened)
+		raw, _ = ojson.SetBytes(raw, "tools", flattened)
 	}
 	if codeMode {
-		instructions := gjson.GetBytes(raw, "instructions").String()
+		instructions := ojson.GetBytes(raw, "instructions").String()
 		guidance := nativeCodeModeInstructions
 		if codeModeImages {
 			guidance += "\n\n" + nativeCodeModeImageInstructions
@@ -228,10 +227,10 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 			if instructions != "" {
 				instructions = "\n\n" + instructions
 			}
-			raw, _ = sjson.SetBytes(raw, "instructions", guidance+instructions)
+			raw, _ = ojson.SetBytes(raw, "instructions", guidance+instructions)
 		}
 	}
-	choice := gjson.GetBytes(raw, "tool_choice")
+	choice := ojson.GetBytes(raw, "tool_choice")
 	if choice.Exists() && native && choice.IsObject() && (choice.Get("type").String() == "function" || choice.Get("type").String() == "custom") {
 		name := b.names[choice.Get("namespace").String()+"\x00"+choice.Get("name").String()]
 		// Native clients may qualify a named tool as namespace.name instead of
@@ -246,24 +245,24 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 		if name == "" {
 			return nil, nil, fmt.Errorf("named Responses tool is not declared")
 		}
-		raw, _ = sjson.SetBytes(raw, "tool_choice.name", name)
-		raw, _ = sjson.DeleteBytes(raw, "tool_choice.namespace")
-		raw, _ = sjson.SetBytes(raw, "tool_choice.type", "function")
+		raw, _ = ojson.SetBytes(raw, "tool_choice.name", name)
+		raw, _ = ojson.DeleteBytes(raw, "tool_choice.namespace")
+		raw, _ = ojson.SetBytes(raw, "tool_choice.type", "function")
 	}
 	if choice.Exists() && !native {
-		if choice.Type != gjson.String {
+		if choice.Type != ojson.String {
 			return nil, nil, fmt.Errorf("Muse does not support required or named tool selection")
 		}
 		switch choice.String() {
 		case "auto":
 		case "none":
-			raw, _ = sjson.DeleteBytes(raw, "tools")
-			raw, _ = sjson.SetBytes(raw, "tool_choice", "auto")
+			raw, _ = ojson.DeleteBytes(raw, "tools")
+			raw, _ = ojson.SetBytes(raw, "tool_choice", "auto")
 		default:
 			return nil, nil, fmt.Errorf("Muse does not support required or named tool selection")
 		}
 	}
-	for i, item := range gjson.GetBytes(raw, "input").Array() {
+	for i, item := range ojson.GetBytes(raw, "input").Array() {
 		path := fmt.Sprintf("input.%d", i)
 		switch item.Get("type").String() {
 		case "reasoning":
@@ -275,7 +274,7 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 				if item.Get("encrypted_content").String() != "" {
 					return nil, nil, fmt.Errorf("foreign encrypted reasoning cannot be replayed to Muse; replay portable history or start a new conversation")
 				}
-				raw, _ = sjson.DeleteBytes(raw, path+".id")
+				raw, _ = ojson.DeleteBytes(raw, path+".id")
 			}
 		case "function_call", "custom_tool_call":
 			name, ns := item.Get("name").String(), item.Get("namespace").String()
@@ -304,34 +303,34 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 				internal = museWireToolName(name, ns)
 				inputField = "value"
 			}
-			raw, _ = sjson.SetBytes(raw, path+".name", internal)
-			raw, _ = sjson.DeleteBytes(raw, path+".namespace")
-			raw, _ = sjson.DeleteBytes(raw, path+".id")
+			raw, _ = ojson.SetBytes(raw, path+".name", internal)
+			raw, _ = ojson.DeleteBytes(raw, path+".namespace")
+			raw, _ = ojson.DeleteBytes(raw, path+".id")
 			if item.Get("type").String() == "custom_tool_call" {
-				if item.Get("input").Type != gjson.String {
+				if item.Get("input").Type != ojson.String {
 					return nil, nil, fmt.Errorf("invalid custom tool history input")
 				}
 				args, _ := json.Marshal(map[string]string{inputField: item.Get("input").String()})
-				raw, _ = sjson.SetBytes(raw, path+".type", "function_call")
-				raw, _ = sjson.SetBytes(raw, path+".arguments", string(args))
-				raw, _ = sjson.DeleteBytes(raw, path+".input")
+				raw, _ = ojson.SetBytes(raw, path+".type", "function_call")
+				raw, _ = ojson.SetBytes(raw, path+".arguments", string(args))
+				raw, _ = ojson.DeleteBytes(raw, path+".input")
 			}
 		case "custom_tool_call_output":
-			raw, _ = sjson.SetBytes(raw, path+".type", "function_call_output")
+			raw, _ = ojson.SetBytes(raw, path+".type", "function_call_output")
 		}
 	}
 	return raw, b, nil
 }
 
 func (b *MuseBridge) BindFinal(raw []byte) error {
-	if tools := gjson.GetBytes(raw, "tools"); tools.Exists() && !tools.IsArray() {
+	if tools := ojson.GetBytes(raw, "tools"); tools.Exists() && !tools.IsArray() {
 		return fmt.Errorf("final Muse tools must be an array")
 	}
-	choice := gjson.GetBytes(raw, "tool_choice")
-	if !b.native && choice.Exists() && (choice.Type != gjson.String || choice.String() != "auto") {
+	choice := ojson.GetBytes(raw, "tool_choice")
+	if !b.native && choice.Exists() && (choice.Type != ojson.String || choice.String() != "auto") {
 		return fmt.Errorf("final Muse payload requires auto tool_choice; user payload rules were not overridden")
 	}
-	for _, tool := range gjson.GetBytes(raw, "tools").Array() {
+	for _, tool := range ojson.GetBytes(raw, "tools").Array() {
 		if b.native && tool.Get("type").String() == "custom" {
 			return fmt.Errorf("native custom tools require the prepared function envelope")
 		}
@@ -350,7 +349,7 @@ func (b *MuseBridge) BindFinal(raw []byte) error {
 			b.tools[name] = museTool{name: name}
 		}
 	}
-	for _, item := range gjson.GetBytes(raw, "input").Array() {
+	for _, item := range ojson.GetBytes(raw, "input").Array() {
 		if item.Get("type").String() == "additional_tools" {
 			return fmt.Errorf("final Muse payload contains unsupported additional_tools")
 		}
@@ -365,18 +364,18 @@ func (b *MuseBridge) BindFinal(raw []byte) error {
 }
 
 func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
-	if b.native && gjson.GetBytes(raw, "type").String() == "custom_tool_call" {
+	if b.native && ojson.GetBytes(raw, "type").String() == "custom_tool_call" {
 		return nil, fmt.Errorf("upstream returned an undeclared native custom call type")
 	}
-	if gjson.GetBytes(raw, "type").String() != "function_call" {
+	if ojson.GetBytes(raw, "type").String() != "function_call" {
 		return raw, nil
 	}
-	name := gjson.GetBytes(raw, "name").String()
+	name := ojson.GetBytes(raw, "name").String()
 	info, ok := b.tools[name]
 	if !ok || b.final[name] == nil {
 		return nil, fmt.Errorf("undeclared Muse tool call")
 	}
-	id := gjson.GetBytes(raw, "id").String()
+	id := ojson.GetBytes(raw, "id").String()
 	if id == "" || len(id) > 1024 {
 		return nil, fmt.Errorf("invalid Muse call identity")
 	}
@@ -389,7 +388,7 @@ func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
 		}
 		b.calls[id] = &museCall{tool: info}
 	}
-	callID := gjson.GetBytes(raw, "call_id").String()
+	callID := ojson.GetBytes(raw, "call_id").String()
 	if callID != "" {
 		if len(callID) > 1024 || (b.calls[id].callID != "" && b.calls[id].callID != callID) {
 			return nil, fmt.Errorf("conflicting Muse call ID")
@@ -399,7 +398,7 @@ func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
 	if !partial && b.calls[id].callID == "" {
 		return nil, fmt.Errorf("Muse call_id is missing")
 	}
-	args := gjson.GetBytes(raw, "arguments").String()
+	args := ojson.GetBytes(raw, "arguments").String()
 	if !partial {
 		if len(args) > MaxChars {
 			return nil, fmt.Errorf("Muse argument limit")
@@ -423,13 +422,13 @@ func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
 		}
 		b.calls[id].fingerprint = fingerprint
 	}
-	raw, _ = sjson.SetBytes(raw, "name", info.name)
+	raw, _ = ojson.SetBytes(raw, "name", info.name)
 	if info.namespace != "" {
-		raw, _ = sjson.SetBytes(raw, "namespace", info.namespace)
+		raw, _ = ojson.SetBytes(raw, "namespace", info.namespace)
 	}
 	if info.custom {
-		raw, _ = sjson.SetBytes(raw, "type", "custom_tool_call")
-		raw, _ = sjson.SetBytes(raw, "id", "ctc_"+strings.TrimPrefix(id, "fc_"))
+		raw, _ = ojson.SetBytes(raw, "type", "custom_tool_call")
+		raw, _ = ojson.SetBytes(raw, "id", "ctc_"+strings.TrimPrefix(id, "fc_"))
 		input := ""
 		if !partial {
 			value, err := strictJSON(args)
@@ -445,20 +444,20 @@ func (b *MuseBridge) restoreItem(raw []byte, partial bool) ([]byte, error) {
 				return nil, fmt.Errorf("invalid Muse custom tool input")
 			}
 		}
-		raw, _ = sjson.DeleteBytes(raw, "arguments")
-		raw, _ = sjson.SetBytes(raw, "input", input)
+		raw, _ = ojson.DeleteBytes(raw, "arguments")
+		raw, _ = ojson.SetBytes(raw, "input", input)
 	}
 	return raw, nil
 }
 
 func (b *MuseBridge) Response(raw []byte) ([]byte, error) {
 	var err error
-	for i, item := range gjson.GetBytes(raw, "output").Array() {
+	for i, item := range ojson.GetBytes(raw, "output").Array() {
 		out, errItem := b.restoreItem([]byte(item.Raw), false)
 		if errItem != nil {
 			return nil, errItem
 		}
-		raw, err = sjson.SetRawBytes(raw, fmt.Sprintf("output.%d", i), out)
+		raw, err = ojson.SetRawBytes(raw, fmt.Sprintf("output.%d", i), out)
 		if err != nil {
 			return nil, err
 		}
@@ -466,30 +465,30 @@ func (b *MuseBridge) Response(raw []byte) ([]byte, error) {
 			b.pendingIDs = append(b.pendingIDs, item.Get("id").String())
 		}
 	}
-	if gjson.GetBytes(raw, "status").String() == "completed" {
+	if ojson.GetBytes(raw, "status").String() == "completed" {
 		b.refs.remember(b.scope, b.pendingIDs)
 	}
 	return raw, nil
 }
 
 func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
-	if !gjson.ValidBytes(raw) {
+	if !ojson.ValidBytes(raw) {
 		return nil, fmt.Errorf("invalid Muse event")
 	}
-	kind := gjson.GetBytes(raw, "type").String()
+	kind := ojson.GetBytes(raw, "type").String()
 	var err error
 	if kind == "response.output_item.added" || kind == "response.output_item.done" {
-		item := gjson.GetBytes(raw, "item")
+		item := ojson.GetBytes(raw, "item")
 		out, errItem := b.restoreItem([]byte(item.Raw), kind == "response.output_item.added")
 		if errItem != nil {
 			return nil, errItem
 		}
-		raw, err = sjson.SetRawBytes(raw, "item", out)
+		raw, err = ojson.SetRawBytes(raw, "item", out)
 		if kind == "response.output_item.done" && item.Get("type").String() == "reasoning" {
 			b.pendingIDs = append(b.pendingIDs, item.Get("id").String())
 		}
 	}
-	id := gjson.GetBytes(raw, "item_id").String()
+	id := ojson.GetBytes(raw, "item_id").String()
 	if b.native && strings.HasPrefix(kind, "response.custom_tool_call_input.") {
 		return nil, fmt.Errorf("upstream emitted a custom event for a function envelope")
 	}
@@ -502,7 +501,7 @@ func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
 			if name == "" {
 				name = call.tool.name
 			}
-			item, _ := json.Marshal(map[string]any{"type": "function_call", "id": id, "call_id": call.callID, "name": name, "arguments": gjson.GetBytes(raw, "arguments").String()})
+			item, _ := json.Marshal(map[string]any{"type": "function_call", "id": id, "call_id": call.callID, "name": name, "arguments": ojson.GetBytes(raw, "arguments").String()})
 			if _, err := b.restoreItem(item, false); err != nil {
 				return nil, err
 			}
@@ -510,7 +509,7 @@ func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
 		}
 		if call.tool.custom {
 			if kind == "response.function_call_arguments.delta" {
-				delta := gjson.GetBytes(raw, "delta").String()
+				delta := ojson.GetBytes(raw, "delta").String()
 				b.buffered += len(delta)
 				if b.buffered > 4*MaxChars || len(call.arguments)+len(delta) > MaxChars {
 					return nil, fmt.Errorf("Muse argument buffer limit")
@@ -518,7 +517,7 @@ func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
 				call.arguments += delta
 				return nil, nil
 			}
-			args := gjson.GetBytes(raw, "arguments").String()
+			args := ojson.GetBytes(raw, "arguments").String()
 			if args == "" {
 				args = call.arguments
 			}
@@ -527,26 +526,26 @@ func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
 			if errItem != nil {
 				return nil, errItem
 			}
-			input := gjson.GetBytes(out, "input").String()
-			raw, _ = sjson.SetBytes(raw, "item_id", gjson.GetBytes(out, "id").String())
-			raw, _ = sjson.DeleteBytes(raw, "arguments")
-			raw, _ = sjson.SetBytes(raw, "type", "response.custom_tool_call_input.done")
-			raw, _ = sjson.SetBytes(raw, "input", input)
-			delta, _ := sjson.SetBytes(raw, "type", "response.custom_tool_call_input.delta")
-			delta, _ = sjson.DeleteBytes(delta, "input")
-			delta, _ = sjson.SetBytes(delta, "delta", input)
+			input := ojson.GetBytes(out, "input").String()
+			raw, _ = ojson.SetBytes(raw, "item_id", ojson.GetBytes(out, "id").String())
+			raw, _ = ojson.DeleteBytes(raw, "arguments")
+			raw, _ = ojson.SetBytes(raw, "type", "response.custom_tool_call_input.done")
+			raw, _ = ojson.SetBytes(raw, "input", input)
+			delta, _ := ojson.SetBytes(raw, "type", "response.custom_tool_call_input.delta")
+			delta, _ = ojson.DeleteBytes(delta, "input")
+			delta, _ = ojson.SetBytes(delta, "delta", input)
 			call.done = true
 			return b.number([][]byte{delta, raw}), nil
 		}
 	} else if strings.HasPrefix(kind, "response.function_call_arguments.") {
 		return nil, fmt.Errorf("Muse arguments lack a declared call")
 	}
-	if response := gjson.GetBytes(raw, "response"); response.IsObject() {
+	if response := ojson.GetBytes(raw, "response"); response.IsObject() {
 		out, errResponse := b.Response([]byte(response.Raw))
 		if errResponse != nil {
 			return nil, errResponse
 		}
-		raw, err = sjson.SetRawBytes(raw, "response", out)
+		raw, err = ojson.SetRawBytes(raw, "response", out)
 	}
 	if err != nil {
 		return nil, err
@@ -556,8 +555,8 @@ func (b *MuseBridge) Event(raw []byte) ([][]byte, error) {
 
 func (b *MuseBridge) number(events [][]byte) [][]byte {
 	for i, raw := range events {
-		if gjson.GetBytes(raw, "sequence_number").Exists() {
-			events[i], _ = sjson.SetBytes(raw, "sequence_number", b.sequence)
+		if ojson.GetBytes(raw, "sequence_number").Exists() {
+			events[i], _ = ojson.SetBytes(raw, "sequence_number", b.sequence)
 			b.sequence++
 		}
 	}

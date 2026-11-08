@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func TestNativeResponsesRetiredToolHistory(t *testing.T) {
@@ -16,10 +16,10 @@ func TestNativeResponsesRetiredToolHistory(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if gjson.GetBytes(body, "tools").Raw != tools || gjson.GetBytes(body, "input.0.name").String() != "retired__exec" || gjson.GetBytes(body, "input.0.call_id").String() != "call_old" || gjson.GetBytes(body, "input.1.call_id").String() != "call_old" || gjson.GetBytes(body, "input.1.output").String() != "done" || gjson.GetBytes(body, "input.1.type").String() != "function_call_output" {
+				if ojson.GetBytes(body, "tools").Raw != tools || ojson.GetBytes(body, "input.0.name").String() != "retired__exec" || ojson.GetBytes(body, "input.0.call_id").String() != "call_old" || ojson.GetBytes(body, "input.1.call_id").String() != "call_old" || ojson.GetBytes(body, "input.1.output").String() != "done" || ojson.GetBytes(body, "input.1.type").String() != "function_call_output" {
 					t.Fatalf("history or declarations changed: %s", body)
 				}
-				if kind == "custom_tool_call" && gjson.Get(gjson.GetBytes(body, "input.0.arguments").String(), "value").String() != "old result" {
+				if kind == "custom_tool_call" && ojson.Get(ojson.GetBytes(body, "input.0.arguments").String(), "value").String() != "old result" {
 					t.Fatalf("custom history envelope lost: %s", body)
 				}
 				if err := bridge.BindFinal(body); err != nil {
@@ -43,7 +43,7 @@ func TestNativeResponsesNamespaceCustomReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gjson.GetBytes(body, "tools.0.name").String() != "functions__ping" || gjson.GetBytes(body, "tools.0.type").String() != "function" || gjson.GetBytes(body, "input.0.encrypted_content").String() != "opaque-provider-signed-data" || gjson.GetBytes(body, "input.2.type").String() != "function_call_output" {
+	if ojson.GetBytes(body, "tools.0.name").String() != "functions__ping" || ojson.GetBytes(body, "tools.0.type").String() != "function" || ojson.GetBytes(body, "input.0.encrypted_content").String() != "opaque-provider-signed-data" || ojson.GetBytes(body, "input.2.type").String() != "function_call_output" {
 		t.Fatalf("invalid reversible envelope: %s", body)
 	}
 	if err := b.BindFinal(body); err != nil {
@@ -53,7 +53,7 @@ func TestNativeResponsesNamespaceCustomReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gjson.GetBytes(out, "output.0.type").String() != "custom_tool_call" || gjson.GetBytes(out, "output.0.namespace").String() != "functions" || gjson.GetBytes(out, "output.0.name").String() != "ping" || gjson.GetBytes(out, "output.0.input").String() != "hello" {
+	if ojson.GetBytes(out, "output.0.type").String() != "custom_tool_call" || ojson.GetBytes(out, "output.0.namespace").String() != "functions" || ojson.GetBytes(out, "output.0.name").String() != "ping" || ojson.GetBytes(out, "output.0.input").String() != "hello" {
 		t.Fatalf("restoration failed: %s", out)
 	}
 }

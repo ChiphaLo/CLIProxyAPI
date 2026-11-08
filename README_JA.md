@@ -19,7 +19,7 @@ CLIProxyAPI は、CLI向けのOpenAI/Gemini/Claude/Codex/Grok互換APIインタ�
     </tr>
     <tr>
         <td align="center"><a href="https://developers.openai.com/api/docs/models"><img src="./assets/logo/openai.svg" alt="OpenAI" width="28" height="28" /></a></td>
-        <td>OpenAI GPT-6シリーズモデル（GPT-6 Astra、GPT-6.1 Sol、GPT-6 Luna）。Codex OAuth経由でも利用できます。Astraは複雑な推論とコーディング、Solは性能とコストのバランス、Lunaは大量の明確なタスクに適しています。</td>
+        <td>OpenAI GPT-6シリーズモデル（GPT-6 Astra、GPT-6.1 Sol、GPT-6.1 Terra、GPT-6 Luna）。Codex OAuth経由でも利用できます。Astraは複雑な推論とコーディング、Solは性能とコストのバランス、Terraは視覚的推論とコンピューター操作、Lunaは大量の明確なタスクに適しています。</td>
     </tr>
     <tr>
         <td align="center"><a href="https://www.anthropic.com/claude"><img src="./assets/logo/claude.svg" alt="Anthropic" width="28" height="28" /></a></td>
@@ -227,6 +227,14 @@ Cloudflare ベースの LLM ゲートウェイ兼プロキシサーバー。CLIP
 ### [Hermes CLIProxyAPI Provider](https://github.com/duu261/hermes-cliproxyapi-provider)
 
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 向けのモデルプロバイダープラグイン。CLIProxyAPI のプロバイダーごとに Hermes プロバイダーを 1 つ登録し、それぞれの executor が受け付けるプロトコル（Anthropic Messages、Responses、Chat Completions）を使います。コンテキストウィンドウと推論レベルは CLIProxyAPI から取得します。正確なプロバイダーグループ分けのための読み取り専用 Management API 照会はオプションです。[Hermes プラグインカタログ](https://hermes-agent.nousresearch.com/docs/plugins/cliproxyapi-provider)に掲載されています：`hermes plugins install cliproxyapi-provider`。
+
+### [Ebb](https://github.com/lucasnsaraujo/ebb)
+
+CLIProxyAPI のアカウントプール向けのネイティブ macOS メニューバーアプリ。プール全体で Claude、Codex などの 5 時間枠と週間枠がどれだけ残っているか、いつ戻るかを表示し、Management API で各ログインのルーティング重みを設定してアカウントを均等に消費させます。
+
+### [Nia Live Demo](https://github.com/nia-teams/nia-live-demo)
+
+話しながらリアルタイムで描画・操作できるインタラクティブな SVG/HTML キャンバスを備えた、全二重音声コンパニオン。CLIProxyAPI の 2 つの機能を組み合わせています：音声対話と即時割り込みを担う Codex GPT-Live 1.1 メディアリレー（`gpt-live-1-codex`、WebRTC + Sideband）と、会話中にキャンバスをリアルタイムで生成・編集する `ultrafast` Responses（`gpt-6.1-sol` / `gpt-6-astra`）です。
 
 > [!NOTE]
 > CLIProxyAPIをベースにプロジェクトを開発した場合は、PRを送ってこのリストに追加してください。

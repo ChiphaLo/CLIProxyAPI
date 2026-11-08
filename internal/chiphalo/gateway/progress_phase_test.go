@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	claude "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/claude/openai/responses"
 	gemini "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/gemini/openai/responses"
 	chat "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/openai/openai/responses"
-	"github.com/tidwall/gjson"
 )
 
 func TestProviderProgressAndFinalMessagePhases(t *testing.T) {
@@ -51,7 +51,7 @@ func TestProviderProgressAndFinalMessagePhases(t *testing.T) {
 							if !bytes.HasPrefix(line, []byte("data:")) {
 								continue
 							}
-							event := gjson.ParseBytes(bytes.TrimSpace(line[5:]))
+							event := ojson.ParseBytes(bytes.TrimSpace(line[5:]))
 							switch event.Get("type").String() {
 							case "response.output_text.delta":
 								if frameIndex < len(tc.frames)-1 {

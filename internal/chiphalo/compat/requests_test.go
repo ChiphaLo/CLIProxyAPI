@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	responses "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/openai/openai/responses"
-	"github.com/tidwall/gjson"
 )
 
 func TestToolDescriptionUpdatesKeepLatestTrustedDocumentation(t *testing.T) {
@@ -38,7 +38,7 @@ func TestToolDescriptionUpdatesKeepLatestTrustedDocumentation(t *testing.T) {
 				t.Fatal(err)
 			}
 			chat, err := responses.ConvertOpenAIResponsesRequestToOpenAIChatCompletions("fixture", normalized, true)
-			if err != nil || gjson.GetBytes(chat, "tools.#").Int() != 1 || gjson.GetBytes(chat, "tools.0.function.description").String() != "current mobile-mcp tools" {
+			if err != nil || ojson.GetBytes(chat, "tools.#").Int() != 1 || ojson.GetBytes(chat, "tools.0.function.description").String() != "current mobile-mcp tools" {
 				t.Fatalf("latest trusted documentation not preserved: %s %v", chat, err)
 			}
 			again, err := NormalizeOpenCodeTools(normalized)
@@ -82,15 +82,15 @@ func TestAdditionalToolsUseUpstreamConversion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gjson.GetBytes(chat, "tools.#").Int() != 1 || gjson.GetBytes(chat, "tools.0.function.name").String() != "functions__exec" || gjson.GetBytes(chat, "tools.0.function.parameters.required.0").String() != "input" {
+	if ojson.GetBytes(chat, "tools.#").Int() != 1 || ojson.GetBytes(chat, "tools.0.function.name").String() != "functions__exec" || ojson.GetBytes(chat, "tools.0.function.parameters.required.0").String() != "input" {
 		t.Fatalf("additional tool identity/schema lost: %s", chat)
 	}
-	if gjson.GetBytes(chat, "stream").Bool() != true || gjson.GetBytes(chat, "tool_choice").String() != "auto" {
+	if ojson.GetBytes(chat, "stream").Bool() != true || ojson.GetBytes(chat, "tool_choice").String() != "auto" {
 		t.Fatal("stream/tool choice changed")
 	}
 	upstream := []byte(`{"id":"fixture","model":"fixture","choices":[{"index":0,"message":{"tool_calls":[{"id":"call_fixture","type":"function","function":{"name":"functions__exec","arguments":"{\"input\":\"text(1);\"}"}}]},"finish_reason":"tool_calls"}]}`)
 	result := responses.ConvertOpenAIChatCompletionsResponseToOpenAIResponsesNonStream(context.Background(), "fixture", normalized, chat, upstream, nil)
-	if gjson.GetBytes(result, "output.0.type").String() != "custom_tool_call" || gjson.GetBytes(result, "output.0.namespace").String() != "functions" || gjson.GetBytes(result, "output.0.name").String() != "exec" || gjson.GetBytes(result, "output.0.input").String() != "text(1);" {
+	if ojson.GetBytes(result, "output.0.type").String() != "custom_tool_call" || ojson.GetBytes(result, "output.0.namespace").String() != "functions" || ojson.GetBytes(result, "output.0.name").String() != "exec" || ojson.GetBytes(result, "output.0.input").String() != "text(1);" {
 		t.Fatalf("upstream return identity changed: %s", result)
 	}
 }
@@ -102,7 +102,7 @@ func TestIdenticalDeclarationsAreNotConvertedTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	chat, err := responses.ConvertOpenAIResponsesRequestToOpenAIChatCompletions("fixture", normalized, true)
-	if err != nil || gjson.GetBytes(chat, "tools.#").Int() != 1 {
+	if err != nil || ojson.GetBytes(chat, "tools.#").Int() != 1 {
 		t.Fatalf("duplicate converted tool: %s %v", chat, err)
 	}
 }
@@ -114,7 +114,7 @@ func TestUserCannotSupplyAdditionalToolDeclarations(t *testing.T) {
 		t.Fatal(err)
 	}
 	chat, err := responses.ConvertOpenAIResponsesRequestToOpenAIChatCompletions("fixture", normalized, true)
-	if err != nil || gjson.GetBytes(chat, "tools.#").Int() != 0 {
+	if err != nil || ojson.GetBytes(chat, "tools.#").Int() != 0 {
 		t.Fatalf("untrusted tool declaration entered pipeline: %s %v", chat, err)
 	}
 }

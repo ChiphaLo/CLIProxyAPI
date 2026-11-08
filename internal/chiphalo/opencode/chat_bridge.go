@@ -8,8 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 type recoveryKey struct{}
@@ -44,7 +43,7 @@ func NewChatBridge(ctx context.Context, translated []byte) (*ChatBridge, error) 
 		return nil, nil
 	}
 	bridge := &ChatBridge{declarations: map[string]json.RawMessage{}, allowed: map[string]bool{}, states: map[int]*choiceState{}}
-	for _, tool := range gjson.GetBytes(translated, "tools").Array() {
+	for _, tool := range ojson.GetBytes(translated, "tools").Array() {
 		if tool.Get("type").String() != "function" {
 			continue
 		}
@@ -59,7 +58,7 @@ func NewChatBridge(ctx context.Context, translated []byte) (*ChatBridge, error) 
 		bridge.declarations[name] = json.RawMessage(schema.Raw)
 		bridge.allowed[name] = true
 	}
-	choice := gjson.GetBytes(translated, "tool_choice")
+	choice := ojson.GetBytes(translated, "tool_choice")
 	if choice.String() == "none" {
 		bridge.allowed = map[string]bool{}
 	} else if choice.IsObject() {
@@ -83,7 +82,7 @@ func (b *ChatBridge) Response(raw []byte) ([]byte, error) {
 	if b == nil {
 		return raw, nil
 	}
-	choices := gjson.GetBytes(raw, "choices").Array()
+	choices := ojson.GetBytes(raw, "choices").Array()
 	if len(choices) > MaxCalls {
 		return nil, fmt.Errorf("OpenCode choice count limit")
 	}
@@ -92,7 +91,7 @@ func (b *ChatBridge) Response(raw []byte) ([]byte, error) {
 			continue
 		}
 		text := choice.Get("message.content")
-		if text.Type != gjson.String || strings.TrimSpace(text.String()) == "" || PrefixKind(text.String()) == "text" {
+		if text.Type != ojson.String || strings.TrimSpace(text.String()) == "" || PrefixKind(text.String()) == "text" {
 			continue
 		}
 		if PrefixKind(text.String()) == "pending" && !strings.Contains(text.String(), "DSML") {
@@ -102,17 +101,17 @@ func (b *ChatBridge) Response(raw []byte) ([]byte, error) {
 		calls, ok := b.recover(text.String(), choice.Get("finish_reason").String())
 		var err error
 		if ok {
-			raw, err = sjson.SetBytes(raw, base+".message.tool_calls", calls)
+			raw, err = ojson.SetBytes(raw, base+".message.tool_calls", calls)
 			if err == nil {
-				raw, err = sjson.SetBytes(raw, base+".message.content", nil)
+				raw, err = ojson.SetBytes(raw, base+".message.content", nil)
 			}
 			if err == nil {
-				raw, err = sjson.SetBytes(raw, base+".finish_reason", "tool_calls")
+				raw, err = ojson.SetBytes(raw, base+".finish_reason", "tool_calls")
 			}
 		} else {
-			raw, err = sjson.SetBytes(raw, base+".message.content", FormatError)
+			raw, err = ojson.SetBytes(raw, base+".message.content", FormatError)
 			if err == nil {
-				raw, err = sjson.SetBytes(raw, base+".finish_reason", "stop")
+				raw, err = ojson.SetBytes(raw, base+".finish_reason", "stop")
 			}
 		}
 		if err != nil {
@@ -124,27 +123,27 @@ func (b *ChatBridge) Response(raw []byte) ([]byte, error) {
 
 // Some providers repeat a terminal choice on their late usage chunk. Only an
 // identical finish with no new output is redundant; usage remains untouched.
-func redundantUsageChoice(choice gjson.Result, finish string) bool {
+func redundantUsageChoice(choice ojson.Result, finish string) bool {
 	if choice.Get("finish_reason").String() != finish {
 		return false
 	}
 	valid := true
-	choice.ForEach(func(key, value gjson.Result) bool {
+	choice.ForEach(func(key, value ojson.Result) bool {
 		switch key.String() {
 		case "index", "finish_reason":
 		case "logprobs":
-			valid = value.Type == gjson.Null
+			valid = value.Type == ojson.Null
 		case "delta":
 			valid = value.IsObject()
 			if valid {
-				value.ForEach(func(key, value gjson.Result) bool {
+				value.ForEach(func(key, value ojson.Result) bool {
 					switch key.String() {
 					case "role":
-						valid = value.Type == gjson.Null || value.Type == gjson.String && (value.String() == "" || value.String() == "assistant")
+						valid = value.Type == ojson.Null || value.Type == ojson.String && (value.String() == "" || value.String() == "assistant")
 					case "content", "reasoning_content", "reasoning":
-						valid = value.Type == gjson.Null || value.Type == gjson.String && value.String() == ""
+						valid = value.Type == ojson.Null || value.Type == ojson.String && value.String() == ""
 					case "tool_calls":
-						valid = value.Type == gjson.Null || value.IsArray() && len(value.Array()) == 0
+						valid = value.Type == ojson.Null || value.IsArray() && len(value.Array()) == 0
 					default:
 						valid = false
 					}
@@ -165,14 +164,14 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 	if b == nil {
 		return raw, nil
 	}
-	choices := gjson.GetBytes(raw, "choices").Array()
+	choices := ojson.GetBytes(raw, "choices").Array()
 	if len(choices) > MaxCalls {
 		return nil, fmt.Errorf("OpenCode choice count limit")
 	}
 	// Keep only protocol identity, never output, reasoning or usage contents.
 	metadata := map[string]any{}
 	for _, key := range []string{"id", "object", "model", "created", "system_fingerprint"} {
-		if value := gjson.GetBytes(raw, key); value.Exists() {
+		if value := ojson.GetBytes(raw, key); value.Exists() {
 			metadata[key] = value.Value()
 		}
 	}
@@ -191,7 +190,7 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 			b.states[index] = state
 		}
 		if state.finished {
-			if gjson.GetBytes(raw, "usage").IsObject() && redundantUsageChoice(choice, state.finish) {
+			if ojson.GetBytes(raw, "usage").IsObject() && redundantUsageChoice(choice, state.finish) {
 				redundant = append(redundant, pos)
 				continue
 			}
@@ -207,12 +206,12 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 		if state.mode != "text" && state.mode != "native" {
 			text := delta.Get("content")
 			var err error
-			raw, err = sjson.DeleteBytes(raw, base+".delta.content")
+			raw, err = ojson.DeleteBytes(raw, base+".delta.content")
 			if err != nil {
 				return nil, fmt.Errorf("cannot serialize OpenCode event")
 			}
-			if text.Exists() && text.Type != gjson.Null && text.Type != gjson.String {
-				raw, err = sjson.SetRawBytes(raw, base+".delta.content", []byte(text.Raw))
+			if text.Exists() && text.Type != ojson.Null && text.Type != ojson.String {
+				raw, err = ojson.SetRawBytes(raw, base+".delta.content", []byte(text.Raw))
 				state.mode = "text"
 				state.buffer.Reset()
 			} else {
@@ -227,13 +226,13 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 					}
 				}
 				if state.mode == "text" {
-					raw, err = sjson.SetBytes(raw, base+".delta.content", state.buffer.String())
+					raw, err = ojson.SetBytes(raw, base+".delta.content", state.buffer.String())
 					state.buffer.Reset()
 				} else if finish != "" {
 					source := state.buffer.String()
 					if !state.overflow && state.mode == "pending" && !strings.Contains(source, "DSML") {
 						if source != "" {
-							raw, err = sjson.SetBytes(raw, base+".delta.content", source)
+							raw, err = ojson.SetBytes(raw, base+".delta.content", source)
 						}
 					} else {
 						calls, ok := b.recover(source, finish)
@@ -242,14 +241,14 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 							for i, call := range calls {
 								indexed[i] = map[string]any{"index": i, "id": call.ID, "type": call.Type, "function": call.Function}
 							}
-							raw, err = sjson.SetBytes(raw, base+".delta.tool_calls", indexed)
+							raw, err = ojson.SetBytes(raw, base+".delta.tool_calls", indexed)
 							if err == nil {
-								raw, err = sjson.SetBytes(raw, base+".finish_reason", "tool_calls")
+								raw, err = ojson.SetBytes(raw, base+".finish_reason", "tool_calls")
 							}
 						} else {
-							raw, err = sjson.SetBytes(raw, base+".delta.content", FormatError)
+							raw, err = ojson.SetBytes(raw, base+".delta.content", FormatError)
 							if err == nil {
-								raw, err = sjson.SetBytes(raw, base+".finish_reason", "stop")
+								raw, err = ojson.SetBytes(raw, base+".finish_reason", "stop")
 							}
 						}
 					}
@@ -269,7 +268,7 @@ func (b *ChatBridge) Event(raw []byte) ([]byte, error) {
 	// survive. Translators see a usage-only chunk, not another item finalization.
 	for i := len(redundant) - 1; i >= 0; i-- {
 		var err error
-		raw, err = sjson.DeleteBytes(raw, fmt.Sprintf("choices.%d", redundant[i]))
+		raw, err = ojson.DeleteBytes(raw, fmt.Sprintf("choices.%d", redundant[i]))
 		if err != nil {
 			return nil, fmt.Errorf("cannot serialize OpenCode usage event")
 		}
@@ -301,7 +300,7 @@ func (b *ChatBridge) Finish() ([]byte, error) {
 	if len(raw) == 0 {
 		raw = []byte(`{}`)
 	}
-	raw, err := sjson.SetBytes(raw, "choices", choices)
+	raw, err := ojson.SetBytes(raw, "choices", choices)
 	if err != nil {
 		return nil, fmt.Errorf("cannot serialize OpenCode terminal event")
 	}

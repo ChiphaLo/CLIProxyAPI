@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 var nativeContractIdentifier = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,128}$`)
@@ -31,7 +31,7 @@ func NativeResponsesContractMessage(err error, event []byte) string {
 	}
 	parts := []string{reason}
 	for _, field := range []struct{ label, path string }{{"event", "type"}, {"tool", "item.name"}} {
-		if value := gjson.GetBytes(event, field.path).String(); nativeContractIdentifier.MatchString(value) {
+		if value := ojson.GetBytes(event, field.path).String(); nativeContractIdentifier.MatchString(value) {
 			parts = append(parts, field.label+"="+value)
 		}
 	}

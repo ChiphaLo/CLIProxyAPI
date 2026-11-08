@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/traffic"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
@@ -24,7 +25,6 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexec "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
-	"github.com/tidwall/gjson"
 )
 
 type bandwidthExecutor struct {
@@ -45,8 +45,8 @@ func (e *bandwidthExecutor) ExecuteStream(ctx context.Context, auth *coreauth.Au
 	if n == 1 {
 		name, namespace := "", ""
 		var available []string
-		var find func(gjson.Result, string)
-		find = func(tools gjson.Result, ns string) {
+		var find func(ojson.Result, string)
+		find = func(tools ojson.Result, ns string) {
 			for _, tool := range tools.Array() {
 				if tool.Get("type").String() == "namespace" {
 					find(tool.Get("tools"), tool.Get("name").String())
@@ -58,7 +58,7 @@ func (e *bandwidthExecutor) ExecuteStream(ctx context.Context, auth *coreauth.Au
 				}
 			}
 		}
-		find(gjson.GetBytes(req.Payload, "tools"), "")
+		find(ojson.GetBytes(req.Payload, "tools"), "")
 		if name == "" {
 			return nil, fmt.Errorf("installed Codex does not declare a fixture tool: %v", available)
 		}
@@ -172,13 +172,13 @@ func TestCodexCLICompressedIncrementalToolRoundTrip(t *testing.T) {
 	finalMessage := false
 	commandItem := false
 	for _, line := range bytes.Split(output, []byte{'\n'}) {
-		if !gjson.ValidBytes(line) || gjson.GetBytes(line, "type").String() != "item.completed" {
+		if !ojson.ValidBytes(line) || ojson.GetBytes(line, "type").String() != "item.completed" {
 			continue
 		}
-		if gjson.GetBytes(line, "item.type").String() == "agent_message" && gjson.GetBytes(line, "item.text").String() == "OK" {
+		if ojson.GetBytes(line, "item.type").String() == "agent_message" && ojson.GetBytes(line, "item.text").String() == "OK" {
 			finalMessage = true
 		}
-		if gjson.GetBytes(line, "item.type").String() == "command_execution" {
+		if ojson.GetBytes(line, "item.type").String() == "command_execution" {
 			commandItem = true
 		}
 	}
@@ -198,9 +198,9 @@ func TestCodexCLICompressedIncrementalToolRoundTrip(t *testing.T) {
 	var totalPlain, delta int
 	for _, frame := range frames {
 		totalPlain += len(frame)
-		if gjson.GetBytes(frame, "previous_response_id").String() == "resp_bandwidth_1" {
+		if ojson.GetBytes(frame, "previous_response_id").String() == "resp_bandwidth_1" {
 			delta = len(frame)
-			if len(gjson.GetBytes(frame, "input").Array()) != 1 || gjson.GetBytes(frame, "input.0.call_id").String() != "call_bandwidth" {
+			if len(ojson.GetBytes(frame, "input").Array()) != 1 || ojson.GetBytes(frame, "input.0.call_id").String() != "call_bandwidth" {
 				t.Fatalf("client sent full history on the followup: %s", frame)
 			}
 		}

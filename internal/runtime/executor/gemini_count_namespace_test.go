@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 func TestGeminiCountTokensNormalizesNamespaceBeforeFinalPayloadRules(t *testing.T) {
@@ -40,7 +40,7 @@ func TestGeminiCountTokensNormalizesNamespaceBeforeFinalPayloadRules(t *testing.
 				if _, err := e.CountTokens(context.Background(), auth, req, coreexecutor.Options{SourceFormat: sdktranslator.FormatGemini}); err != nil {
 					t.Fatal(err)
 				}
-				value := gjson.GetBytes(received, nested+".model")
+				value := ojson.GetBytes(received, nested+".model")
 				want := "models/gemini-count-fixture"
 				if rule == "override" {
 					want = "models/payload-override"

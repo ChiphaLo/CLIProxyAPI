@@ -9,10 +9,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
-func museText(r gjson.Result) string {
+func museText(r ojson.Result) string {
 	var text strings.Builder
 	for _, item := range r.Get("output").Array() {
 		for _, part := range item.Get("content").Array() {
@@ -41,7 +41,7 @@ func runMuseProbe(base string) error {
 	}
 	raw, errRead := io.ReadAll(io.LimitReader(response.Body, (4<<20)+1))
 	_ = response.Body.Close()
-	if errRead != nil || response.StatusCode != 200 || !gjson.ValidBytes(raw) || gjson.GetBytes(raw, "status").String() != "completed" || museText(gjson.ParseBytes(raw)) != "OK" {
+	if errRead != nil || response.StatusCode != 200 || !ojson.ValidBytes(raw) || ojson.GetBytes(raw, "status").String() != "completed" || museText(ojson.ParseBytes(raw)) != "OK" {
 		return fmt.Errorf("native Muse JSON check failed (status %d)", response.StatusCode)
 	}
 	plain, _ := json.Marshal(map[string]any{"model": model, "stream": true, "reasoning": map[string]string{"effort": "low"}, "max_output_tokens": 2048, "input": "Reply with only OK."})
@@ -70,5 +70,5 @@ func runMuseProbe(base string) error {
 	if err != nil || museText(final) != "42" {
 		return fmt.Errorf("native Muse tool continuation failed: %v", err)
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"ok": true, "model": model, "real_requests": 4, "json_verified": true, "sse_text_verified": true, "custom_namespace_tool_verified": true, "tool_result_verified": true, "foreign_reasoning_summary_replayed": true, "json_usage": json.RawMessage(gjson.GetBytes(raw, "usage").Raw), "text": textEvidence, "tool": toolEvidence, "incremental": deltaEvidence, "production_replaced": false, "banked_reset_used": false})
+	return json.NewEncoder(os.Stdout).Encode(map[string]any{"ok": true, "model": model, "real_requests": 4, "json_verified": true, "sse_text_verified": true, "custom_namespace_tool_verified": true, "tool_result_verified": true, "foreign_reasoning_summary_replayed": true, "json_usage": json.RawMessage(ojson.GetBytes(raw, "usage").Raw), "text": textEvidence, "tool": toolEvidence, "incremental": deltaEvidence, "production_replaced": false, "banked_reset_used": false})
 }

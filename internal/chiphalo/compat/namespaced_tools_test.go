@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	responses "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/openai/openai/responses"
-	"github.com/tidwall/gjson"
 )
 
 func TestDiscoveredToolsWithSameShortNameKeepTheirNamespaces(t *testing.T) {
@@ -19,10 +19,10 @@ func TestDiscoveredToolsWithSameShortNameKeepTheirNamespaces(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if gjson.GetBytes(chat, "tools.#").Int() != 2 || gjson.GetBytes(chat, "tools.0.function.name").String() != "mcp__node_repl__js" || gjson.GetBytes(chat, "tools.1.function.name").String() != "mcp__cua_repl__js" {
+		if ojson.GetBytes(chat, "tools.#").Int() != 2 || ojson.GetBytes(chat, "tools.0.function.name").String() != "mcp__node_repl__js" || ojson.GetBytes(chat, "tools.1.function.name").String() != "mcp__cua_repl__js" {
 			t.Fatalf("namespaced tool identities lost: %s", chat)
 		}
-		if gjson.GetBytes(chat, "tools.0.function.description").String() != "" {
+		if ojson.GetBytes(chat, "tools.0.function.description").String() != "" {
 			t.Fatal("historical documentation overrode the current declaration")
 		}
 	}

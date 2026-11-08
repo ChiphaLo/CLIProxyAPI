@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
-	"github.com/tidwall/gjson"
 )
 
 func TestDeepSeekMilestonePreservesHistoryAndThinking(t *testing.T) {
@@ -14,11 +14,11 @@ func TestDeepSeekMilestonePreservesHistoryAndThinking(t *testing.T) {
 	for _, model := range []string{"deepseek-v4.1-flash", "opencode2/deepseek-v4.1-flash", "workbuddy-intl/deepseek-v4.1-flash(high)", "deepseek-ai/DeepSeek-V3.2", "ds/deepseek-flash"} {
 		t.Run(model, func(t *testing.T) {
 			out := ApplyPayloadConfigWithRequest(nil, model, "openai", "openai-response", "", body, body, model, "/v1/responses", nil)
-			if !gjson.ValidBytes(out) || !strings.HasPrefix(gjson.GetBytes(out, "messages.0.content").String(), "Keep original instructions.\n\n") || !bytes.Contains(out, []byte("cpa-progress-policy")) {
+			if !ojson.ValidBytes(out) || !strings.HasPrefix(ojson.GetBytes(out, "messages.0.content").String(), "Keep original instructions.\n\n") || !bytes.Contains(out, []byte("cpa-progress-policy")) {
 				t.Fatal("original instructions missing or policy absent")
 			}
 			for _, path := range []string{"model", "messages.1", "messages.2", "messages.3", "tools", "stream", "reasoning_effort", "temperature"} {
-				if gjson.GetBytes(body, path).Raw != gjson.GetBytes(out, path).Raw {
+				if ojson.GetBytes(body, path).Raw != ojson.GetBytes(out, path).Raw {
 					t.Errorf("policy changed %s", path)
 				}
 			}
@@ -54,16 +54,16 @@ func TestDeepSeekMilestoneShapesAndNoOriginalSystem(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := applyDeepSeekMilestoneGuidance([]byte(tc.body), "deepseek-v4.1-flash", tc.protocol, tc.root)
-			if !gjson.ValidBytes(out) || !strings.Contains(gjson.GetBytes(out, tc.path).String(), deepSeekMilestoneGuidance) {
+			if !ojson.ValidBytes(out) || !strings.Contains(ojson.GetBytes(out, tc.path).String(), deepSeekMilestoneGuidance) {
 				t.Fatalf("missing policy at %s", tc.path)
 			}
 			if again := applyDeepSeekMilestoneGuidance(out, "deepseek-v4.1-flash", tc.protocol, tc.root); !bytes.Equal(out, again) {
 				t.Fatal("policy not idempotent")
 			}
-			if tc.name == "chat" && gjson.GetBytes(out, "messages.1").Raw != gjson.Get(tc.body, "messages.0").Raw {
+			if tc.name == "chat" && ojson.GetBytes(out, "messages.1").Raw != ojson.Get(tc.body, "messages.0").Raw {
 				t.Fatal("prepend changed original user message")
 			}
-			if tc.name == "chat_blocks" && gjson.GetBytes(out, "messages.0.content.0").Raw != gjson.Get(tc.body, "messages.0.content.0").Raw {
+			if tc.name == "chat_blocks" && ojson.GetBytes(out, "messages.0.content.0").Raw != ojson.Get(tc.body, "messages.0.content.0").Raw {
 				t.Fatal("original system block/cache control changed")
 			}
 		})
@@ -74,12 +74,12 @@ func TestDeepSeekMilestoneUserPayloadRulesRemainFinal(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"system","content":"original"},{"role":"user","content":"hello"}]}`)
 	cfg := &config.Config{Payload: config.PayloadConfig{Override: []config.PayloadRule{{Models: []config.PayloadModelRule{{Name: "deepseek-*"}}, Params: map[string]any{"messages.0.content": "administrator override"}}}}}
 	out := ApplyPayloadConfigWithRequest(cfg, "deepseek-v4.1-flash", "openai", "openai-response", "", body, body, "opencode/deepseek-v4.1-flash", "/v1/responses", nil)
-	if gjson.GetBytes(out, "messages.0.content").String() != "administrator override" || bytes.Contains(out, []byte("cpa-progress-policy")) {
+	if ojson.GetBytes(out, "messages.0.content").String() != "administrator override" || bytes.Contains(out, []byte("cpa-progress-policy")) {
 		t.Fatal("built-in policy overwrote final user rules")
 	}
 	cfg.Payload = config.PayloadConfig{Filter: []config.PayloadFilterRule{{Models: []config.PayloadModelRule{{Name: "deepseek-*"}}, Params: []string{"messages.0.content"}}}}
 	out = ApplyPayloadConfigWithRequest(cfg, "deepseek-v4.1-flash", "openai", "openai-response", "", body, body, "opencode/deepseek-v4.1-flash", "/v1/responses", nil)
-	if gjson.GetBytes(out, "messages.0.content").Exists() {
+	if ojson.GetBytes(out, "messages.0.content").Exists() {
 		t.Fatal("filtered instructions were restored")
 	}
 }

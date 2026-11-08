@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	codexmodels "github.com/router-for-me/CLIProxyAPI/v8/internal/client/codex/models"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
 	_ "github.com/router-for-me/CLIProxyAPI/v8/internal/thinking/provider/antigravity"
-	"github.com/tidwall/gjson"
 )
 
 func TestAntigravityBudgetCatalogAndWireStayConsistent(t *testing.T) {
@@ -21,7 +21,7 @@ func TestAntigravityBudgetCatalogAndWireStayConsistent(t *testing.T) {
 	}
 	catalog := codexmodels.BuildResponseForClientWithToolCapabilities([]map[string]any{projected}, func(string) []string { return []string{"antigravity"} }, nil, nil, nil, false, "0.170.1")
 	raw, _ := json.Marshal(catalog)
-	if len(gjson.GetBytes(raw, "models.0.supported_reasoning_levels").Array()) != 4 {
+	if len(ojson.GetBytes(raw, "models.0.supported_reasoning_levels").Array()) != 4 {
 		t.Fatalf("client choices missing: %s", raw)
 	}
 	for _, level := range levels {
@@ -29,7 +29,7 @@ func TestAntigravityBudgetCatalogAndWireStayConsistent(t *testing.T) {
 		source := []byte(`{"reasoning":{"effort":"` + level + `"}}`)
 		actual, err := thinking.ApplyThinkingWithModelInfo(body, source, info.ID, "openai-response", "antigravity", "antigravity", info)
 		budget, _ := thinking.ConvertLevelToBudget(level)
-		if err != nil || gjson.GetBytes(actual, "request.generationConfig.thinkingConfig.thinkingBudget").Int() != int64(budget) || gjson.GetBytes(actual, "request.generationConfig.thinkingConfig.thinkingLevel").Exists() {
+		if err != nil || ojson.GetBytes(actual, "request.generationConfig.thinkingConfig.thinkingBudget").Int() != int64(budget) || ojson.GetBytes(actual, "request.generationConfig.thinkingConfig.thinkingLevel").Exists() {
 			t.Fatalf("%s did not map to budget: %s %v", level, actual, err)
 		}
 	}

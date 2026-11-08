@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 func TestDeepSeekMilestoneOutgoingRequest(t *testing.T) {
@@ -59,11 +59,11 @@ func TestDeepSeekMilestoneOutgoingRequest(t *testing.T) {
 						t.Fatal(errExecute)
 					}
 					body := <-captured
-					content := gjson.GetBytes(body, "messages.0.content").String()
+					content := ojson.GetBytes(body, "messages.0.content").String()
 					if !strings.Contains(content, "original instructions") || bytes.Contains(body, []byte("cpa-progress-policy")) != strings.HasPrefix(model, "deepseek-") {
 						t.Fatal("outgoing guidance missing or non-DeepSeek request changed")
 					}
-					if gjson.GetBytes(body, "tools.0.function.name").String() != "inspect_project" {
+					if ojson.GetBytes(body, "tools.0.function.name").String() != "inspect_project" {
 						t.Fatal("tool declaration changed")
 					}
 				})

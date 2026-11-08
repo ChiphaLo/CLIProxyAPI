@@ -17,7 +17,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/billing"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func writeData(w http.ResponseWriter, value any) {
@@ -41,12 +41,12 @@ func mock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024*1024))
-	if err != nil || !gjson.ValidBytes(data) {
+	if err != nil || !ojson.ValidBytes(data) {
 		http.Error(w, "invalid fixture request", http.StatusBadRequest)
 		return
 	}
-	name := gjson.GetBytes(data, "tools.0.function.name").String()
-	tool := name != "" && gjson.GetBytes(data, "tool_choice").String() != "none"
+	name := ojson.GetBytes(data, "tools.0.function.name").String()
+	tool := name != "" && ojson.GetBytes(data, "tool_choice").String() != "none"
 	usage := map[string]any{"prompt_tokens": 1001, "completion_tokens": 137, "total_tokens": 1138,
 		"prompt_tokens_details":     map[string]any{"cached_tokens": 701, "cache_write_tokens": 23},
 		"completion_tokens_details": map[string]any{"reasoning_tokens": 100}}
@@ -61,7 +61,7 @@ func mock(w http.ResponseWriter, r *http.Request) {
 	}
 	dsmlCase := ""
 	for _, candidate := range []string{"valid", "invalid", "truncated"} {
-		if strings.Contains(gjson.GetBytes(data, "messages").Raw, "DSML_CASE="+candidate) {
+		if strings.Contains(ojson.GetBytes(data, "messages").Raw, "DSML_CASE="+candidate) {
 			dsmlCase = candidate
 		}
 	}
@@ -80,7 +80,7 @@ func mock(w http.ResponseWriter, r *http.Request) {
 		message["content"] = dsmlText
 		delete(message, "tool_calls")
 	}
-	if !gjson.GetBytes(data, "stream").Bool() {
+	if !ojson.GetBytes(data, "stream").Bool() {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": "chatcmpl_wire_fixture", "object": "chat.completion", "model": "wire-reported-model",
 			"choices": []any{map[string]any{"index": 0, "message": message, "finish_reason": finish}}, "usage": usage})
@@ -170,12 +170,12 @@ func check(base, keyPath, requestedModel string, additional bool, dsmlCase strin
 					if strings.HasPrefix(line, "data: ") {
 						event := []byte(strings.TrimPrefix(line, "data: "))
 						events++
-						if kind := gjson.GetBytes(event, "item.type").String(); kind == "custom_tool_call" || kind == "function_call" {
+						if kind := ojson.GetBytes(event, "item.type").String(); kind == "custom_tool_call" || kind == "function_call" {
 							toolEvents++
 						}
-						if gjson.GetBytes(event, "type").String() == "response.completed" {
+						if ojson.GetBytes(event, "type").String() == "response.completed" {
 							terminals++
-							completed = []byte(gjson.GetBytes(event, "response").Raw)
+							completed = []byte(ojson.GetBytes(event, "response").Raw)
 						}
 					}
 				}
@@ -195,20 +195,20 @@ func check(base, keyPath, requestedModel string, additional bool, dsmlCase strin
 				}
 			}
 			_ = response.Body.Close()
-			if gjson.GetBytes(completed, "usage.input_tokens").Int() != 1001 || gjson.GetBytes(completed, "usage.output_tokens").Int() != 137 || gjson.GetBytes(completed, "usage.input_tokens_details.cached_tokens").Int() != 701 {
+			if ojson.GetBytes(completed, "usage.input_tokens").Int() != 1001 || ojson.GetBytes(completed, "usage.output_tokens").Int() != 137 || ojson.GetBytes(completed, "usage.input_tokens_details.cached_tokens").Int() != 701 {
 				return nil, fmt.Errorf("fixture usage lost (stream=%t tool=%t)", stream, tool)
 			}
 			if tool && (dsmlCase == "invalid" || dsmlCase == "truncated") {
 				if toolEvents > 0 || !strings.Contains(string(completed), opencode.FormatError) {
 					return nil, fmt.Errorf("invalid DSML was not rejected atomically (stream=%t)", stream)
 				}
-				for _, item := range gjson.GetBytes(completed, "output").Array() {
+				for _, item := range ojson.GetBytes(completed, "output").Array() {
 					if kind := item.Get("type").String(); kind == "custom_tool_call" || kind == "function_call" {
 						return nil, fmt.Errorf("invalid DSML leaked a call")
 					}
 				}
 			} else if tool {
-				if gjson.GetBytes(completed, "output.0.type").String() != "custom_tool_call" || gjson.GetBytes(completed, "output.0.namespace").String() != "functions" || gjson.GetBytes(completed, "output.0.name").String() != "exec" || gjson.GetBytes(completed, "output.0.input").String() != "text(1);" {
+				if ojson.GetBytes(completed, "output.0.type").String() != "custom_tool_call" || ojson.GetBytes(completed, "output.0.namespace").String() != "functions" || ojson.GetBytes(completed, "output.0.name").String() != "exec" || ojson.GetBytes(completed, "output.0.input").String() != "text(1);" {
 					return nil, fmt.Errorf("fixture tool identity lost (stream=%t)", stream)
 				}
 			} else if !strings.Contains(string(completed), "WIRE_PROBE_OK") {

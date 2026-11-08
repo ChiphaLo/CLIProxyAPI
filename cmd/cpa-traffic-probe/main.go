@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/traffic"
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 type evidence struct {
@@ -29,7 +29,7 @@ type evidence struct {
 	Usage            json.RawMessage `json:"usage"`
 }
 
-func turn(client *http.Client, endpoint string, body []byte) (gjson.Result, evidence, error) {
+func turn(client *http.Client, endpoint string, body []byte) (ojson.Result, evidence, error) {
 	e := evidence{IdentityUpload: len(body)}
 	var wire bytes.Buffer
 	z, _ := traffic.Encoder(&wire, "gzip")
@@ -44,7 +44,7 @@ func turn(client *http.Client, endpoint string, body []byte) (gjson.Result, evid
 	start := time.Now()
 	response, err := client.Do(r)
 	if err != nil {
-		return gjson.Result{}, e, err
+		return ojson.Result{}, e, err
 	}
 	defer response.Body.Close()
 	e.Status = response.StatusCode
@@ -53,7 +53,7 @@ func turn(client *http.Client, endpoint string, body []byte) (gjson.Result, evid
 	if coding := response.Header.Get("Content-Encoding"); coding != "" {
 		d, err := traffic.Decoder(encoded, coding)
 		if err != nil {
-			return gjson.Result{}, e, err
+			return ojson.Result{}, e, err
 		}
 		defer d.Close()
 		reader = d
@@ -63,14 +63,14 @@ func turn(client *http.Client, endpoint string, body []byte) (gjson.Result, evid
 	e.WireDownload = encoded.n
 	e.IdentityDownload = len(all)
 	if err != nil || len(all) > 4<<20 {
-		return gjson.Result{}, e, fmt.Errorf("invalid or oversized response")
+		return ojson.Result{}, e, fmt.Errorf("invalid or oversized response")
 	}
 	if e.Status != 200 {
-		return gjson.Result{}, e, fmt.Errorf("test upstream status %d", e.Status)
+		return ojson.Result{}, e, fmt.Errorf("test upstream status %d", e.Status)
 	}
 	for _, line := range strings.Split(string(all), "\n") {
 		if strings.HasPrefix(line, "data:") {
-			event := gjson.Parse(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+			event := ojson.Parse(strings.TrimSpace(strings.TrimPrefix(line, "data:")))
 			if event.Get("type").String() == "response.completed" {
 				result := event.Get("response")
 				e.Usage = json.RawMessage(result.Get("usage").Raw)
@@ -78,7 +78,7 @@ func turn(client *http.Client, endpoint string, body []byte) (gjson.Result, evid
 			}
 		}
 	}
-	return gjson.Result{}, e, fmt.Errorf("stream ended without response.completed")
+	return ojson.Result{}, e, fmt.Errorf("stream ended without response.completed")
 }
 
 type countReader struct {
@@ -128,7 +128,7 @@ func run() error {
 	for _, item := range result.Get("output").Array() {
 		if item.Get("type").String() == "function_call" && item.Get("name").String() == "lookup" {
 			if item.Get("arguments").Get("value").Int() != 7 {
-				args := gjson.Parse(item.Get("arguments").String())
+				args := ojson.Parse(item.Get("arguments").String())
 				if args.Get("value").Int() != 7 {
 					return fmt.Errorf("unexpected tool arguments")
 				}

@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	agresponses "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/antigravity/openai/responses"
 	clauderesponses "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/claude/openai/responses"
 	chatresponses "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/openai/openai/responses"
-	"github.com/tidwall/gjson"
 )
 
 func TestProviderPromptProjectionPreservesProgressInstructions(t *testing.T) {
@@ -52,12 +52,12 @@ func TestProviderResponsesPhaseProjectionAudit(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var state any
 			body := tc.call(context.Background(), "fixture", request, request, []byte(tc.raw), &state)
-			if !gjson.ValidBytes(body) {
+			if !ojson.ValidBytes(body) {
 				t.Fatal("invalid Responses projection")
 			}
 			messages := 0
 			phases := []string{}
-			for _, item := range gjson.GetBytes(body, "output").Array() {
+			for _, item := range ojson.GetBytes(body, "output").Array() {
 				if item.Get("type").String() == "message" {
 					messages++
 					phases = append(phases, item.Get("phase").String())

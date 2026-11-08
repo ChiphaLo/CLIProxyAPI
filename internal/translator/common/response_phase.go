@@ -3,16 +3,15 @@ package common
 import (
 	"strconv"
 
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 // SetResponseMessagePhases classifies synthesized JSON responses after their
 // output order and client tool calls are known. Native Responses bypass it.
 func SetResponseMessagePhases(body []byte) []byte {
-	items := gjson.GetBytes(body, "output").Array()
+	items := ojson.GetBytes(body, "output").Array()
 	lastMessage := -1
-	final := gjson.GetBytes(body, "status").String() == "completed"
+	final := ojson.GetBytes(body, "status").String() == "completed"
 	for i, item := range items {
 		switch item.Get("type").String() {
 		case "message":
@@ -29,7 +28,7 @@ func SetResponseMessagePhases(body []byte) []byte {
 		if final && i == lastMessage {
 			phase = "final_answer"
 		}
-		body, _ = sjson.SetBytes(body, "output."+strconv.Itoa(i)+".phase", phase)
+		body, _ = ojson.SetBytes(body, "output."+strconv.Itoa(i)+".phase", phase)
 	}
 	return body
 }

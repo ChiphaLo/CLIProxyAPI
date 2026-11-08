@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func TestResponsesStreamFailure(t *testing.T) {
@@ -33,7 +33,7 @@ func TestResponsesStreamFailure(t *testing.T) {
 			if strings.Contains(string(body), "PRIVATE OUTPUT") {
 				t.Fatal("retained output in error envelope")
 			}
-			if !gjson.GetBytes(body, "error.message").Exists() {
+			if !ojson.GetBytes(body, "error.message").Exists() {
 				t.Fatal("missing normalized error")
 			}
 			if tc.retry == 0 {
@@ -44,7 +44,7 @@ func TestResponsesStreamFailure(t *testing.T) {
 				if delay == nil || *delay != tc.retry {
 					t.Fatalf("retry=%v, want %v", delay, tc.retry)
 				}
-				if !strings.Contains(gjson.GetBytes(body, "error.message").String(), "try again in ") {
+				if !strings.Contains(ojson.GetBytes(body, "error.message").String(), "try again in ") {
 					t.Fatal("missing machine-readable retry hint")
 				}
 			}

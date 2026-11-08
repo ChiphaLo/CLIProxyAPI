@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 // Exercise the actual production route: OpenAI-compatible native Responses ->
@@ -27,11 +27,11 @@ func TestSWENativeResponsesMilestonesPreserveToolBatch(t *testing.T) {
 			body := []byte(`{"model":"swe-2","instructions":"original instructions","input":[{"role":"user","content":"Do two checks."}],"tools":[` + nativeResponsesTool + `],"reasoning":{"effort":"medium"}}`)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, _ := io.ReadAll(r.Body)
-				if !strings.HasPrefix(gjson.GetBytes(raw, "instructions").String(), "original instructions\n\n<cpa-progress-policy") {
+				if !strings.HasPrefix(ojson.GetBytes(raw, "instructions").String(), "original instructions\n\n<cpa-progress-policy") {
 					t.Error("SWE policy missing from upstream request")
 				}
 				for _, path := range []string{"input", "tools", "reasoning"} {
-					if gjson.GetBytes(raw, path).Raw != gjson.GetBytes(body, path).Raw {
+					if ojson.GetBytes(raw, path).Raw != ojson.GetBytes(body, path).Raw {
 						t.Errorf("policy changed %s", path)
 					}
 				}
@@ -59,7 +59,7 @@ func TestSWENativeResponsesMilestonesPreserveToolBatch(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if gjson.GetBytes(result.Payload, "output").Raw != gjson.Get(response, "output").Raw {
+				if ojson.GetBytes(result.Payload, "output").Raw != ojson.Get(response, "output").Raw {
 					t.Fatal("tool batch modified")
 				}
 				return

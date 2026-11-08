@@ -16,14 +16,13 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/compat"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/nativegemini"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 const MaxBodyBytes int64 = 64 * 1024 * 1024
@@ -84,7 +83,7 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 			}
 			return
 		}
-		if !gjson.ValidBytes(body) || !gjson.ParseBytes(body).IsObject() {
+		if !ojson.ValidBytes(body) || !ojson.ParseBytes(body).IsObject() {
 			abort(c, http.StatusBadRequest, "request body must be a JSON object")
 			return
 		}
@@ -131,7 +130,7 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 					abort(c, http.StatusBadRequest, "native Gemini model routing must preserve the URL resource")
 					return
 				}
-				body, err = sjson.SetBytes(body, "model", routed)
+				body, err = ojson.SetBytes(body, "model", routed)
 				if err != nil {
 					abort(c, http.StatusBadRequest, "cannot resolve CPA model route")
 					return

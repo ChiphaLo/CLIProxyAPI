@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 var responsesResetDuration = regexp.MustCompile(`(?i)\b(?:reset|resets|try again)\s+in\s+(?:(\d+)\s*(?:hours?|h)\b\s*)?(?:(\d+)\s*(?:minutes?|mins?|m)\b\s*)?(?:(\d+)\s*(?:seconds?|secs?|s)\b)?`)
@@ -17,7 +17,7 @@ var responsesResetDuration = regexp.MustCompile(`(?i)\b(?:reset|resets|try again
 // ResponsesStreamFailure retains the upstream error contract without retaining
 // the response output, prompt or other fields from its surrounding envelope.
 func ResponsesStreamFailure(payload []byte) (int, []byte, *time.Duration) {
-	root := gjson.ParseBytes(payload)
+	root := ojson.ParseBytes(payload)
 	errorNode := root.Get("error")
 	if !errorNode.IsObject() {
 		errorNode = root.Get("response.error")
@@ -29,7 +29,7 @@ func ResponsesStreamFailure(payload []byte) (int, []byte, *time.Duration) {
 	explicitStatus := false
 	for _, path := range []string{"status", "status_code", "error.status", "error.status_code", "response.error.status", "response.error.status_code"} {
 		value := root.Get(path)
-		if value.Type == gjson.Number && value.Int() >= 400 && value.Int() <= 599 {
+		if value.Type == ojson.Number && value.Int() >= 400 && value.Int() <= 599 {
 			status = int(value.Int())
 			explicitStatus = true
 			break

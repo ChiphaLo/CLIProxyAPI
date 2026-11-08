@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 func TestDevinDiscoveredJSToolsRoundTrip(t *testing.T) {
@@ -21,7 +21,7 @@ func TestDevinDiscoveredJSToolsRoundTrip(t *testing.T) {
 		t.Run(fmt.Sprint(stream), func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				raw, _ := io.ReadAll(r.Body)
-				if gjson.GetBytes(raw, "tools.#").Int() != 2 || gjson.GetBytes(raw, "tools.0.name").String() != "mcp__node_repl__js" || gjson.GetBytes(raw, "tools.1.name").String() != "mcp__cua_repl__js" || gjson.GetBytes(raw, "reasoning.effort").String() != "high" {
+				if ojson.GetBytes(raw, "tools.#").Int() != 2 || ojson.GetBytes(raw, "tools.0.name").String() != "mcp__node_repl__js" || ojson.GetBytes(raw, "tools.1.name").String() != "mcp__cua_repl__js" || ojson.GetBytes(raw, "reasoning.effort").String() != "high" {
 					t.Errorf("tool identities or reasoning lost: %s", raw)
 				}
 				result := `{"id":"resp_js","object":"response","model":"swe-2-flash-high","status":"completed","output":[{"type":"function_call","id":"fc_js","call_id":"call_js","name":"mcp__cua_repl__js","arguments":"{\"code\":\"fixture\"}"}]}`

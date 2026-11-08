@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/traffic"
@@ -25,7 +26,6 @@ import (
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	exec "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v8/sdk/config"
-	"github.com/tidwall/gjson"
 )
 
 type continuationExecutor struct {
@@ -147,8 +147,8 @@ func TestHTTPIncrementalToolContinuationAndCompression(t *testing.T) {
 			e.mu.Lock()
 			upstream := bytes.Clone(e.requests[1])
 			e.mu.Unlock()
-			items := gjson.GetBytes(upstream, "input").Array()
-			if len(items) != 3 || items[1].Get("type").String() != "function_call" || items[2].Get("call_id").String() != "call_tool" || gjson.GetBytes(upstream, "previous_response_id").Exists() {
+			items := ojson.GetBytes(upstream, "input").Array()
+			if len(items) != 3 || items[1].Get("type").String() != "function_call" || items[2].Get("call_id").String() != "call_tool" || ojson.GetBytes(upstream, "previous_response_id").Exists() {
 				t.Fatalf("tool conversation corrupted: %s", upstream)
 			}
 			if status, _, _ := post(delta, "issued-test-key"); status != 409 {
@@ -236,41 +236,41 @@ func TestCPAWebsocketCompressedToolContinuationAndAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			kind := gjson.GetBytes(b, "type").String()
+			kind := ojson.GetBytes(b, "type").String()
 			if kind == "response.completed" || kind == "error" {
 				return b
 			}
 		}
 	}
 	write(fmt.Sprintf(`{"type":"response.create","model":%q,"input":[{"role":"user","content":"run lookup"}],"tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]}`, identityModel))
-	if b := read(); gjson.GetBytes(b, "type").String() != "response.completed" {
+	if b := read(); ojson.GetBytes(b, "type").String() != "response.completed" {
 		t.Fatalf("first WS turn: %s", b)
 	}
 	write(`{"type":"response.create","previous_response_id":"resp_traffic_1","input":[{"type":"function_call_output","call_id":"call_tool","output":"executed"}]}`)
-	if b := read(); gjson.GetBytes(b, "type").String() != "response.completed" {
+	if b := read(); ojson.GetBytes(b, "type").String() != "response.completed" {
 		t.Fatalf("WS continuation: %s", b)
 	}
 	e.mu.Lock()
 	second := bytes.Clone(e.requests[1])
 	count := len(e.requests)
 	e.mu.Unlock()
-	if len(gjson.GetBytes(second, "input").Array()) != 3 || gjson.GetBytes(second, "previous_response_id").Exists() {
+	if len(ojson.GetBytes(second, "input").Array()) != 3 || ojson.GetBytes(second, "previous_response_id").Exists() {
 		t.Fatalf("HTTP-only provider did not receive full replay: %s", second)
 	}
 	write(fmt.Sprintf(`{"type":"response.create","model":%q,"previous_response_id":"resp_traffic_2","input":[]}`, "codex2/"+identityModel))
-	if b := read(); gjson.GetBytes(b, "type").String() != "error" {
+	if b := read(); ojson.GetBytes(b, "type").String() != "error" {
 		t.Fatalf("account switch admitted: %s", b)
 	}
 	write(`{"type":"response.create","model":"x","\u006dodel":"y","input":[]}`)
-	if b := read(); gjson.GetBytes(b, "type").String() != "error" {
+	if b := read(); ojson.GetBytes(b, "type").String() != "error" {
 		t.Fatalf("duplicate model admitted: %s", b)
 	}
 	write(`{"type":"response.steer","input":"must not bypass admission"}`)
-	if b := read(); gjson.GetBytes(b, "type").String() != "error" {
+	if b := read(); ojson.GetBytes(b, "type").String() != "error" {
 		t.Fatalf("unadmitted steer executed: %s", b)
 	}
 	write(`{"type":"response.create","stream_id":"other-lane","input":[]}`)
-	if b := read(); gjson.GetBytes(b, "type").String() != "error" {
+	if b := read(); ojson.GetBytes(b, "type").String() != "error" {
 		t.Fatalf("unsupported multiplexed lane admitted: %s", b)
 	}
 	e.mu.Lock()
@@ -283,7 +283,7 @@ func TestCPAWebsocketCompressedToolContinuationAndAdmission(t *testing.T) {
 	changed.Metadata["account_id"] = "different-team"
 	_, _ = f.manager.Update(context.Background(), changed)
 	write(fmt.Sprintf(`{"type":"response.create","model":%q,"input":[]}`, identityModel))
-	if _, b, err := conn.ReadMessage(); err == nil && gjson.GetBytes(b, "type").String() != "error" {
+	if _, b, err := conn.ReadMessage(); err == nil && ojson.GetBytes(b, "type").String() != "error" {
 		t.Fatalf("changed identity admitted: %s", b)
 	}
 	e.mu.Lock()
@@ -378,7 +378,7 @@ func TestCPANativeWebsocketSendsOnlyDeltaToUpstream(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			switch gjson.GetBytes(b, "type").String() {
+			switch ojson.GetBytes(b, "type").String() {
 			case "error":
 				t.Fatalf("WS error %s", b)
 			case "response.completed":
@@ -401,7 +401,7 @@ func TestCPANativeWebsocketSendsOnlyDeltaToUpstream(t *testing.T) {
 	read()
 	secondWire := written.Load() - before
 	upFirst, upSecond := <-requests, <-requests
-	if gjson.GetBytes(upSecond, "previous_response_id").String() != "resp_native_1" || len(gjson.GetBytes(upSecond, "input").Array()) != 1 || gjson.GetBytes(upSecond, "input.0.call_id").String() != "call_native" {
+	if ojson.GetBytes(upSecond, "previous_response_id").String() != "resp_native_1" || len(ojson.GetBytes(upSecond, "input").Array()) != 1 || ojson.GetBytes(upSecond, "input.0.call_id").String() != "call_native" {
 		t.Fatalf("native WS uploaded history instead of delta: %s", upSecond)
 	}
 	if len(upSecond) >= len(upFirst) || firstWire >= int64(len(first)) {

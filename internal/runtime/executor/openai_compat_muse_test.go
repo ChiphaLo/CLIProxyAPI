@@ -11,11 +11,11 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
-	"github.com/tidwall/gjson"
 )
 
 const museNativeFixture = `{"model":"opencode/muse-spark-1.3-contributor","tool_choice":"auto","input":[{"type":"additional_tools","role":"developer","tools":[{"type":"namespace","name":"functions","tools":[{"type":"custom","name":"lookup","format":{"type":"text"}}]}]},{"type":"reasoning","id":"rs_old_other_provider","summary":[{"type":"summary_text","text":"prior portable summary"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"fixture"}]}],"max_output_tokens":128}`
@@ -30,7 +30,7 @@ func TestOpenCodeMuseNativeHTTPAndSSE(t *testing.T) {
 				if r.URL.Path != "/responses" || !strings.HasPrefix(r.Header.Get("x-opencode-session"), "cpa-go-") {
 					t.Error("native endpoint/session not used")
 				}
-				if gjson.GetBytes(final, "input.0.type").String() != "reasoning" || gjson.GetBytes(final, "input.0.id").Exists() || gjson.GetBytes(final, "tools.0.name").String() != "functions__lookup" || gjson.GetBytes(final, "max_output_tokens").Int() != 128 {
+				if ojson.GetBytes(final, "input.0.type").String() != "reasoning" || ojson.GetBytes(final, "input.0.id").Exists() || ojson.GetBytes(final, "tools.0.name").String() != "functions__lookup" || ojson.GetBytes(final, "max_output_tokens").Int() != 128 {
 					t.Errorf("invalid native payload: %s", final)
 				}
 				response := `{"id":"resp_fixture","object":"response","status":"completed","model":"muse-spark-1.3-contributor","output":[` + museNativeItem + `],"usage":{"input_tokens":10,"output_tokens":9,"total_tokens":19,"output_tokens_details":{"reasoning_tokens":8}}}`
@@ -98,10 +98,10 @@ func TestOpenCodeMusePayloadRulesRemainFinal(t *testing.T) {
 				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					seen.Add(1)
 					raw, _ := io.ReadAll(r.Body)
-					if rule == "model-overridden" && gjson.GetBytes(raw, "model").String() != "muse-spark-fixture-override" {
+					if rule == "model-overridden" && ojson.GetBytes(raw, "model").String() != "muse-spark-fixture-override" {
 						t.Error("configured model overwritten")
 					}
-					if rule == "tools-filtered" && gjson.GetBytes(raw, "tools").Exists() {
+					if rule == "tools-filtered" && ojson.GetBytes(raw, "tools").Exists() {
 						t.Error("filtered tools restored")
 					}
 					value := map[string]any{"object": "response", "status": "completed", "output": []any{map[string]any{"type": "function_call", "name": "functions__lookup", "id": "fc_fixture", "call_id": "call_fixture", "arguments": `{"input":"7"}`}}}

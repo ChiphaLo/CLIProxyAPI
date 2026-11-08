@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tidwall/gjson"
+	"github.com/MoeForge/moego/ojson"
 )
 
 func TestNativeResponsesCodeModeContract(t *testing.T) {
@@ -23,12 +23,12 @@ func TestNativeResponsesCodeModeContract(t *testing.T) {
 	if err := bridge.BindFinal(body); err != nil {
 		t.Fatal(err)
 	}
-	tool := gjson.GetBytes(body, "tools.0")
+	tool := ojson.GetBytes(body, "tools.0")
 	text := tool.Get("description").String()
 	if !strings.HasPrefix(text, "CODE-MODE CALL CONTRACT:") || !strings.HasSuffix(text, description) || !strings.Contains(text, "text(r.output)") {
 		t.Fatal("code-mode calling and output instructions missing or original documentation lost")
 	}
-	if tool.Get("name").String() != "functions__exec" || tool.Get("parameters.required.0").String() != "value" || gjson.GetBytes(body, "instructions").String() != nativeCodeModeInstructions+"\n\nKeep original policy." || len(gjson.GetBytes(body, "tools").Array()) != 1 {
+	if tool.Get("name").String() != "functions__exec" || tool.Get("parameters.required.0").String() != "value" || ojson.GetBytes(body, "instructions").String() != nativeCodeModeInstructions+"\n\nKeep original policy." || len(ojson.GetBytes(body, "tools").Array()) != 1 {
 		t.Fatal("declarations or caller instructions changed")
 	}
 	call := []byte(`{"type":"response.output_item.added","item":{"type":"function_call","id":"fc_bad","call_id":"call_bad","name":"exec_command","arguments":""}}`)
@@ -37,7 +37,7 @@ func TestNativeResponsesCodeModeContract(t *testing.T) {
 	}
 	valid := []byte(`{"status":"completed","output":[{"type":"function_call","id":"fc_good","call_id":"call_good","name":"functions__exec","arguments":"{\"value\":\"const r = await tools.exec_command({cmd: 'echo hello'}); text(r.output);\"}"}]}`)
 	response, err := bridge.Response(valid)
-	if err != nil || gjson.GetBytes(response, "output.0.type").String() != "custom_tool_call" || !strings.Contains(gjson.GetBytes(response, "output.0.input").String(), "text(r.output)") {
+	if err != nil || ojson.GetBytes(response, "output.0.type").String() != "custom_tool_call" || !strings.Contains(ojson.GetBytes(response, "output.0.input").String(), "text(r.output)") {
 		t.Fatalf("declared code-mode call did not round trip: %v", err)
 	}
 }
@@ -49,7 +49,7 @@ func TestNativeResponsesCodeModeLeavesOtherToolsUnchanged(t *testing.T) {
 		`{"type":"custom","name":"other","description":"tools.exec_command text(value)"}`,
 	} {
 		body, _, err := PrepareNativeResponses([]byte(`{"model":"fixture","tools":[{"type":"namespace","name":"functions","tools":[`+tool+`]}],"input":"hello"}`), nil, "")
-		if err != nil || strings.Contains(gjson.GetBytes(body, "tools.0.description").String(), "CODE-MODE CALL CONTRACT:") {
+		if err != nil || strings.Contains(ojson.GetBytes(body, "tools.0.description").String(), "CODE-MODE CALL CONTRACT:") {
 			t.Fatalf("unrelated tool description changed: %v", err)
 		}
 	}
@@ -74,7 +74,7 @@ func TestNativeResponsesCodeModeImageGuidance(t *testing.T) {
 		if err := bridge.BindFinal(body); err != nil {
 			t.Fatal(err)
 		}
-		instructions := gjson.GetBytes(body, "instructions").String()
+		instructions := ojson.GetBytes(body, "instructions").String()
 		if strings.Contains(instructions, nativeCodeModeImageInstructions) != imageAPI || !strings.HasSuffix(instructions, "\n\nKeep policy.") {
 			t.Fatal("image guidance did not follow the current documented API")
 		}

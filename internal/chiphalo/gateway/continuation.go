@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 const continuationEntryLimit = 4 << 20
@@ -109,11 +108,11 @@ func strictContinuationFields(body []byte) error {
 	return nil
 }
 
-func inputArray(v gjson.Result) ([]json.RawMessage, error) {
-	if !v.Exists() || v.Type == gjson.Null {
+func inputArray(v ojson.Result) ([]json.RawMessage, error) {
+	if !v.Exists() || v.Type == ojson.Null {
 		return nil, nil
 	}
-	if v.Type == gjson.String {
+	if v.Type == ojson.String {
 		b, _ := json.Marshal(map[string]any{"type": "message", "role": "user", "content": v.String()})
 		return []json.RawMessage{b}, nil
 	}
@@ -129,11 +128,11 @@ func (s *ConversationStore) prepare(body []byte, key conversationKey, pinned str
 	if err := strictContinuationFields(body); err != nil {
 		return nil, "", err
 	}
-	prev := gjson.GetBytes(body, "previous_response_id")
-	if !prev.Exists() || prev.Type == gjson.Null {
+	prev := ojson.GetBytes(body, "previous_response_id")
+	if !prev.Exists() || prev.Type == ojson.Null {
 		return body, pinned, nil
 	}
-	if prev.Type != gjson.String || prev.String() == "" || len(prev.String()) > 1024 {
+	if prev.Type != ojson.String || prev.String() == "" || len(prev.String()) > 1024 {
 		return nil, "", fmt.Errorf("invalid previous_response_id")
 	}
 	key.ID = prev.String()
@@ -145,7 +144,7 @@ func (s *ConversationStore) prepare(body []byte, key conversationKey, pinned str
 	if err := json.Unmarshal(prior.Input, &items); err != nil {
 		return nil, "", err
 	}
-	delta, err := inputArray(gjson.GetBytes(body, "input"))
+	delta, err := inputArray(ojson.GetBytes(body, "input"))
 	if err != nil {
 		return nil, "", err
 	}
@@ -156,11 +155,11 @@ func (s *ConversationStore) prepare(body []byte, key conversationKey, pinned str
 	if len(combined) > int(MaxBodyBytes) {
 		return nil, "", fmt.Errorf("expanded conversation exceeds 64 MiB")
 	}
-	body, err = sjson.SetRawBytes(body, "input", combined)
+	body, err = ojson.SetRawBytes(body, "input", combined)
 	if err != nil {
 		return nil, "", err
 	}
-	body, err = sjson.DeleteBytes(body, "previous_response_id")
+	body, err = ojson.DeleteBytes(body, "previous_response_id")
 	if len(body) > int(MaxBodyBytes) {
 		return nil, "", fmt.Errorf("expanded conversation exceeds 64 MiB")
 	}
@@ -219,9 +218,9 @@ func (w *continuationWriter) consume() {
 				data = append(data, line...)
 			}
 		}
-		switch gjson.GetBytes(data, "type").String() {
+		switch ojson.GetBytes(data, "type").String() {
 		case "response.completed":
-			w.response = bytes.Clone([]byte(gjson.GetBytes(data, "response").Raw))
+			w.response = bytes.Clone([]byte(ojson.GetBytes(data, "response").Raw))
 		case "error", "response.failed", "response.incomplete":
 			w.invalid = true
 			w.response = nil
@@ -244,14 +243,14 @@ func (w *continuationWriter) completed() []byte {
 }
 
 func (s *ConversationStore) save(key conversationKey, body, response []byte, authID string) {
-	if !gjson.ValidBytes(response) || gjson.GetBytes(response, "status").String() != "completed" {
+	if !ojson.ValidBytes(response) || ojson.GetBytes(response, "status").String() != "completed" {
 		return
 	}
-	output := gjson.GetBytes(response, "output")
+	output := ojson.GetBytes(response, "output")
 	if !output.IsArray() {
 		return
 	}
-	input, err := inputArray(gjson.GetBytes(body, "input"))
+	input, err := inputArray(ojson.GetBytes(body, "input"))
 	if err != nil {
 		return
 	}
@@ -263,7 +262,7 @@ func (s *ConversationStore) save(key conversationKey, body, response []byte, aut
 	if err != nil {
 		return
 	}
-	key.ID = gjson.GetBytes(response, "id").String()
+	key.ID = ojson.GetBytes(response, "id").String()
 	s.put(key, combined, authID)
 }
 
