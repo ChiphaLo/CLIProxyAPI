@@ -11,6 +11,7 @@ import (
 
 	"github.com/MoeForge/moego/ojson"
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 )
 
 const continuationEntryLimit = 4 << 20
@@ -84,26 +85,27 @@ func (s *ConversationStore) put(key conversationKey, input []byte, authID string
 	s.bytes += len(input)
 }
 
+// strictContinuationFields rejects duplicate top-level names, comparing the
+// decoded spelling so escaped-equivalent keys collide. body must already be
+// valid JSON; members are walked without copying.
 func strictContinuationFields(body []byte) error {
-	d := json.NewDecoder(bytes.NewReader(body))
-	if _, err := d.Token(); err != nil {
-		return err
+	root := util.ParseGJSONBytesNoCopy(body)
+	if !root.IsObject() {
+		return fmt.Errorf("request body must be a JSON object")
 	}
-	seen := map[string]bool{}
-	for d.More() {
-		k, err := d.Token()
-		if err != nil {
-			return err
+	seen := make(map[string]struct{}, 32)
+	duplicate := false
+	root.ForEach(func(key, _ ojson.Result) bool {
+		name := key.String()
+		if _, exists := seen[name]; exists {
+			duplicate = true
+			return false
 		}
-		var v json.RawMessage
-		if err = d.Decode(&v); err != nil {
-			return err
-		}
-		name := k.(string)
-		if seen[name] {
-			return fmt.Errorf("duplicate request field")
-		}
-		seen[name] = true
+		seen[name] = struct{}{}
+		return true
+	})
+	if duplicate {
+		return fmt.Errorf("duplicate request field")
 	}
 	return nil
 }
@@ -246,11 +248,16 @@ func (s *ConversationStore) save(key conversationKey, body, response []byte, aut
 	if !ojson.ValidBytes(response) || ojson.GetBytes(response, "status").String() != "completed" {
 		return
 	}
-	output := ojson.GetBytes(response, "output")
+	output := util.GetGJSONBytesNoCopy(response, "output")
 	if !output.IsArray() {
 		return
 	}
-	input, err := inputArray(ojson.GetBytes(body, "input"))
+	rawInput := util.GetGJSONBytesNoCopy(body, "input")
+	// Entries above the cache limit are never stored; skip decoding them.
+	if len(rawInput.Raw)+len(output.Raw) > continuationEntryLimit {
+		return
+	}
+	input, err := inputArray(rawInput)
 	if err != nil {
 		return
 	}

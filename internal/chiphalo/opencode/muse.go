@@ -131,7 +131,34 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 	if err != nil {
 		return nil, nil, err
 	}
-	if prev := ojson.GetBytes(raw, "previous_response_id"); !native && prev.Exists() && prev.Type != ojson.Null && prev.String() != "" {
+	// Read the top-level members in one pass. Lookups of members after or
+	// missing from a large input would otherwise each rescan the whole body.
+	var prev, declared, instructions, choice, input ojson.Result
+	util.ParseGJSONBytesNoCopy(raw).ForEach(func(key, value ojson.Result) bool {
+		var target *ojson.Result
+		switch key.String() {
+		case "previous_response_id":
+			target = &prev
+		case "tools":
+			target = &declared
+		case "instructions":
+			target = &instructions
+		case "tool_choice":
+			target = &choice
+		case "input":
+			target = &input
+		default:
+			return true
+		}
+		if !target.Exists() {
+			*target = value
+		}
+		return true
+	})
+	// All edits are batched into one document build; raw itself is not modified.
+	doc := ojson.NewDoc(raw)
+	edited := false
+	if !native && prev.Exists() && prev.Type != ojson.Null && prev.String() != "" {
 		return nil, nil, fmt.Errorf("Muse continuation requires the CPA scoped full-context replay; resend full context")
 	}
 	flattened := make([]json.RawMessage, 0)
@@ -205,26 +232,27 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 		}
 		return nil
 	}
-	if tools := ojson.GetBytes(raw, "tools"); tools.Exists() {
-		if err := flatten(tools, "", 0); err != nil {
+	if declared.Exists() {
+		if err := flatten(declared, "", 0); err != nil {
 			return nil, nil, err
 		}
-		raw, _ = ojson.SetBytes(raw, "tools", flattened)
+		_ = doc.Set("tools", flattened)
+		edited = true
 	}
 	if codeMode {
-		instructions := ojson.GetBytes(raw, "instructions").String()
+		current := instructions.String()
 		guidance := nativeCodeModeInstructions
 		if codeModeImages {
 			guidance += "\n\n" + nativeCodeModeImageInstructions
 		}
-		if !strings.Contains(instructions, guidance) {
-			if instructions != "" {
-				instructions = "\n\n" + instructions
+		if !strings.Contains(current, guidance) {
+			if current != "" {
+				current = "\n\n" + current
 			}
-			raw, _ = ojson.SetBytes(raw, "instructions", guidance+instructions)
+			_ = doc.Set("instructions", guidance+current)
+			edited = true
 		}
 	}
-	choice := ojson.GetBytes(raw, "tool_choice")
 	if choice.Exists() && native && choice.IsObject() && (choice.Get("type").String() == "function" || choice.Get("type").String() == "custom") {
 		name := b.names[choice.Get("namespace").String()+"\x00"+choice.Get("name").String()]
 		// Native clients may qualify a named tool as namespace.name instead of
@@ -239,9 +267,10 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 		if name == "" {
 			return nil, nil, fmt.Errorf("named Responses tool is not declared")
 		}
-		raw, _ = ojson.SetBytes(raw, "tool_choice.name", name)
-		raw, _ = ojson.DeleteBytes(raw, "tool_choice.namespace")
-		raw, _ = ojson.SetBytes(raw, "tool_choice.type", "function")
+		_ = doc.Set("tool_choice.name", name)
+		_ = doc.Delete("tool_choice.namespace")
+		_ = doc.Set("tool_choice.type", "function")
+		edited = true
 	}
 	if choice.Exists() && !native {
 		if choice.Type != ojson.String {
@@ -250,15 +279,18 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 		switch choice.String() {
 		case "auto":
 		case "none":
-			raw, _ = ojson.DeleteBytes(raw, "tools")
-			raw, _ = ojson.SetBytes(raw, "tool_choice", "auto")
+			_ = doc.Delete("tools")
+			_ = doc.Set("tool_choice", "auto")
+			edited = true
 		default:
 			return nil, nil, fmt.Errorf("Muse does not support required or named tool selection")
 		}
 	}
-	input := util.GetGJSONBytesNoCopy(raw, "input")
 	items := input.Array()
 	retained := make([]string, 0, len(items))
+	// Tool outputs can carry megabytes of images; their envelope edit is
+	// streamed into the rebuilt input instead of copying each item again.
+	outputs := map[int]*ojson.Doc{}
 	changed := false
 	for _, item := range items {
 		var out []byte
@@ -315,7 +347,13 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 				out, _ = ojson.DeleteBytes(out, "input")
 			}
 		case "custom_tool_call_output":
-			out, _ = ojson.SetBytes([]byte(item.Raw), "type", "function_call_output")
+			edited := ojson.NewDocString(item.Raw)
+			if edited.Set("type", "function_call_output") == nil {
+				outputs[len(retained)] = edited
+				retained = append(retained, "")
+				changed = true
+				continue
+			}
 		}
 		if out == nil {
 			retained = append(retained, item.Raw)
@@ -333,15 +371,22 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 			if i > 0 {
 				rebuilt.WriteByte(',')
 			}
-			rebuilt.WriteString(item)
+			if edited := outputs[i]; edited != nil {
+				_, _ = edited.WriteTo(&rebuilt)
+			} else {
+				rebuilt.WriteString(item)
+			}
 		}
 		rebuilt.WriteByte(']')
-		raw, err = ojson.SetRawBytes(raw, "input", []byte(rebuilt.String()))
-		if err != nil {
+		if err := doc.SetRaw("input", rebuilt.String()); err != nil {
 			return nil, nil, err
 		}
+		edited = true
 	}
-	return raw, b, nil
+	if !edited {
+		return raw, b, nil
+	}
+	return doc.Bytes(), b, nil
 }
 
 func (b *MuseBridge) BindFinal(raw []byte) error {

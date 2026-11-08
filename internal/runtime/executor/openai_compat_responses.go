@@ -46,14 +46,21 @@ func (e *OpenAICompatExecutor) prepareNativeResponses(ctx context.Context, req c
 	if err != nil {
 		return nil, err
 	}
-	body = helps.SetStringIfDifferent(body, "model", model)
-	body = helps.SetBoolIfDifferent(body, "stream", stream)
+	// Batch the envelope edits: members after a large input are indexed once.
+	doc := ojson.NewDoc(body)
+	edited := helps.SetStringIfDifferentDoc(doc, "model", model)
+	edited = helps.SetBoolIfDifferentDoc(doc, "stream", stream) || edited
 	// A stateless proxy does not opt users into provider response storage. An
 	// explicitly configured or requested value is still owned by the caller.
-	if !ojson.GetBytes(body, "store").Exists() {
-		body = helps.SetBoolIfDifferent(body, "store", false)
+	if !doc.Get("store").Exists() {
+		edited = helps.SetBoolIfDifferentDoc(doc, "store", false) || edited
 	}
-	body, _ = ojson.DeleteBytes(body, "stream_options")
+	if doc.Get("stream_options").Exists() {
+		edited = doc.Delete("stream_options") == nil || edited
+	}
+	if edited {
+		body = doc.Bytes()
+	}
 	body, bridge, err := opencode.PrepareNativeResponses(body, nil, "")
 	if err != nil {
 		return nil, statusErr{code: 400, msg: err.Error()}
@@ -64,7 +71,12 @@ func (e *OpenAICompatExecutor) prepareNativeResponses(ctx context.Context, req c
 	if err := bridge.BindFinal(body); err != nil {
 		return nil, statusErr{code: 400, msg: err.Error()}
 	}
-	return &nativeResponsesRequest{bridge: bridge, body: body, original: bytes.Clone(original), model: model, format: coreexecutor.ResponseFormatOrSource(opts)}, nil
+	format := coreexecutor.ResponseFormatOrSource(opts)
+	// The original request is read only to translate responses to another format.
+	if format != sdktranslator.FormatOpenAIResponse {
+		original = bytes.Clone(original)
+	}
+	return &nativeResponsesRequest{bridge: bridge, body: body, original: original, model: model, format: format}, nil
 }
 
 func (e *OpenAICompatExecutor) requestNativeResponses(ctx context.Context, auth *coreauth.Auth, opts coreexecutor.Options, p *nativeResponsesRequest, reporter *helps.UsageReporter) (*http.Response, error) {

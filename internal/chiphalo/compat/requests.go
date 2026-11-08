@@ -3,90 +3,137 @@
 package compat
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/MoeForge/moego/ojson"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 )
 
 // NormalizeOpenCodeTools ports the deployed tool-declaration conflict gate.
 // Additional tools are promoted once and removed from input: the new upstream
 // walker would otherwise re-read them, including untrusted user-role records.
+// raw must be valid JSON; unrelated models are returned without a copy.
 func NormalizeOpenCodeTools(raw []byte) ([]byte, error) {
-	var probe struct {
-		Model string `json:"model"`
+	model := util.GetGJSONBytesNoCopy(raw, "model")
+	if model.Exists() && model.Type != ojson.String && model.Type != ojson.Null {
+		return nil, fmt.Errorf("model must be a string")
 	}
-	if err := json.Unmarshal(raw, &probe); err != nil {
-		return nil, err
-	}
-	if !strings.HasPrefix(probe.Model, "opencode/") {
-		return append([]byte(nil), raw...), nil
+	if !strings.HasPrefix(model.String(), "opencode/") {
+		return raw, nil
 	}
 	return NormalizeResponsesTools(raw)
 }
 
 // NormalizeResponsesTools promotes trusted Codex tool discovery records while
-// preserving native namespaces, custom tools and replay items.
+// preserving native namespaces, custom tools and replay items. Only the tool
+// declarations are decoded; every other input item is copied verbatim, so the
+// cost does not depend on image or history size. raw must be valid JSON.
 func NormalizeResponsesTools(raw []byte) ([]byte, error) {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var body map[string]any
-	if err := decoder.Decode(&body); err != nil {
-		return nil, err
-	}
-	input, ok := body["input"].([]any)
-	if !ok {
-		return append([]byte(nil), raw...), nil
-	}
-	tools, trusted, sawAdditional := []any{}, false, false
-	var snapshots [][]any
-	if value, exists := body["tools"]; exists {
-		tools, ok = value.([]any)
-		if !ok {
-			return nil, fmt.Errorf("tools must be an array")
+	var input, current ojson.Result
+	util.ParseGJSONBytesNoCopy(raw).ForEach(func(key, value ojson.Result) bool {
+		switch key.String() {
+		case "input":
+			input = value
+		case "tools":
+			current = value
 		}
+		return true
+	})
+	if !input.IsArray() {
+		return raw, nil
 	}
-	retained := make([]any, 0, len(input))
-	for _, item := range input {
-		object, ok := item.(map[string]any)
-		if !ok || object["type"] != "additional_tools" {
-			retained = append(retained, item)
-			continue
+	if current.Exists() && !current.IsArray() {
+		return nil, fmt.Errorf("tools must be an array")
+	}
+	trusted, sawAdditional := false, false
+	var snapshots []string
+	retained := make([]string, 0, 64)
+	retainedBytes := 0
+	var failure error
+	input.ForEach(func(_, item ojson.Result) bool {
+		kind := item.Get("type")
+		if !item.IsObject() || kind.Type != ojson.String || kind.String() != "additional_tools" {
+			retained = append(retained, item.Raw)
+			retainedBytes += len(item.Raw) + 1
+			return true
 		}
 		sawAdditional = true
-		if object["role"] != "developer" && object["role"] != "system" {
-			continue
+		role := item.Get("role")
+		if role.Type != ojson.String || role.String() != "developer" && role.String() != "system" {
+			return true
 		}
-		declarations, ok := object["tools"].([]any)
-		if !ok {
-			return nil, fmt.Errorf("additional_tools.tools must be an array")
+		declarations := item.Get("tools")
+		if !declarations.IsArray() {
+			failure = fmt.Errorf("additional_tools.tools must be an array")
+			return false
 		}
 		trusted = true
-		snapshots = append(snapshots, declarations)
+		snapshots = append(snapshots, declarations.Raw)
+		return true
+	})
+	if failure != nil {
+		return nil, failure
 	}
 	if !sawAdditional {
-		return append([]byte(nil), raw...), nil
+		return raw, nil
 	}
+	doc := ojson.NewDoc(raw)
 	if trusted {
-		var err error
+		tools := []any{}
+		if current.Exists() {
+			if err := decodeDeclarations(current.Raw, &tools); err != nil {
+				return nil, err
+			}
+		}
 		// Top-level tools describe the current runtime. Historical discovery
 		// snapshots fill missing identities, newest first, as tools evolve.
 		selected := make(map[string]bool)
-		tools, err = deduplicate(tools, "", make(map[string]toolDeclaration), selected)
+		tools, err := deduplicate(tools, "", make(map[string]toolDeclaration), selected)
 		if err != nil {
 			return nil, err
 		}
 		for i := len(snapshots) - 1; i >= 0; i-- {
-			additional, err := deduplicate(snapshots[i], "", make(map[string]toolDeclaration), selected)
+			var declarations []any
+			if err := decodeDeclarations(snapshots[i], &declarations); err != nil {
+				return nil, err
+			}
+			additional, err := deduplicate(declarations, "", make(map[string]toolDeclaration), selected)
 			if err != nil {
 				return nil, err
 			}
 			tools = append(tools, additional...)
 		}
-		body["tools"] = tools
+		encoded, err := json.Marshal(tools)
+		if err != nil {
+			return nil, err
+		}
+		if err := doc.SetRaw("tools", string(encoded)); err != nil {
+			return nil, err
+		}
 	}
-	body["input"] = retained
-	return json.Marshal(body)
+	var rebuilt strings.Builder
+	rebuilt.Grow(retainedBytes + 2)
+	rebuilt.WriteByte('[')
+	for i, item := range retained {
+		if i > 0 {
+			rebuilt.WriteByte(',')
+		}
+		rebuilt.WriteString(item)
+	}
+	rebuilt.WriteByte(']')
+	if err := doc.SetRaw("input", rebuilt.String()); err != nil {
+		return nil, err
+	}
+	return doc.Bytes(), nil
+}
+
+// decodeDeclarations keeps numbers exact so schemas round-trip unchanged.
+func decodeDeclarations(raw string, target *[]any) error {
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	return decoder.Decode(target)
 }
 
 type toolDeclaration struct {

@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -21,6 +20,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/compat"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/nativegemini"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 )
@@ -83,7 +83,7 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 			}
 			return
 		}
-		if !ojson.ValidBytes(body) || !ojson.ParseBytes(body).IsObject() {
+		if !ojson.ValidBytes(body) || !util.ParseGJSONBytesNoCopy(body).IsObject() {
 			abort(c, http.StatusBadRequest, "request body must be a JSON object")
 			return
 		}
@@ -193,27 +193,22 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 
 // Different JSON readers must not route/account for different occurrences of
 // model. Reject duplicates, including escaped-equivalent top-level key names.
+// body must already be a valid JSON object; members are walked without copying.
 func requestModel(body []byte) (string, error) {
-	d := json.NewDecoder(bytes.NewReader(body))
-	if _, err := d.Token(); err != nil {
-		return "", err
-	}
-	model, found := "", false
-	for d.More() {
-		key, err := d.Token()
-		if err != nil {
-			return "", err
+	model, found, ambiguous := "", false, false
+	util.ParseGJSONBytesNoCopy(body).ForEach(func(key, value ojson.Result) bool {
+		if key.String() != "model" {
+			return true
 		}
-		var value json.RawMessage
-		if err := d.Decode(&value); err != nil {
-			return "", err
+		if found || value.Type != ojson.String {
+			ambiguous = true
+			return false
 		}
-		if key == "model" {
-			if found || json.Unmarshal(value, &model) != nil {
-				return "", errors.New("ambiguous model")
-			}
-			found = true
-		}
+		model, found = strings.Clone(value.String()), true
+		return true
+	})
+	if ambiguous {
+		return "", errors.New("ambiguous model")
 	}
 	if !found || strings.TrimSpace(model) == "" || len(model) > 1024 || strings.IndexFunc(model, unicode.IsControl) >= 0 {
 		return "", errors.New("missing or invalid model")
