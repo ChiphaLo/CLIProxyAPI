@@ -131,7 +131,7 @@ func (e *OpenAICompatExecutor) executeNativeResponses(ctx context.Context, auth 
 	var param any
 	out, err := p.bridge.Response(data)
 	if err != nil {
-		return result, statusErr{code: 502, msg: "Native Responses tool contract is invalid"}
+		return result, statusErr{code: 502, msg: helps.NativeResponsesContractMessage(err, data)}
 	}
 	if p.format != sdktranslator.FormatOpenAIResponse {
 		out = sdktranslator.TranslateNonStream(ctx, sdktranslator.FormatOpenAIResponse, p.format, req.Model, p.original, p.body, out, &param)
@@ -219,7 +219,7 @@ func (e *OpenAICompatExecutor) executeNativeResponsesStream(ctx context.Context,
 			}
 			events, errEvent := p.bridge.Event(data)
 			if errEvent != nil {
-				fail("Native Responses tool contract is invalid")
+				fail(helps.NativeResponsesContractMessage(errEvent, data))
 				return false
 			}
 			if kind == "response.completed" || kind == "response.incomplete" {

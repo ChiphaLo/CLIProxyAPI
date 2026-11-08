@@ -145,3 +145,31 @@ func TestNativeResponsesCodeModePayloadRulesAreFinal(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeResponsesUndeclaredToolReportsReason(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"function_call\",\"name\":\"view_image\",\"id\":\"fc_bad\",\"call_id\":\"call_bad\",\"arguments\":\"private-argument\"}}\n\n")
+	}))
+	defer server.Close()
+	executor := NewOpenAICompatExecutor("fixture", &config.Config{})
+	auth := &coreauth.Auth{ID: "fixture", Attributes: map[string]string{"base_url": server.URL, "upstream_protocol": "responses"}}
+	result, err := executor.ExecuteStream(context.Background(), auth, coreexecutor.Request{Model: "fixture", Payload: []byte(`{"input":"test","tools":[` + nativeResponsesTool + `]}`)}, coreexecutor.Options{SourceFormat: sdktranslator.FormatOpenAIResponse})
+	if err != nil {
+		t.Fatal(err)
+	}
+	failed := false
+	for chunk := range result.Chunks {
+		if chunk.Err == nil {
+			continue
+		}
+		failed = true
+		message := chunk.Err.Error()
+		if !strings.Contains(message, "undeclared_tool; event=response.output_item.added; tool=view_image") || strings.Contains(message, "private-argument") {
+			t.Fatalf("unsafe or missing diagnostic: %s", message)
+		}
+	}
+	if !failed {
+		t.Fatal("undeclared tool was accepted")
+	}
+}

@@ -17,7 +17,9 @@ import (
 
 const MuseFormatError = "Upstream Muse returned an invalid, conflicting or undeclared tool call; this response cannot be completed safely."
 
-const nativeCodeModeInstructions = `CODE-MODE TOOL ROUTING: Invoke only tools explicitly declared in the request's tools array. APIs documented as tools.* are JavaScript members, not additional top-level tool declarations. For shell commands, call functions__exec (client name functions.exec), with a single value string containing JavaScript that invokes tools.exec_command. Never emit exec_command as a top-level call based on its documentation inside functions.exec. Example arguments: {"value":"const r = await tools.exec_command({cmd: 'echo hello'}); text(r.output);"}. Results must be emitted with text(...); a last expression is not displayed. console.log and print are unavailable. Do not throw an error to display a successful tool result. Follow the same code-mode routing for other documented tools.* APIs; keep all other explicitly declared tools available.`
+const nativeCodeModeInstructions = `CODE-MODE TOOL ROUTING: Invoke only tools explicitly declared in the request's tools array. Every API documented inside functions.exec, under tools.*, must run as JavaScript inside functions__exec (client name functions.exec). This applies to file reads, shell commands, image viewing, MCP APIs and all other documented nested APIs. Their documentation does not declare additional top-level tools. Put the JavaScript into the single value string. Never emit a documented nested API such as exec_command as a separate top-level call. Example arguments: {"value":"const r = await tools.exec_command({cmd: 'echo hello'}); text(r.output);"}. Emit text results with text(...) and image results with image(...); returning a value or leaving a last expression does not display it. console.log and print are unavailable. Do not throw an error to display a successful result. Keep all other explicitly declared tools available.`
+
+const nativeCodeModeImageInstructions = `CODE-MODE IMAGE OUTPUT: The documented view_image API must be called inside functions__exec, not as a top-level tool. Forward its returned image to the model: const result = await tools.view_image({path: 'absolute/image/path.png'}); image(result.image_url);. Printing a caption such as "viewing" or "ok" does not display the image. Only use APIs actually documented in the current functions.exec declaration.`
 
 var museName = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
@@ -141,6 +143,7 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 	}
 	flattened := make([]json.RawMessage, 0)
 	codeMode := false
+	codeModeImages := false
 	var flatten func(gjson.Result, string, int) error
 	flatten = func(list gjson.Result, ns string, depth int) error {
 		if !list.IsArray() || depth > 16 {
@@ -196,6 +199,7 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 				}
 				if native && toolNS == "functions" && name == "exec" && strings.Contains(description, "tools.exec_command") && strings.Contains(description, "text(") {
 					codeMode = true
+					codeModeImages = strings.Contains(description, "### `view_image`") && strings.Contains(description, "image_url")
 					// Nested code-mode APIs are documentation, not callable wire tools.
 					description = "CODE-MODE CALL CONTRACT: Call this declared tool using the single value string containing raw JavaScript. APIs documented as tools.* (including tools.exec_command) must be invoked inside that JavaScript; never emit them as separate top-level tool calls. Emit results explicitly with text(...). The last expression is not displayed. console.log and print are unavailable; do not throw errors to display successful results. Example value: const r = await tools.exec_command({cmd: 'echo hello'}); text(r.output);\n\n" + description
 				}
@@ -216,11 +220,15 @@ func prepareNativeTools(raw []byte, refs *MuseReferences, scope string, native b
 	}
 	if codeMode {
 		instructions := gjson.GetBytes(raw, "instructions").String()
-		if !strings.Contains(instructions, nativeCodeModeInstructions) {
+		guidance := nativeCodeModeInstructions
+		if codeModeImages {
+			guidance += "\n\n" + nativeCodeModeImageInstructions
+		}
+		if !strings.Contains(instructions, guidance) {
 			if instructions != "" {
 				instructions = "\n\n" + instructions
 			}
-			raw, _ = sjson.SetBytes(raw, "instructions", nativeCodeModeInstructions+instructions)
+			raw, _ = sjson.SetBytes(raw, "instructions", guidance+instructions)
 		}
 	}
 	choice := gjson.GetBytes(raw, "tool_choice")

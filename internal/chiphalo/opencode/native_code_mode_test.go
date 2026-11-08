@@ -54,3 +54,36 @@ func TestNativeResponsesCodeModeLeavesOtherToolsUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeResponsesCodeModeImageGuidance(t *testing.T) {
+	for _, imageAPI := range []bool{false, true} {
+		description := "Run tools.exec_command inside JavaScript and text(value) for output."
+		if imageAPI {
+			description += "\n### `view_image`\nReturns an object containing image_url."
+		}
+		request, _ := json.Marshal(map[string]any{
+			"model": "fixture", "instructions": "Keep policy.", "input": "Inspect an image.",
+			"tools": []any{map[string]any{"type": "namespace", "name": "functions", "tools": []any{
+				map[string]any{"type": "custom", "name": "exec", "description": description},
+			}}},
+		})
+		body, bridge, err := PrepareNativeResponses(request, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := bridge.BindFinal(body); err != nil {
+			t.Fatal(err)
+		}
+		instructions := gjson.GetBytes(body, "instructions").String()
+		if strings.Contains(instructions, nativeCodeModeImageInstructions) != imageAPI || !strings.HasSuffix(instructions, "\n\nKeep policy.") {
+			t.Fatal("image guidance did not follow the current documented API")
+		}
+		if imageAPI && !strings.Contains(instructions, "image(result.image_url)") {
+			t.Fatal("image emission example missing")
+		}
+		call := []byte(`{"type":"response.output_item.added","item":{"type":"function_call","id":"fc_bad","call_id":"call_bad","name":"view_image","arguments":""}}`)
+		if _, err := bridge.Event(call); err == nil {
+			t.Fatal("nested image API became a top-level tool")
+		}
+	}
+}
