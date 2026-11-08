@@ -114,7 +114,7 @@ func TestReceiptsUseOnlyLegacyRawUsageAndSelectedAccount(t *testing.T) {
 	if err := json.Unmarshal(data, &row); err != nil {
 		t.Fatal(err)
 	}
-	if row.TS != stamp.Unix() || row.Input != 1001 || row.Output != 137 || row.Cached != 701 || row.Write != 23 || row.ModelMismatch || row.OAuthAccountID != "codex2" || row.DurationMS != 2000 || row.TTFTMS != 1000 || row.OutputTPS != 68.5 {
+	if row.TS != stamp.Unix() || row.Input != 1001 || row.Output != 137 || row.Cached != 701 || row.Write != 23 || row.ModelMismatch || row.OAuthAccountID != "codex2" || row.DurationMS != 2000 || row.TTFTMS != 2000 || row.UpstreamTTFTMS != 1000 || row.OutputTPS != 68.5 {
 		t.Fatalf("changed legacy receipt: %+v", row)
 	}
 	amount := billing.Cost(row, map[string]*billing.Rates{"gpt-6-luna": {Input: .1, Cached: .01, Write: .125, Output: .5}})

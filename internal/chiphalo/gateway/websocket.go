@@ -68,6 +68,7 @@ func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
 		}
 	}
 	hook.AdmitTurn = func(parent context.Context, body []byte) (context.Context, []byte, string, error) {
+		started := time.Now()
 		deny := func(status int, message string) (context.Context, []byte, string, error) {
 			return nil, nil, "", &handlers.AdmissionError{Status: status, Message: message}
 		}
@@ -113,7 +114,7 @@ func websocketAdmission(c *gin.Context, options AdmissionOptions) bool {
 		if options.ChargeTurn != nil && !options.ChargeTurn(id) {
 			return deny(429, "CPA websocket turn rate limit reached")
 		}
-		meta := requestMetadata{Model: model, KeyID: id, IP: ip, Path: path, Started: time.Now()}
+		meta := requestMetadata{Model: model, KeyID: id, IP: ip, Path: path, Started: started}
 		decorateSnapshot := options.Decorate
 		if options.SnapshotDecorator != nil {
 			decorateSnapshot = options.SnapshotDecorator()

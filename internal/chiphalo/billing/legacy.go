@@ -43,6 +43,7 @@ type Row struct {
 	ModelMismatch         bool    `json:"model_mismatch,omitempty"`
 	DurationMS            int64   `json:"duration_ms"`
 	TTFTMS                int64   `json:"ttft_ms"`
+	UpstreamTTFTMS        int64   `json:"upstream_ttft_ms,omitempty"`
 	OutputTPS             float64 `json:"output_tps"`
 }
 
@@ -132,7 +133,7 @@ func DecodeRow(raw []byte) (Row, error) {
 	// Typed metadata is decoded separately so numeric-string legacy counts work.
 	for key, target := range map[string]*int64{"ts": &row.TS, "input": &row.Input,
 		"cached": &row.Cached, "write": &row.Write, "output": &row.Output,
-		"duration_ms": &row.DurationMS, "ttft_ms": &row.TTFTMS} {
+		"duration_ms": &row.DurationMS, "ttft_ms": &row.TTFTMS, "upstream_ttft_ms": &row.UpstreamTTFTMS} {
 		value, errNumber := legacyInt(object[key])
 		if errNumber != nil {
 			return Row{}, fmt.Errorf("%s: %w", key, errNumber)

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
-	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/compat"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
@@ -46,10 +45,6 @@ func (e *OpenAICompatExecutor) prepareNativeResponses(ctx context.Context, req c
 	body, err = helps.ApplyRequestThinking(body, req, opts, from.String(), to.String(), e.Identifier(), changed)
 	if err != nil {
 		return nil, err
-	}
-	body, err = compat.NormalizeResponsesTools(body)
-	if err != nil {
-		return nil, statusErr{code: 400, msg: err.Error()}
 	}
 	body = helps.SetStringIfDifferent(body, "model", model)
 	body = helps.SetBoolIfDifferent(body, "stream", stream)

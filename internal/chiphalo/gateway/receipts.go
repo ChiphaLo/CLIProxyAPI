@@ -108,10 +108,20 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 		// Queue lag must not move a receipt across an official quota boundary.
 		completed = record.RequestedAt.Add(record.Latency)
 	}
+	duration := max(completed.Sub(meta.Started), 0)
+	ttft := time.Duration(0)
+	if record.TTFT > 0 {
+		ttft = record.TTFT
+		if !record.RequestedAt.IsZero() && !meta.Started.IsZero() {
+			ttft += max(record.RequestedAt.Sub(meta.Started), 0)
+		}
+		ttft = min(ttft, duration)
+	}
 	row, err := billing.FromRawUsage(raw, billing.Row{
 		TS: completed.Unix(), Model: meta.Model, KeyID: meta.KeyID, ClientIP: meta.IP, Path: meta.Path,
 		RequestID: record.TraceID, RoutedModel: routed, UpstreamReportedModel: record.ResponseModel,
-		DurationMS: completed.Sub(meta.Started).Milliseconds(), TTFTMS: record.TTFT.Milliseconds(),
+		DurationMS: duration.Milliseconds(), TTFTMS: ttft.Milliseconds(),
+		UpstreamTTFTMS: max(record.TTFT.Milliseconds(), 0),
 	})
 	if err != nil {
 		s.accountingGap(ctx, record, "usage_invalid")
