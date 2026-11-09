@@ -75,10 +75,11 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	_ = outDoc.Set("max_tokens", defaultClaudeResponsesMaxTokensForModel(modelName))
 
 	root := util.ParseGJSONBytesNoCopy(rawJSON)
-	inlineResizeNotices := responsesInlineImageResizeNotices(modelName, root.Get("input"))
+	get := util.IndexRootFields(root)
+	inlineResizeNotices := responsesInlineImageResizeNotices(modelName, get("input"))
 
 	// Convert OpenAI Responses reasoning.effort to Claude thinking config.
-	if v := root.Get("reasoning.effort"); v.Exists() {
+	if v := get("reasoning.effort"); v.Exists() {
 		effort := strings.ToLower(strings.TrimSpace(v.String()))
 		if effort != "" {
 			mi := registry.LookupModelInfo(modelName, "claude")
@@ -132,7 +133,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	_ = outDoc.Set("model", modelName)
 
 	// Max tokens
-	if mot := root.Get("max_output_tokens"); mot.Exists() && mot.Type != ojson.Null {
+	if mot := get("max_output_tokens"); mot.Exists() && mot.Type != ojson.Null {
 		val := mot.Int()
 		if info := registry.LookupModelInfo(modelName, "claude"); info != nil && info.MaxCompletionTokens > 0 && val > int64(info.MaxCompletionTokens) {
 			val = int64(info.MaxCompletionTokens)
@@ -144,7 +145,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	_ = outDoc.Set("stream", stream)
 
 	// Service Tier -> Speed
-	if st := root.Get("service_tier"); st.Type == ojson.String && st.String() == "priority" {
+	if st := get("service_tier"); st.Type == ojson.String && st.String() == "priority" {
 		_ = outDoc.Set("speed", "fast")
 	}
 
@@ -157,8 +158,8 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	// it, and still owns the final placement of the leading blocks. Both paths
 	// keep source text, block boundaries and cache_control, and never downgrade
 	// system-level items to user text.
-	messageCapacity := root.Get("input.#").Int()
-	if messageCapacity == 0 && root.Get("input").Type == ojson.String {
+	messageCapacity := get("input.#").Int()
+	if messageCapacity == 0 && get("input").Type == ojson.String {
 		messageCapacity = 1
 	}
 	messageBlocks := common.NewRawArrayItems(messageCapacity)
@@ -171,7 +172,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 		_ = blockDoc.Set("text", text)
 		systemBlocks = append(systemBlocks, blockDoc.Bytes())
 	}
-	if instr := root.Get("instructions"); instr.Type == ojson.String {
+	if instr := get("instructions"); instr.Type == ojson.String {
 		appendSystemText(instr.String())
 	}
 	type responsesSystemInputEntry struct {
@@ -182,7 +183,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	topLevelSystemItems := topLevelSystemItemsFor(ctx, modelName)
 	var systemInputEntries []responsesSystemInputEntry
 	systemInputEntryByIndex := map[int]int{}
-	if input := root.Get("input"); input.IsArray() {
+	if input := get("input"); input.IsArray() {
 		conversationStarted := false
 		itemIndex := -1
 		input.ForEach(func(_, item ojson.Result) bool {
@@ -205,11 +206,12 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 		})
 	}
 
-	names := buildClaudeToolNames(root, toolSearch)
-	winners := responsesToolWinners(root, toolSearch)
+	descriptors := responsesToolDescriptors(root, toolSearch)
+	winners := selectResponsesToolWinners(descriptors)
+	names := buildClaudeToolNamesWithWinners(root, winners, toolSearch)
 	// Native tool search declares discovered tools as deferred and replays
 	// search results as tool_reference blocks, which keeps the cached prefix.
-	nativeToolSearch := responsesClientToolSearchWins(responsesToolDescriptors(root, toolSearch))
+	nativeToolSearch := responsesClientToolSearchWins(descriptors)
 
 	// input array processing
 	var pendingRole string
@@ -324,7 +326,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	}
 
 	var inputItems []ojson.Result
-	if input := root.Get("input"); input.Exists() {
+	if input := get("input"); input.Exists() {
 		if input.IsArray() {
 			inputItems = common.NormalizeResponsesToolCallOutputs(input.Array())
 		} else if input.Type == ojson.String && strings.TrimSpace(input.String()) != "" {
@@ -693,9 +695,9 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	}
 	pendingSystemEntryIndices = nil
 	// The structured-output instruction stays the last system block.
-	formatResult := root.Get("text.format")
+	formatResult := get("text.format")
 	if !formatResult.Exists() {
-		formatResult = root.Get("response_format")
+		formatResult = get("response_format")
 	}
 	if formatInstruction := common.BuildClaudeStructuredOutputInstruction(formatResult); formatInstruction != "" {
 		appendSystemText(formatInstruction)
@@ -737,7 +739,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	// The deferred anchor goes between declared and discovered tools, so each
 	// discovery only appends to tools[].
 	anchorIndex := -1
-	for _, descriptor := range responsesToolDescriptors(root, toolSearch) {
+	for _, descriptor := range descriptors {
 		winner, ok := winners[descriptor.name]
 		if !ok || winner.order != descriptor.order {
 			continue
@@ -772,7 +774,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 			toolItems = append(toolItems[:anchorIndex], append([][]byte{anchor}, toolItems[anchorIndex:]...)...)
 		}
 	}
-	toolNameMap = responsesToolNameMap(root, includedToolNames, toolSearch)
+	toolNameMap = responsesToolNameMapFromDescriptors(descriptors, winners, includedToolNames)
 	if len(toolItems) > 0 {
 		_ = outDoc.SetRawBytes("tools", common.JoinRawArray(toolItems))
 	}
@@ -780,7 +782,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	// Map tool_choice similar to Chat Completions translator (optional in docs, safe to handle)
 	toolChoiceNone := false
 	forcedToolFilteredOut := false
-	if toolChoice := root.Get("tool_choice"); toolChoice.Exists() {
+	if toolChoice := get("tool_choice"); toolChoice.Exists() {
 		switch toolChoice.Type {
 		case ojson.String:
 			switch toolChoice.String() {
@@ -842,7 +844,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	// mirroring the Chat Completions translator. It is not added when the
 	// effective choice is none, when no tool survived conversion, or when a
 	// forced tool was filtered out (no tool_choice was produced for it).
-	if parallelToolCalls := root.Get("parallel_tool_calls"); parallelToolCalls.Type == ojson.False && !toolChoiceNone && !forcedToolFilteredOut && len(toolItems) > 0 {
+	if parallelToolCalls := get("parallel_tool_calls"); parallelToolCalls.Type == ojson.False && !toolChoiceNone && !forcedToolFilteredOut && len(toolItems) > 0 {
 		if choice := outDoc.Get("tool_choice"); choice.Exists() {
 			if choice.Get("type").String() != "none" {
 				_ = outDoc.Set("tool_choice.disable_parallel_tool_use", true)
@@ -1703,28 +1705,28 @@ type responsesToolSource struct {
 
 func responsesToolSources(root ojson.Result, toolSearch bool) []responsesToolSource {
 	var sources []responsesToolSource
+	get := util.IndexRootFields(root)
 	appendSource := func(tools ojson.Result, priority int) {
 		if tools.Exists() && tools.IsArray() {
 			sources = append(sources, responsesToolSource{tools: tools, priority: priority})
 		}
 	}
 
-	appendSource(root.Get("tools"), 0)
-	if input := root.Get("input"); input.Exists() && input.IsArray() {
+	appendSource(get("tools"), 0)
+	if input := get("input"); input.Exists() && input.IsArray() {
+		var discovered []responsesToolSource
 		input.ForEach(func(_, item ojson.Result) bool {
-			if item.Get("type").String() == "additional_tools" {
+			switch item.Get("type").String() {
+			case "additional_tools":
 				appendSource(item.Get("tools"), 1)
+			case "tool_search_output":
+				if tools := item.Get("tools"); toolSearch && tools.Exists() && tools.IsArray() {
+					discovered = append(discovered, responsesToolSource{tools: tools, priority: responsesDiscoveredToolPriority})
+				}
 			}
 			return true
 		})
-		if toolSearch {
-			input.ForEach(func(_, item ojson.Result) bool {
-				if item.Get("type").String() == "tool_search_output" {
-					appendSource(item.Get("tools"), responsesDiscoveredToolPriority)
-				}
-				return true
-			})
-		}
+		sources = append(sources, discovered...)
 	}
 	return sources
 }
@@ -1869,8 +1871,12 @@ func responsesToolDescriptorPrecedes(left, right responsesToolDescriptor) bool {
 }
 
 func responsesToolWinners(root ojson.Result, toolSearch bool) map[string]responsesToolDescriptor {
+	return selectResponsesToolWinners(responsesToolDescriptors(root, toolSearch))
+}
+
+func selectResponsesToolWinners(descriptors []responsesToolDescriptor) map[string]responsesToolDescriptor {
 	winners := map[string]responsesToolDescriptor{}
-	for _, descriptor := range responsesToolDescriptors(root, toolSearch) {
+	for _, descriptor := range descriptors {
 		current, exists := winners[descriptor.name]
 		if !exists || responsesToolDescriptorPrecedes(descriptor, current) {
 			winners[descriptor.name] = descriptor
@@ -1880,9 +1886,12 @@ func responsesToolWinners(root ojson.Result, toolSearch bool) map[string]respons
 }
 
 func responsesToolNameMap(root ojson.Result, acceptedToolNames map[string]struct{}, toolSearch bool) map[string]string {
-	toolNameMap := map[string]string{}
 	descriptors := responsesToolDescriptors(root, toolSearch)
-	winners := responsesToolWinners(root, toolSearch)
+	return responsesToolNameMapFromDescriptors(descriptors, selectResponsesToolWinners(descriptors), acceptedToolNames)
+}
+
+func responsesToolNameMapFromDescriptors(descriptors []responsesToolDescriptor, winners map[string]responsesToolDescriptor, acceptedToolNames map[string]struct{}) map[string]string {
+	toolNameMap := map[string]string{}
 
 	// Direct tool names are canonical aliases and must win over namespace
 	// child aliases, regardless of declaration order.

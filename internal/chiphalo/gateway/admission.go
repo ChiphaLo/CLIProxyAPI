@@ -73,7 +73,17 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 			abort(c, http.StatusRequestEntityTooLarge, "request body exceeds 64 MiB")
 			return
 		}
-		body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, MaxBodyBytes))
+		reader := http.MaxBytesReader(c.Writer, c.Request.Body, MaxBodyBytes)
+		var body []byte
+		var err error
+		if c.Request.ContentLength > 0 {
+			var buffer bytes.Buffer
+			buffer.Grow(int(c.Request.ContentLength) + bytes.MinRead)
+			_, err = buffer.ReadFrom(reader)
+			body = buffer.Bytes()
+		} else {
+			body, err = io.ReadAll(reader)
+		}
 		if err != nil {
 			var tooLarge *http.MaxBytesError
 			if errors.As(err, &tooLarge) {
@@ -184,6 +194,7 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 		c.Request = c.Request.WithContext(ctx)
 		c.Request.Body = io.NopCloser(bytes.NewReader(body))
 		c.Request.ContentLength = int64(len(body))
+		c.Set(gin.BodyBytesKey, body)
 		c.Next()
 		if continuation != nil && c.Request.Context().Err() == nil {
 			options.Continuations.save(conversationID, body, continuation.completed(), selected.Load().(string))

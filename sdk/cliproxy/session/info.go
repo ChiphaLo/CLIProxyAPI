@@ -105,6 +105,7 @@ func ExtractSessionInfo(headers http.Header, payload []byte, metadata map[string
 	var reqRoot sessionObject
 	var hasNestedReq bool
 	var parentCandidate string
+	var claudeID, claudeParent, claudeAgent string
 
 	if len(payload) > 0 {
 		root = newSessionObject(util.ParseGJSONBytesNoCopy(payload))
@@ -166,7 +167,8 @@ func ExtractSessionInfo(headers http.Header, payload []byte, metadata map[string
 			}
 		}
 		if parentCandidate == "" {
-			parentCandidate = ClaudeMetadataParentSessionID(payload)
+			claudeID, claudeParent, claudeAgent = claudeMetadataIdentities(root)
+			parentCandidate = claudeParent
 		}
 	}
 
@@ -187,7 +189,7 @@ func ExtractSessionInfo(headers http.Header, payload []byte, metadata map[string
 			}
 		}
 		if agentID == "" {
-			_, _, agentID = ClaudeMetadataIdentities(payload)
+			_, _, agentID = claudeMetadataIdentities(root)
 		}
 		parentAgentID := sessionHeaderValue(headers, "X-Claude-Code-Parent-Agent-Id")
 		if parentAgentID == "" && root.Exists() {
@@ -224,7 +226,10 @@ func ExtractSessionInfo(headers http.Header, payload []byte, metadata map[string
 
 	// 2. Claude Code metadata.user_id in payload (outranks generic headers)
 	if len(payload) > 0 {
-		if sid, parentSID, agentID := ClaudeMetadataIdentities(payload); sid != "" {
+		if claudeID == "" {
+			claudeID, claudeParent, claudeAgent = claudeMetadataIdentities(root)
+		}
+		if sid, parentSID, agentID := claudeID, claudeParent, claudeAgent; sid != "" {
 			info.ClientType = "claude"
 			if agentID == "" {
 				agentID = sessionHeaderValue(headers, "X-Claude-Code-Agent-Id")

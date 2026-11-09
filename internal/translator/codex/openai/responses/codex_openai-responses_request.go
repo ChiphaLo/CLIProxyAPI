@@ -3,6 +3,7 @@ package responses
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
@@ -13,6 +14,7 @@ import (
 
 func ConvertOpenAIResponsesRequestToCodex(modelName string, inputRawJSON []byte, _ bool) ([]byte, error) {
 	rawJSON := inputRawJSON
+	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(rawJSON))
 	var doc *ojson.Doc
 	ensureDoc := func() *ojson.Doc {
 		if doc == nil {
@@ -21,30 +23,30 @@ func ConvertOpenAIResponsesRequestToCodex(modelName string, inputRawJSON []byte,
 		return doc
 	}
 
-	inputResult := util.GetGJSONBytesNoCopy(rawJSON, "input")
+	inputResult := get("input")
 	if inputResult.Type == ojson.String {
 		input, _ := ojson.SetBytes([]byte(`[{"type":"message","role":"user","content":[{"type":"input_text","text":""}]}]`), "0.content.0.text", inputResult.String())
 		_ = ensureDoc().SetRawBytes("input", input)
 		inputResult = util.ParseGJSONBytesNoCopy(input)
 	}
 
-	setCodexRequiredBoolDoc(rawJSON, ensureDoc, "stream", true)
-	setCodexRequiredBoolDoc(rawJSON, ensureDoc, "store", false)
-	if ojson.GetBytesNoCopy(rawJSON, "parallel_tool_calls").Type != ojson.False {
-		setCodexRequiredBoolDoc(rawJSON, ensureDoc, "parallel_tool_calls", true)
+	setCodexRequiredBoolDoc(get, ensureDoc, "stream", true)
+	setCodexRequiredBoolDoc(get, ensureDoc, "store", false)
+	if get("parallel_tool_calls").Type != ojson.False {
+		setCodexRequiredBoolDoc(get, ensureDoc, "parallel_tool_calls", true)
 	}
-	setCodexRequiredIncludeDoc(rawJSON, ensureDoc)
+	setCodexRequiredIncludeDoc(get, ensureDoc)
 	// Preserve max_output_tokens and fill it from legacy token limits when unset.
-	if maxOutputTokens := ojson.GetBytesNoCopy(rawJSON, "max_output_tokens"); !maxOutputTokens.Exists() || maxOutputTokens.Type == ojson.Null {
+	if maxOutputTokens := get("max_output_tokens"); !maxOutputTokens.Exists() || maxOutputTokens.Type == ojson.Null {
 		for _, path := range []string{"max_completion_tokens", "max_tokens"} {
-			if v := ojson.GetBytesNoCopy(rawJSON, path); v.Type == ojson.Number {
+			if v := get(path); v.Type == ojson.Number {
 				_ = ensureDoc().Set("max_output_tokens", v.Int())
 				break
 			}
 		}
 	}
-	deleteCodexRequestFieldsDoc(rawJSON, ensureDoc, "max_completion_tokens", "max_tokens", "temperature", "top_p")
-	if serviceTier := ojson.GetBytesNoCopy(rawJSON, "service_tier"); serviceTier.Exists() {
+	deleteCodexRequestFieldsDoc(get, ensureDoc, "max_completion_tokens", "max_tokens", "temperature", "top_p")
+	if serviceTier := get("service_tier"); serviceTier.Exists() {
 		if serviceTier.Type == ojson.String {
 			switch strings.ToLower(strings.TrimSpace(serviceTier.String())) {
 			case "priority", "fast":
@@ -63,12 +65,12 @@ func ConvertOpenAIResponsesRequestToCodex(modelName string, inputRawJSON []byte,
 		}
 	}
 
-	deleteCodexRequestFieldsDoc(rawJSON, ensureDoc, "truncation", "prompt_cache_options", "prompt_cache_retention")
+	deleteCodexRequestFieldsDoc(get, ensureDoc, "truncation", "prompt_cache_options", "prompt_cache_retention")
 	inputResult = stripCodexResponsesCacheBreakpointsDoc(rawJSON, inputResult, ensureDoc)
-	applyResponsesCompactionCompatibilityDoc(rawJSON, ensureDoc)
+	applyResponsesCompactionCompatibilityDoc(get, ensureDoc)
 
 	// Delete the user field as it is not supported by the Codex upstream.
-	deleteCodexRequestFieldsDoc(rawJSON, ensureDoc, "user")
+	deleteCodexRequestFieldsDoc(get, ensureDoc, "user")
 
 	// Convert role "system" to "developer" in input array to comply with Codex API requirements.
 	inputResult = convertSystemRoleToDeveloperDoc(inputResult, ensureDoc)
@@ -92,40 +94,28 @@ func normalizeEmptyFunctionCallArgumentsDoc(inputResult ojson.Result, ensureDoc 
 	if !inputResult.IsArray() {
 		return
 	}
-	items := inputResult.Array()
-	if len(items) == 0 {
-		return
-	}
-	changed := false
-	rebuilt := make([][]byte, 0, len(items))
-	for _, item := range items {
-		itemRaw := []byte(item.Raw)
+	index := -1
+	inputResult.ForEach(func(_, item ojson.Result) bool {
+		index++
 		if item.IsObject() && item.Get("type").String() == "function_call" {
 			if args := item.Get("arguments"); args.Type == ojson.String && strings.TrimSpace(args.String()) == "" {
-				if updated, errSet := ojson.SetBytes(itemRaw, "arguments", "{}"); errSet == nil {
-					itemRaw = updated
-					changed = true
-				}
+				_ = ensureDoc().Set("input."+strconv.Itoa(index)+".arguments", "{}")
 			}
 		}
-		rebuilt = append(rebuilt, itemRaw)
-	}
-	if !changed {
-		return
-	}
-	_ = ensureDoc().SetRawBytes("input", translatorcommon.JoinRawArray(rebuilt))
+		return true
+	})
 }
 
-func setCodexRequiredBoolDoc(rawJSON []byte, ensureDoc func() *ojson.Doc, path string, value bool) {
-	current := ojson.GetBytesNoCopy(rawJSON, path)
+func setCodexRequiredBoolDoc(get func(string) ojson.Result, ensureDoc func() *ojson.Doc, path string, value bool) {
+	current := get(path)
 	if value && current.Type == ojson.True || !value && current.Type == ojson.False {
 		return
 	}
 	_ = ensureDoc().Set(path, value)
 }
 
-func setCodexRequiredIncludeDoc(rawJSON []byte, ensureDoc func() *ojson.Doc) {
-	current := ojson.GetBytesNoCopy(rawJSON, "include")
+func setCodexRequiredIncludeDoc(get func(string) ojson.Result, ensureDoc func() *ojson.Doc) {
+	current := get("include")
 	includeSources := false
 	if current.IsArray() {
 		values := current.Array()
@@ -152,9 +142,9 @@ func setCodexRequiredIncludeDoc(rawJSON []byte, ensureDoc func() *ojson.Doc) {
 	_ = ensureDoc().SetRawBytes("include", encoded)
 }
 
-func deleteCodexRequestFieldsDoc(rawJSON []byte, ensureDoc func() *ojson.Doc, paths ...string) {
+func deleteCodexRequestFieldsDoc(get func(string) ojson.Result, ensureDoc func() *ojson.Doc, paths ...string) {
 	for _, path := range paths {
-		if !ojson.GetBytesNoCopy(rawJSON, path).Exists() {
+		if !get(path).Exists() {
 			continue
 		}
 		_ = ensureDoc().Delete(path)
@@ -265,8 +255,8 @@ func stripPromptCacheBreakpointFromContent(content ojson.Result) ([]byte, bool) 
 //
 // Compatibility strategy:
 // 1) Remove context_management before forwarding to Codex upstream.
-func applyResponsesCompactionCompatibilityDoc(rawJSON []byte, ensureDoc func() *ojson.Doc) {
-	if !ojson.GetBytesNoCopy(rawJSON, "context_management").Exists() {
+func applyResponsesCompactionCompatibilityDoc(get func(string) ojson.Result, ensureDoc func() *ojson.Doc) {
+	if !get("context_management").Exists() {
 		return
 	}
 	_ = ensureDoc().Delete("context_management")

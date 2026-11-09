@@ -378,8 +378,9 @@ func extractEffectiveServiceTier(payload []byte) string {
 	if len(payload) == 0 || !ojson.ValidBytes(payload) {
 		return ""
 	}
+	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(payload))
 	for _, path := range []string{"service_tier", "request.service_tier", "interaction.service_tier"} {
-		if node := ojson.GetBytesNoCopy(payload, path); node.Type == ojson.String {
+		if node := get(path); node.Type == ojson.String {
 			if tier := strings.TrimSpace(node.String()); tier != "" {
 				return strings.Clone(tier)
 			}

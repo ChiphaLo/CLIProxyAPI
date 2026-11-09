@@ -875,7 +875,7 @@ func (st *claudeToResponsesState) finalizeAssistantMessage(nextSeq func() int) [
 }
 
 func newClaudeToResponsesState(requestJSON []byte, toolSearch bool) *claudeToResponsesState {
-	root := util.ParseGJSONBytesNoCopy(bytes.Clone(requestJSON))
+	root := util.ParseGJSONBytesNoCopy(snapshotResponsesRequestMetadata(requestJSON))
 	winners := responsesToolWinners(root, toolSearch)
 	return &claudeToResponsesState{
 		ToolSearch:              toolSearch,

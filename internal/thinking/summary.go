@@ -37,9 +37,7 @@ func ExtractSummaryConfig(body []byte, format string) SummaryConfig {
 	if !summaryFormatSupported(normalized) || len(body) == 0 || !ojson.ValidBytes(body) {
 		return SummaryConfig{}
 	}
-	return extractSummaryConfigFromGetter(func(path string) ojson.Result {
-		return ojson.GetBytesNoCopy(body, path)
-	}, normalized)
+	return extractSummaryConfigFromGetter(util.IndexRootFields(util.ParseGJSONBytesNoCopy(body)), normalized)
 }
 
 // ExtractSummaryConfigDoc reads protocol-specific summary visibility intent from doc.

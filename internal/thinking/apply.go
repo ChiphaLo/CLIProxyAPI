@@ -1062,10 +1062,26 @@ func extractCodexUsageConfig(body []byte) ThinkingConfig {
 	if len(body) == 0 || !ojson.ValidBytes(body) {
 		return ThinkingConfig{}
 	}
-	if config := extractConfigurationUpdateConfig(body); hasThinkingConfig(config) {
+	var input, reasoning ojson.Result
+	util.ParseGJSONBytesNoCopy(body).ForEach(func(key, value ojson.Result) bool {
+		switch key.String() {
+		case "input":
+			if !input.Exists() {
+				input = value
+			}
+		case "reasoning":
+			if !reasoning.Exists() {
+				reasoning = value
+			}
+		}
+		return true
+	})
+	if config := extractConfigurationUpdateConfigFromInput(input); hasThinkingConfig(config) {
 		return config
 	}
-	return extractCodexConfig(body)
+	return extractCodexConfigFromGetter(func(path string) ojson.Result {
+		return reasoning.Get(strings.TrimPrefix(path, "reasoning."))
+	})
 }
 
 func extractCodexUsageConfigDoc(doc *ojson.Doc, docValid bool) ThinkingConfig {

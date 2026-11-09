@@ -24,7 +24,23 @@ func ReadRequestBody(c *gin.Context) ([]byte, error) {
 	if c != nil {
 		maxBytes = c.GetInt64(MaxRequestBodyBytesContextKey)
 	}
-	raw, err := c.GetRawData()
+	var raw []byte
+	var err error
+	if cached, exists := c.Get(gin.BodyBytesKey); exists {
+		raw, _ = cached.([]byte)
+	}
+	if raw == nil {
+		if c.Request != nil && c.Request.Body != nil && c.Request.ContentLength > 0 && c.Request.ContentLength <= 64<<20 {
+			// Reserve once for ordinary HTTP bodies instead of repeatedly growing
+			// io.ReadAll's buffer across a multi-megabyte inline attachment.
+			var buffer bytes.Buffer
+			buffer.Grow(int(c.Request.ContentLength) + bytes.MinRead)
+			_, err = buffer.ReadFrom(c.Request.Body)
+			raw = buffer.Bytes()
+		} else {
+			raw, err = c.GetRawData()
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -34,6 +50,9 @@ func ReadRequestBody(c *gin.Context) ([]byte, error) {
 		encoding = strings.TrimSpace(c.Request.Header.Get("Content-Encoding"))
 	}
 	if encoding == "" || strings.EqualFold(encoding, "identity") {
+		if maxBytes > 0 && int64(len(raw)) > maxBytes {
+			return nil, &http.MaxBytesError{Limit: maxBytes}
+		}
 		return raw, nil
 	}
 

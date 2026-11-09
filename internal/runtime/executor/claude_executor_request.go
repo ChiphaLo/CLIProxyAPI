@@ -171,6 +171,11 @@ func isManagedClaudeBeta(beta string) bool {
 // An empty body keeps the optimistic role=system default, matching the cloaking
 // policy for unknown and future model IDs.
 func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool) string {
+	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(body))
+	return claudeCodeCLIBetasWithLookup(body, requested, oauthToken, get, helps.IsClaudeProbeOrHelperRequest(body))
+}
+
+func claudeCodeCLIBetasWithLookup(body []byte, requested map[string]bool, oauthToken bool, get func(string) ojson.Result, isProbeOrHelper bool) string {
 	betas := make([]string, 0, len(claudeCodeCLIConstantBetas)+len(claudeCodeTrailingBetas)+10)
 	betas = append(betas, claudeCodeBeta)
 	if oauthToken {
@@ -179,14 +184,15 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 	if requested[claudeContext1MBeta] {
 		betas = append(betas, claudeContext1MBeta)
 	}
-	redactThinking := !claudeThinkingDisplaySet(body)
+	display := get("thinking.display")
+	redactThinking := display.Type != ojson.String || strings.TrimSpace(display.String()) == ""
 	for _, beta := range claudeCodeCLIConstantBetas {
 		if beta == claudeRedactThinkingBeta && !redactThinking {
 			continue
 		}
 		betas = append(betas, beta)
 	}
-	if !claudeUsesLegacySystemReminder(body) {
+	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) {
 		betas = append(betas, claudeMidConvSystemBeta)
 		if claudeIncludePerTurnControl(body, requested) {
 			betas = append(betas, claudePerTurnControlBeta)
@@ -194,7 +200,7 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 		if claudeIncludePerTurnTiming(body, requested) {
 			betas = append(betas, claudePerTurnTimingBeta)
 		}
-		if !isClaudeSonnet5Model(ojson.GetBytesNoCopy(body, "model").String()) {
+		if !isClaudeSonnet5Model(get("model").String()) {
 			betas = append(betas, claudeMidConvToolChangesBeta)
 		}
 		if claudeIncludeInlineTools(body, requested) {
@@ -216,22 +222,21 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 	if requested[claudeAdvancedToolUseBeta] || claudeBodyUsesAdvancedToolUse(body) {
 		betas = append(betas, claudeAdvancedToolUseBeta)
 	}
-	if !claudeUsesLegacySystemReminder(body) && claudeIncludeMidConvClearAt(body, requested) {
+	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) && claudeIncludeMidConvClearAt(body, requested) {
 		betas = append(betas, claudeMidConvSystemClearAtBeta)
 	}
-	if requested[claudeDangerousToolUseBeta] || ojson.GetBytesNoCopy(body, "safeguards").Exists() {
+	if requested[claudeDangerousToolUseBeta] || get("safeguards").Exists() {
 		betas = append(betas, claudeDangerousToolUseBeta)
 	}
-	if claudeRequestSupportsEffort(body, requested) {
+	if claudeRequestFieldsSupportEffort(get, isProbeOrHelper) {
 		betas = append(betas, claudeEffortBeta)
 	}
-	isProbeOrHelper := helps.IsClaudeProbeOrHelperRequest(body)
-	if !isProbeOrHelper && (requested[claudeServerSideFallbackBeta] || ojson.GetBytesNoCopy(body, "fallbacks").Exists()) {
+	if !isProbeOrHelper && (requested[claudeServerSideFallbackBeta] || get("fallbacks").Exists()) {
 		betas = append(betas, claudeServerSideFallbackBeta)
 	}
 	shouldIncludeFallbackCredit := requested[claudeFallbackCreditBeta] ||
-		ojson.GetBytesNoCopy(body, "fallback_credit_token").Exists() ||
-		(oauthToken && ojson.GetBytesNoCopy(body, "fallbacks").Exists())
+		get("fallback_credit_token").Exists() ||
+		(oauthToken && get("fallbacks").Exists())
 	if shouldIncludeFallbackCredit {
 		betas = append(betas, claudeFallbackCreditBeta)
 	}
@@ -243,9 +248,9 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 			betas = append(betas, beta)
 		}
 	}
-	thinkingType := ojson.GetBytesNoCopy(body, "thinking.type").String()
-	if requested[claudeThinkingBindingBeta] || ojson.GetBytesNoCopy(body, "thinking.block_binding").Exists() ||
-		(claudeModelUsesProgressDisplay(ojson.GetBytesNoCopy(body, "model").String()) && thinkingType == "adaptive") {
+	thinkingType := get("thinking.type").String()
+	if requested[claudeThinkingBindingBeta] || get("thinking.block_binding").Exists() ||
+		(claudeModelUsesProgressDisplay(get("model").String()) && thinkingType == "adaptive") {
 		betas = append(betas, claudeThinkingBindingBeta)
 	}
 	if !isProbeOrHelper && thinkingType != "disabled" && (requested[claudeThinkingDisplayUpdatesBeta] || claudeThinkingDisplayUpdates(body)) {
@@ -271,7 +276,7 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 	if requested[claudePromptCachingEvictBeta] || bytes.Contains(body, []byte(`"evict_on_complete"`)) {
 		betas = append(betas, claudePromptCachingEvictBeta)
 	}
-	if diagnostics := ojson.GetBytesNoCopy(body, "diagnostics"); diagnostics.IsObject() {
+	if diagnostics := get("diagnostics"); diagnostics.IsObject() {
 		betas = append(betas, claudeCacheDiagnosisBeta)
 	}
 	return strings.Join(betas, ",")
@@ -541,23 +546,13 @@ func claudeIncludeMidConvClearAt(body []byte, requested map[string]bool) bool {
 }
 
 func claudeRequestSupportsEffort(body []byte, requested map[string]bool) bool {
-	if len(body) > 0 {
-		if helps.IsClaudeProbeOrHelperRequest(body) {
-			return false
-		}
-		model := strings.ToLower(strings.TrimSpace(ojson.GetBytesNoCopy(body, "model").String()))
-		if isClaudeHaikuModel(model) {
-			return false
-		}
-		thinkingType := strings.ToLower(strings.TrimSpace(ojson.GetBytesNoCopy(body, "thinking.type").String()))
-		if thinkingType == "disabled" {
-			return false
-		}
-	}
-	if requested[claudeEffortBeta] {
-		return true
-	}
-	return true
+	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(body))
+	return claudeRequestFieldsSupportEffort(get, helps.IsClaudeProbeOrHelperRequest(body))
+}
+
+func claudeRequestFieldsSupportEffort(get func(string) ojson.Result, probeOrHelper bool) bool {
+	return !probeOrHelper && !isClaudeHaikuModel(get("model").String()) &&
+		!strings.EqualFold(strings.TrimSpace(get("thinking.type").String()), "disabled")
 }
 
 func claudeThinkingDisplayUpdates(body []byte) bool {
@@ -1215,12 +1210,16 @@ func applyClaudeHeadersWithNativeProfile(
 			helperProfile = helperProfile || (!det.BetasPresent && !countTokens)
 		}
 	}
+	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(body))
+	probeOrHelper := helps.IsClaudeProbeOrHelperRequest(body)
+	supportsEffort := claudeRequestFieldsSupportEffort(get, probeOrHelper)
+	has1hTTL := helps.ClaudePayloadHas1hTTL(body)
 	requestedMap := claudeRequestedBetas(incomingBetas, extraBetas)
 	advisorNeeded := requestedMap[claudeAdvisorToolBeta] || claudeBodyHasAdvisorTool(body)
 
 	baseBetas := incomingBetas
 	if !preserveCallerFingerprint {
-		baseBetas = claudeCodeCLIBetas(body, requestedMap, useOAuthBetas)
+		baseBetas = claudeCodeCLIBetasWithLookup(body, requestedMap, useOAuthBetas, get, probeOrHelper)
 		if countTokens {
 			baseBetas = claudeCountTokensBetasForCredential(useOAuthBetas)
 			if advisorNeeded {
@@ -1243,7 +1242,7 @@ func applyClaudeHeadersWithNativeProfile(
 				baseBetas = withClaudeCountTokensOAuthBeta(baseBetas)
 			} else {
 				isSubagent := helps.IsClaudeSubagentRequest(incomingHeaders, body)
-				isProbe := helps.IsClaudeProbeOrHelperRequest(body)
+				isProbe := probeOrHelper
 				subagent1h := isSubagent && helps.ClaudeSubagentRequests1h(incomingHeaders, body)
 				includeExtendedCacheTTL := !helperProfile && (!isSubagent || subagent1h) && !isProbe
 				baseBetas = withClaudeOAuthCredentialBetas(baseBetas, includeExtendedCacheTTL)
@@ -1259,7 +1258,7 @@ func applyClaudeHeadersWithNativeProfile(
 	if preserveCallerFingerprint && advisorNeeded {
 		baseBetas = withClaudeAdvisorToolBeta(baseBetas)
 	}
-	if !claudeRequestSupportsEffort(body, nil) {
+	if !supportsEffort {
 		baseBetas = withoutClaudeBeta(baseBetas, claudeEffortBeta)
 	}
 	existingSet := make(map[string]bool)
@@ -1283,7 +1282,7 @@ func applyClaudeHeadersWithNativeProfile(
 	if preserveCallerFingerprint {
 		// Caller-owned mode preserves both header and body-lifted betas verbatim.
 		// The explicit speed=fast request still needs its protocol beta.
-		if strings.EqualFold(strings.TrimSpace(ojson.GetBytesNoCopy(body, "speed").String()), "fast") {
+		if strings.EqualFold(strings.TrimSpace(get("speed").String()), "fast") {
 			appendBeta(claudeFastModeBeta)
 		}
 		for _, beta := range extraBetas {
@@ -1322,44 +1321,44 @@ func applyClaudeHeadersWithNativeProfile(
 			baseBetas = withoutClaudeBeta(baseBetas, claudeOAuthBeta)
 			baseBetas = withoutClaudeBeta(baseBetas, claudeRedactThinkingBeta)
 			baseBetas = withoutClaudeBeta(baseBetas, claudeAFKModeBeta)
-			if !ojson.GetBytesNoCopy(body, "diagnostics").Exists() {
+			if !get("diagnostics").Exists() {
 				baseBetas = withoutClaudeBeta(baseBetas, claudeCacheDiagnosisBeta)
 			}
-			if !ojson.GetBytesNoCopy(body, "fallback_credit_token").Exists() {
+			if !get("fallback_credit_token").Exists() {
 				baseBetas = withoutClaudeBeta(baseBetas, claudeFallbackCreditBeta)
 			}
-			if !helps.ClaudePayloadHas1hTTL(body) {
+			if !has1hTTL {
 				baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
 			}
 		}
 		// Enforce strict native Claude Code 2.1.280 model & turn beta gating:
-		if !claudeRequestSupportsEffort(body, nil) {
+		if !supportsEffort {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeEffortBeta)
 		}
-		reqProbeOrHelper := helps.IsClaudeProbeOrHelperRequest(body)
+		reqProbeOrHelper := probeOrHelper
 		if reqProbeOrHelper && !helperProfile {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeServerSideFallbackBeta)
 			baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
 			baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
 		}
-		reqThinkingType := ojson.GetBytesNoCopy(body, "thinking.type").String()
+		reqThinkingType := get("thinking.type").String()
 		if reqThinkingType == "disabled" {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
 		}
 		if helps.IsClaudeSubagentRequest(incomingHeaders, body) && !helps.ClaudeSubagentRequests1h(incomingHeaders, body) {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
 		}
-		if !reqProbeOrHelper && !countTokens && helps.ClaudePayloadHas1hTTL(body) {
+		if !reqProbeOrHelper && !countTokens && has1hTTL {
 			baseBetas = withClaudeExtendedCacheTTLBeta(baseBetas)
 		}
-		reqModel := strings.ToLower(strings.TrimSpace(ojson.GetBytesNoCopy(body, "model").String()))
-		if isClaudeHaikuModel(reqModel) && !ojson.GetBytesNoCopy(body, "fallbacks").Exists() && !helperProfile {
+		reqModel := strings.ToLower(strings.TrimSpace(get("model").String()))
+		if isClaudeHaikuModel(reqModel) && !get("fallbacks").Exists() && !helperProfile {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeServerSideFallbackBeta)
 		}
 		// A body carrying thinking.block_binding is rejected upstream unless
 		// the binding-controls beta travels with it, in every fingerprint
 		// mode (cloaked, caller-owned, and confirmed passthrough alike).
-		if ojson.GetBytesNoCopy(body, "thinking.block_binding").Exists() {
+		if get("thinking.block_binding").Exists() {
 			baseBetas = withClaudeBetaAppended(baseBetas, claudeThinkingBindingBeta)
 		}
 		// Operator overrides get the last word over the derived and caller betas:

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -147,7 +148,10 @@ func ClaudeMetadataIdentities(payload []byte) (sessionID, parentSessionID, agent
 	if len(payload) == 0 {
 		return "", "", ""
 	}
-	root := util.ParseGJSONBytesNoCopy(payload)
+	return claudeMetadataIdentities(newSessionObject(util.ParseGJSONBytesNoCopy(payload)))
+}
+
+func claudeMetadataIdentities(root sessionObject) (sessionID, parentSessionID, agentID string) {
 	userID := strings.TrimSpace(root.Get("metadata.user_id").String())
 	if userID == "" {
 		req := root.Get("request")
@@ -454,7 +458,7 @@ func hasExplicitSession(headers map[string][]string, payload []byte) bool {
 			return true
 		}
 	}
-	if ClaudeMetadataSessionID(payload) != "" {
+	if sessionID, _, _ := claudeMetadataIdentities(root); sessionID != "" {
 		return true
 	}
 	userID := strings.TrimSpace(root.Get("metadata.user_id").String())
@@ -492,6 +496,9 @@ func headerValue(headers map[string][]string, name string) string {
 func DeriveID(format sdktranslator.Format, payload []byte, callerScope string) string {
 	if len(payload) == 0 {
 		return ""
+	}
+	if sourceFormatEqual(format, sdktranslator.FormatOpenAIResponse) || sourceFormatEqual(format, sdktranslator.FormatCodex) {
+		return deriveResponsesID(format, payload, callerScope)
 	}
 	var body map[string]any
 	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
@@ -822,12 +829,37 @@ func normalizeJSONValue(value any) any {
 }
 
 func hashRoot(root canonicalRoot) string {
-	encoded, errMarshal := json.Marshal(root)
-	if errMarshal != nil {
+	// Stream canonical media values to the hash without assembling a full copy.
+	doc := ojson.NewDoc([]byte(`{"version":null,"format":null,"caller_scope":null}`))
+	set := func(path string, value any) bool {
+		encoded, err := json.Marshal(value)
+		return err == nil && doc.SetRawBytes(path, encoded) == nil
+	}
+	if !set("version", root.Version) || !set("format", root.Format) || !set("caller_scope", root.CallerScope) {
 		return ""
 	}
-	sum := sha256.Sum256(encoded)
-	return identityPrefix + hex.EncodeToString(sum[:])
+	if len(root.Instructions) > 0 && !set("instructions", root.Instructions) {
+		return ""
+	}
+	if len(root.User) > 0 {
+		if err := doc.SetRaw("user", "[]"); err != nil {
+			return ""
+		}
+		for i, part := range root.User {
+			path := "user." + strconv.Itoa(i) + "."
+			if !set(path+"kind", part.Kind) || (part.MIME != "" && !set(path+"mime", part.MIME)) || !set(path+"value", part.Value) {
+				return ""
+			}
+		}
+	}
+	if root.Resource != "" && !set("resource", root.Resource) {
+		return ""
+	}
+	hash := sha256.New()
+	if _, err := doc.WriteTo(hash); err != nil {
+		return ""
+	}
+	return identityPrefix + hex.EncodeToString(hash.Sum(nil))
 }
 
 func metadataWithValue(metadata map[string]any, key string, value any) map[string]any {

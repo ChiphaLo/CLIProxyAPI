@@ -30,10 +30,12 @@ func buildClaudeToolNamesWithWinners(root ojson.Result, winners map[string]respo
 	m := claudeToolNames{toClaude: map[string]string{}, fromClaude: map[string]string{}}
 	taken := map[string]bool{}
 	var declared []string
-	for _, d := range responsesToolDescriptors(root, toolSearch) {
-		if w, ok := winners[d.name]; !ok || w.order != d.order {
-			continue
-		}
+	ordered := make([]responsesToolDescriptor, 0, len(winners))
+	for _, descriptor := range winners {
+		ordered = append(ordered, descriptor)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].order < ordered[j].order })
+	for _, d := range ordered {
 		switch d.toolType {
 		case "function", "custom":
 			declared = append(declared, d.name)

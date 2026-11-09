@@ -42,6 +42,7 @@ func convertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	outDoc := ojson.NewDocString(`{"model":"","messages":[],"stream":false}`)
 
 	root := util.ParseGJSONBytesNoCopy(rawJSON)
+	get := util.IndexRootFields(root)
 	toolIndex := newResponsesToolIndex(root)
 
 	messages := make([][]byte, 0)
@@ -56,14 +57,14 @@ func convertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	_ = outDoc.Set("stream", stream)
 
 	// Map Responses text format to Chat Completions response format.
-	if textFormat := root.Get("text.format"); textFormat.Exists() {
+	if textFormat := get("text.format"); textFormat.Exists() {
 		if responseFormat := convertResponsesTextFormatToChatResponseFormat(textFormat); len(responseFormat) > 0 {
 			_ = outDoc.SetRawBytes("response_format", responseFormat)
 		}
 	}
 
 	// Map generation parameters from responses format to chat completions format
-	if maxTokens := root.Get("max_output_tokens"); maxTokens.Exists() {
+	if maxTokens := get("max_output_tokens"); maxTokens.Exists() {
 		if maxTokens.Raw != "" {
 			_ = outDoc.SetRaw("max_tokens", maxTokens.Raw)
 		} else {
@@ -72,7 +73,7 @@ func convertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	}
 
 	// Convert instructions to system message
-	if instructions := root.Get("instructions"); instructions.Exists() {
+	if instructions := get("instructions"); instructions.Exists() {
 		systemMessage := []byte(`{"role":"system","content":""}`)
 		systemMessage, _ = ojson.SetBytes(systemMessage, "content", instructions.String())
 		appendMessage(systemMessage)
@@ -81,7 +82,7 @@ func convertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	duplicateOutputIDs := make(map[string]struct{})
 
 	// Convert input array to messages
-	if input := root.Get("input"); input.Exists() && input.IsArray() {
+	if input := get("input"); input.Exists() && input.IsArray() {
 		rawInputArray := toolIndex.toolSearchHistory(toolIndex.shellHistory(input.Array()))
 		explicitOutputCounts := make(map[string]int)
 		missingIDOutputsCount := 0
@@ -125,17 +126,17 @@ func convertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 		}
 
 		hasReasoningInSession := false
-		if effortRes := root.Get("reasoning.effort"); effortRes.Exists() {
+		if effortRes := get("reasoning.effort"); effortRes.Exists() {
 			effort := strings.ToLower(strings.TrimSpace(effortRes.String()))
 			if effort != "" && effort != "none" && effort != "0" && effort != "false" {
 				hasReasoningInSession = true
 			}
-		} else if effortRes := root.Get("reasoning_effort"); effortRes.Exists() {
+		} else if effortRes := get("reasoning_effort"); effortRes.Exists() {
 			effort := strings.ToLower(strings.TrimSpace(effortRes.String()))
 			if effort != "" && effort != "none" && effort != "0" && effort != "false" {
 				hasReasoningInSession = true
 			}
-		} else if reasoningObj := root.Get("reasoning"); reasoningObj.Exists() {
+		} else if reasoningObj := get("reasoning"); reasoningObj.Exists() {
 			reasoningRaw := strings.ToLower(strings.TrimSpace(reasoningObj.String()))
 			if reasoningRaw != "" && reasoningRaw != "none" && reasoningRaw != "false" && reasoningRaw != "{}" {
 				hasReasoningInSession = true
@@ -490,15 +491,15 @@ func convertOpenAIResponsesRequestToOpenAIChatCompletions(modelName string, inpu
 	}
 	if len(chatCompletionsTools) > 0 {
 		_ = outDoc.Set("tools", chatCompletionsTools)
-		if parallelToolCalls := root.Get("parallel_tool_calls"); parallelToolCalls.Exists() {
+		if parallelToolCalls := get("parallel_tool_calls"); parallelToolCalls.Exists() {
 			_ = outDoc.Set("parallel_tool_calls", parallelToolCalls.Bool())
 		}
-		if toolChoice := root.Get("tool_choice"); toolChoice.Exists() {
+		if toolChoice := get("tool_choice"); toolChoice.Exists() {
 			_ = outDoc.SetRawBytes("tool_choice", convertResponsesToolChoiceWithIndex(toolChoice, toolIndex))
 		}
 	}
 
-	if reasoningEffort := root.Get("reasoning.effort"); reasoningEffort.Exists() {
+	if reasoningEffort := get("reasoning.effort"); reasoningEffort.Exists() {
 		effort := strings.ToLower(strings.TrimSpace(reasoningEffort.String()))
 		if effort != "" {
 			_ = outDoc.Set("reasoning_effort", effort)
