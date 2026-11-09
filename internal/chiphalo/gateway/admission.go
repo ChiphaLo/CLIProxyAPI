@@ -22,6 +22,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/api/handlers"
+	cliproxysession "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/session"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 )
 
@@ -60,6 +61,7 @@ func AdmissionWithOptions(options AdmissionOptions) gin.HandlerFunc {
 		options.websocketSlots = make(chan struct{}, 8)
 	}
 	return func(c *gin.Context) {
+		c.Request.Header.Del(cliproxysession.BridgeHeader)
 		if websocketAdmission(c, options) {
 			return
 		}

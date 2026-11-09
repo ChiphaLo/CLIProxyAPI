@@ -9,9 +9,11 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/klauspost/compress/zstd"
+	coresession "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/session"
 )
 
 // MaxRequestBodyBytesContextKey stores the configured request body size limit (in bytes) on the Gin context.
@@ -19,7 +21,20 @@ const MaxRequestBodyBytesContextKey = "maxRequestBodyBytes"
 
 // ReadRequestBody reads the incoming request body and decodes supported
 // Content-Encoding values before handlers inspect JSON fields.
-func ReadRequestBody(c *gin.Context) ([]byte, error) {
+func ReadRequestBody(c *gin.Context) (body []byte, bodyErr error) {
+	defer func() {
+		if c == nil || c.Request == nil {
+			return
+		}
+		if bodyErr == nil && strings.HasSuffix(c.Request.URL.Path, "/responses") {
+			key := c.GetString("userApiKey")
+			if id := coresession.VerifyBridge(c.Request.Header, key, body, time.Now()); id != "" {
+				c.Set("cpa:verified-derived-session", id)
+			}
+		} else {
+			c.Request.Header.Del(coresession.BridgeHeader)
+		}
+	}()
 	maxBytes := int64(0)
 	if c != nil {
 		maxBytes = c.GetInt64(MaxRequestBodyBytesContextKey)

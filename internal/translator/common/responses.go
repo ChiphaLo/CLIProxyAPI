@@ -62,6 +62,11 @@ func ExtractResponsesCallID(node ojson.Result) string {
 // Outputs that already carry an explicit call ID that does not match any pending call
 // are never rewritten or stolen.
 func NormalizeResponsesToolCallOutputs(items []ojson.Result) []ojson.Result {
+	// Well-formed client histories need neither copies nor repair indexes.
+	if responsesToolOutputsOrdered(items) {
+		return items
+	}
+
 	if len(items) == 0 {
 		return items
 	}
@@ -186,4 +191,24 @@ func NormalizeResponsesToolCallOutputs(items []ojson.Result) []ojson.Result {
 	}
 
 	return normalized
+}
+
+func responsesToolOutputsOrdered(items []ojson.Result) bool {
+	var pending []string
+	head := 0
+	for _, item := range items {
+		switch item.Get("type").String() {
+		case "function_call", "custom_tool_call":
+			if id := ExtractResponsesCallID(item); id != "" {
+				pending = append(pending, id)
+			}
+		case "function_call_output", "custom_tool_call_output":
+			id := ExtractResponsesCallID(item)
+			if id == "" || head >= len(pending) || pending[head] != id {
+				return false
+			}
+			head++
+		}
+	}
+	return true
 }

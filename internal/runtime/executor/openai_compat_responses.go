@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/opencode"
@@ -15,6 +17,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
+	coresession "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/session"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
 )
 
@@ -94,6 +97,15 @@ func (e *OpenAICompatExecutor) requestNativeResponses(ctx context.Context, auth 
 	// Let stream control response framing. Some compatible providers route mixed
 	// Accept headers incorrectly; do not invent a client identity or MIME profile.
 	util.ApplyCustomHeadersFromAttrs(r, auth.Attributes, opts.Headers)
+	r.Header.Del(coresession.BridgeHeader)
+	_, explicitHeader := coresession.ExtractSessionInfo(r.Header, nil, nil)
+	if ip := net.ParseIP(r.URL.Hostname()); ip != nil && ip.IsLoopback() && strings.HasPrefix(p.model, "claude-") && !explicitHeader {
+		id := coresession.ForwardDerivedID(p.body, sdktranslator.FormatOpenAIResponse, coresession.CallerScope(key), opts.Metadata)
+		if signed := coresession.SignBridge(key, p.body, id, time.Now()); signed != "" {
+			r.Header.Set(coresession.BridgeHeader, signed)
+		}
+	}
+
 	helps.RecordAPIRequest(ctx, e.cfg, helps.UpstreamRequestLog{URL: endpoint, Method: http.MethodPost, Headers: r.Header.Clone(), Body: p.body, Provider: e.Identifier(), AuthID: auth.ID, AuthLabel: auth.Label})
 	client := reporter.TrackHTTPClientRoundTripOnly(helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0))
 	response, err := client.Do(r)

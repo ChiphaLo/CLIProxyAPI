@@ -239,29 +239,34 @@ func scanResponsesWebSearchHistory(items []ojson.Result) responsesWebSearchHisto
 			boundary = true
 		}
 	}
+	pending := map[string]int{}
 	for index, item := range items {
-		if !responsesWebSearchItemIsPaused(item) {
+		if responsesItemIsTurnBoundary(item) {
+			clear(pending)
+			continue
+		}
+		if item.Get("type").String() != "web_search_call" {
 			continue
 		}
 		id := strings.TrimSpace(item.Get("id").String())
 		if id == "" {
 			continue
 		}
-		for next := index + 1; next < len(items); next++ {
-			if responsesItemIsTurnBoundary(items[next]) {
-				break
+		if previous, ok := pending[id]; ok {
+			history.skip[previous] = true
+			query := responsesWebSearchCallQuery(items[previous])
+			if query == "" {
+				query = history.pausedQuery[previous]
 			}
-			if items[next].Get("type").String() == "web_search_call" && strings.TrimSpace(items[next].Get("id").String()) == id {
-				history.skip[index] = true
-				query := responsesWebSearchCallQuery(item)
-				if previous, ok := history.pausedQuery[index]; ok && query == "" {
-					query = previous
-				}
-				history.pausedQuery[next] = query
-				break
-			}
+			history.pausedQuery[index] = query
+		}
+		if responsesWebSearchItemIsPaused(item) {
+			pending[id] = index
+		} else {
+			delete(pending, id)
 		}
 	}
+
 	return history
 }
 

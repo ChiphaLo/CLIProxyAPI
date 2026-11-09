@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MoeForge/moego/ojson"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	claudeauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/buildinfo"
@@ -23,8 +24,6 @@ import (
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/session"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -171,11 +170,12 @@ func isManagedClaudeBeta(beta string) bool {
 // An empty body keeps the optimistic role=system default, matching the cloaking
 // policy for unknown and future model IDs.
 func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool) string {
-	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(body))
-	return claudeCodeCLIBetasWithLookup(body, requested, oauthToken, get, helps.IsClaudeProbeOrHelperRequest(body))
+	return claudeCodeCLIBetasWithFacts(body, requested, oauthToken, helps.CollectClaudeRequestFacts(body))
 }
 
-func claudeCodeCLIBetasWithLookup(body []byte, requested map[string]bool, oauthToken bool, get func(string) ojson.Result, isProbeOrHelper bool) string {
+func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthToken bool, facts helps.ClaudeRequestFacts) string {
+	get, isProbeOrHelper := facts.Get, facts.IsProbeOrHelper
+
 	betas := make([]string, 0, len(claudeCodeCLIConstantBetas)+len(claudeCodeTrailingBetas)+10)
 	betas = append(betas, claudeCodeBeta)
 	if oauthToken {
@@ -194,35 +194,35 @@ func claudeCodeCLIBetasWithLookup(body []byte, requested map[string]bool, oauthT
 	}
 	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) {
 		betas = append(betas, claudeMidConvSystemBeta)
-		if claudeIncludePerTurnControl(body, requested) {
+		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(get("model").String()) {
 			betas = append(betas, claudePerTurnControlBeta)
 		}
-		if claudeIncludePerTurnTiming(body, requested) {
+		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(get("model").String()) && facts.HasPerTurnTiming) {
 			betas = append(betas, claudePerTurnTimingBeta)
 		}
 		if !isClaudeSonnet5Model(get("model").String()) {
 			betas = append(betas, claudeMidConvToolChangesBeta)
 		}
-		if claudeIncludeInlineTools(body, requested) {
+		if requested[claudeInlineToolsBeta] || facts.HasInlineTools {
 			betas = append(betas, claudeInlineToolsBeta)
 		}
 	} else {
 		// Legacy models have no mid-conversation slot. A caller that still names
 		// these betas keeps them, in the same relative order, ahead of effort.
-		if claudeIncludePerTurnControl(body, requested) {
+		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(get("model").String()) {
 			betas = append(betas, claudePerTurnControlBeta)
 		}
-		if claudeIncludePerTurnTiming(body, requested) {
+		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(get("model").String()) && facts.HasPerTurnTiming) {
 			betas = append(betas, claudePerTurnTimingBeta)
 		}
 	}
-	if requested[claudeAdvisorToolBeta] || claudeBodyHasAdvisorTool(body) {
+	if requested[claudeAdvisorToolBeta] || facts.HasAdvisorTool {
 		betas = append(betas, claudeAdvisorToolBeta)
 	}
-	if requested[claudeAdvancedToolUseBeta] || claudeBodyUsesAdvancedToolUse(body) {
+	if requested[claudeAdvancedToolUseBeta] || facts.HasAdvancedTool {
 		betas = append(betas, claudeAdvancedToolUseBeta)
 	}
-	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) && claudeIncludeMidConvClearAt(body, requested) {
+	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) && (requested[claudeMidConvSystemClearAtBeta] || claudeModelUsesProgressDisplay(get("model").String()) || facts.HasClearAt) {
 		betas = append(betas, claudeMidConvSystemClearAtBeta)
 	}
 	if requested[claudeDangerousToolUseBeta] || get("safeguards").Exists() {
@@ -266,9 +266,9 @@ func claudeCodeCLIBetasWithLookup(body []byte, requested map[string]bool, oauthT
 		betas = append(betas, claudeAFKModeBeta)
 	}
 	if !isProbeOrHelper {
-		includeExtended := (oauthToken && !helps.IsClaudeSubagentRequest(nil, body)) ||
+		includeExtended := (oauthToken && !facts.IsSubagent) ||
 			requested[claudeExtendedCacheTTLBeta] ||
-			helps.ClaudePayloadHas1hTTL(body)
+			facts.Has1hTTL
 		if includeExtended {
 			betas = append(betas, claudeExtendedCacheTTLBeta)
 		}
@@ -1151,6 +1151,7 @@ func applyClaudeHeadersWithNativeProfile(
 	if r == nil {
 		return nil
 	}
+	defer r.Header.Del(session.BridgeHeader)
 	hdrDefault := func(cfgVal, fallback string) string {
 		if cfgVal != "" {
 			return cfgVal
@@ -1210,16 +1211,20 @@ func applyClaudeHeadersWithNativeProfile(
 			helperProfile = helperProfile || (!det.BetasPresent && !countTokens)
 		}
 	}
-	get := util.IndexRootFields(util.ParseGJSONBytesNoCopy(body))
-	probeOrHelper := helps.IsClaudeProbeOrHelperRequest(body)
+	facts := helps.CollectClaudeRequestFacts(body)
+	get := facts.Get
+	probeOrHelper := facts.IsProbeOrHelper
 	supportsEffort := claudeRequestFieldsSupportEffort(get, probeOrHelper)
-	has1hTTL := helps.ClaudePayloadHas1hTTL(body)
+	has1hTTL := facts.Has1hTTL
+	isSubagentRequest := facts.IsSubagent || helps.HeaderValueCaseInsensitive(incomingHeaders, "X-Claude-Code-Agent-Id") != "" || helps.HeaderValueCaseInsensitive(incomingHeaders, "X-Claude-Code-Parent-Agent-Id") != ""
+	subagentRequests1h := has1hTTL || strings.Contains(incomingBetas, claudeExtendedCacheTTLBeta)
+
 	requestedMap := claudeRequestedBetas(incomingBetas, extraBetas)
-	advisorNeeded := requestedMap[claudeAdvisorToolBeta] || claudeBodyHasAdvisorTool(body)
+	advisorNeeded := requestedMap[claudeAdvisorToolBeta] || facts.HasAdvisorTool
 
 	baseBetas := incomingBetas
 	if !preserveCallerFingerprint {
-		baseBetas = claudeCodeCLIBetasWithLookup(body, requestedMap, useOAuthBetas, get, probeOrHelper)
+		baseBetas = claudeCodeCLIBetasWithFacts(body, requestedMap, useOAuthBetas, facts)
 		if countTokens {
 			baseBetas = claudeCountTokensBetasForCredential(useOAuthBetas)
 			if advisorNeeded {
@@ -1241,9 +1246,9 @@ func applyClaudeHeadersWithNativeProfile(
 			if countTokens {
 				baseBetas = withClaudeCountTokensOAuthBeta(baseBetas)
 			} else {
-				isSubagent := helps.IsClaudeSubagentRequest(incomingHeaders, body)
+				isSubagent := isSubagentRequest
 				isProbe := probeOrHelper
-				subagent1h := isSubagent && helps.ClaudeSubagentRequests1h(incomingHeaders, body)
+				subagent1h := isSubagent && subagentRequests1h
 				includeExtendedCacheTTL := !helperProfile && (!isSubagent || subagent1h) && !isProbe
 				baseBetas = withClaudeOAuthCredentialBetas(baseBetas, includeExtendedCacheTTL)
 			}
@@ -1345,7 +1350,7 @@ func applyClaudeHeadersWithNativeProfile(
 		if reqThinkingType == "disabled" {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
 		}
-		if helps.IsClaudeSubagentRequest(incomingHeaders, body) && !helps.ClaudeSubagentRequests1h(incomingHeaders, body) {
+		if isSubagentRequest && !subagentRequests1h {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
 		}
 		if !reqProbeOrHelper && !countTokens && has1hTTL {

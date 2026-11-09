@@ -94,6 +94,52 @@ func (object sessionObject) Get(path string) ojson.Result {
 //  11. conversation_id / chat_id
 //  12. execution_session_id metadata
 func ExtractSessionInfo(headers http.Header, payload []byte, metadata map[string]any) (SessionInfo, bool) {
+	root := sessionObject{}
+	if len(payload) > 0 {
+		if identity := requestIdentity(payload, metadata); identity != nil {
+			root = identity.root
+		} else {
+			root = newSessionObject(util.ParseGJSONBytesNoCopy(payload))
+		}
+	}
+	return extractSessionInfoFromRoot(headers, payload, metadata, root)
+}
+
+// ExtractSessionInfoWithoutClaudeSignals uses a read-only metadata projection
+// for non-native callers. Conversation bytes are never rewritten.
+func ExtractSessionInfoWithoutClaudeSignals(headers http.Header, payload []byte, metadata map[string]any) (SessionInfo, bool) {
+	headers = headers.Clone()
+	for key := range headers {
+		if strings.EqualFold(key, "X-Claude-Code-Session-Id") {
+			delete(headers, key)
+		}
+	}
+	var root sessionObject
+	if identity := requestIdentity(payload, metadata); identity != nil {
+		root = identity.root
+	} else {
+		root = newSessionObject(util.ParseGJSONBytesNoCopy(payload))
+	}
+	if root.duplicates["metadata"] {
+		stripped, err := util.DeleteJSONBytesIfExists(payload, "metadata.user_id")
+		if err == nil {
+			return ExtractSessionInfo(headers, stripped, metadata)
+		}
+	}
+	if node := root.Get("metadata"); node.Get("user_id").Exists() {
+		doc := ojson.NewDocString(node.Raw)
+		_ = doc.Delete("user_id")
+		fields := make(map[string]ojson.Result, len(root.fields))
+		for k, v := range root.fields {
+			fields[k] = v
+		}
+		fields["metadata"] = util.ParseGJSONBytesNoCopy(doc.Bytes())
+		root.fields = fields
+	}
+	return extractSessionInfoFromRoot(headers, payload, metadata, root)
+}
+
+func extractSessionInfoFromRoot(headers http.Header, payload []byte, metadata map[string]any, root sessionObject) (SessionInfo, bool) {
 	var info SessionInfo
 	if metadata != nil {
 		if scope, ok := metadata[cliproxyexecutor.CallerScopeMetadataKey].(string); ok {
@@ -101,14 +147,12 @@ func ExtractSessionInfo(headers http.Header, payload []byte, metadata map[string
 		}
 	}
 
-	var root sessionObject
 	var reqRoot sessionObject
 	var hasNestedReq bool
 	var parentCandidate string
 	var claudeID, claudeParent, claudeAgent string
 
 	if len(payload) > 0 {
-		root = newSessionObject(util.ParseGJSONBytesNoCopy(payload))
 		reqRoot = root
 		req := root.Get("request")
 		hasNestedReq = req.Exists() && !root.Get("contents").Exists()

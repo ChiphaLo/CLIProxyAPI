@@ -27,6 +27,9 @@ func buildClaudeToolNames(root ojson.Result, toolSearch bool) claudeToolNames {
 }
 
 func buildClaudeToolNamesWithWinners(root ojson.Result, winners map[string]responsesToolDescriptor, toolSearch bool) claudeToolNames {
+	return buildClaudeToolNamesFromHistory(winners, responsesHistoryToolIdentities(root))
+}
+func buildClaudeToolNamesFromHistory(winners map[string]responsesToolDescriptor, history []string) claudeToolNames {
 	m := claudeToolNames{toClaude: map[string]string{}, fromClaude: map[string]string{}}
 	taken := map[string]bool{}
 	var declared []string
@@ -44,7 +47,7 @@ func buildClaudeToolNamesWithWinners(root ojson.Result, winners map[string]respo
 		}
 	}
 	m.allocate(declared, taken)
-	m.allocate(responsesHistoryToolIdentities(root), taken)
+	m.allocate(history, taken)
 	return m
 }
 

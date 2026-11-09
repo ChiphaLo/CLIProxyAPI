@@ -6,8 +6,6 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/MoeForge/moego/ojson"
 	applypatch "github.com/router-for-me/CLIProxyAPI/v8/internal/client/codex/apply-patch"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
@@ -16,6 +14,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/translator/common"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -65,6 +64,7 @@ func ConvertOpenAIResponsesRequestToClaudeWithCompatContext(ctx context.Context,
 // a config reload cannot mix the two behaviors within one request.
 func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string, inputRawJSON []byte, stream, preserveEmptyThinkingBlocks, toolSearch bool) ([]byte, error) {
 	rawJSON := normalizeCodexAgentMessages(inputRawJSON)
+	media := &deferredMedia{}
 	var drops common.UserTurnDrops
 
 	userID := common.DeriveClaudeUserID(rawJSON)
@@ -75,8 +75,9 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	_ = outDoc.Set("max_tokens", defaultClaudeResponsesMaxTokensForModel(modelName))
 
 	root := util.ParseGJSONBytesNoCopy(rawJSON)
-	get := util.IndexRootFields(root)
-	inlineResizeNotices := responsesInlineImageResizeNotices(modelName, get("input"))
+	plan := newResponsesRequestPlan(root, modelName, toolSearch)
+	get := plan.Get
+	inlineResizeNotices := plan.ResizeNotices
 
 	// Convert OpenAI Responses reasoning.effort to Claude thinking config.
 	if v := get("reasoning.effort"); v.Exists() {
@@ -158,7 +159,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	// it, and still owns the final placement of the leading blocks. Both paths
 	// keep source text, block boundaries and cache_control, and never downgrade
 	// system-level items to user text.
-	messageCapacity := get("input.#").Int()
+	messageCapacity := int64(len(plan.RawItems))
 	if messageCapacity == 0 && get("input").Type == ojson.String {
 		messageCapacity = 1
 	}
@@ -186,14 +187,14 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 	if input := get("input"); input.IsArray() {
 		conversationStarted := false
 		itemIndex := -1
-		input.ForEach(func(_, item ojson.Result) bool {
+		for _, item := range plan.RawItems {
 			itemIndex++
 			if _, inline := inlineResizeNotices[item.Index]; inline {
-				return true
+				continue
 			}
 			if !isResponsesSystemLevelRole(item.Get("role").String()) {
 				conversationStarted = true
-				return true
+				continue
 			}
 			blocks := responsesSystemItemToClaudeBlocks(item)
 			eligible := !topLevelSystemItems && conversationStarted && isResponsesMessageItem(item) && claudeBlocksAreAllText(blocks)
@@ -202,13 +203,13 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 				blocks:   blocks,
 				eligible: eligible,
 			})
-			return true
-		})
+			continue
+		}
 	}
 
-	descriptors := responsesToolDescriptors(root, toolSearch)
+	descriptors := plan.Descriptors
 	winners := selectResponsesToolWinners(descriptors)
-	names := buildClaudeToolNamesWithWinners(root, winners, toolSearch)
+	names := buildClaudeToolNamesFromHistory(winners, plan.HistoryIdentities)
 	// Native tool search declares discovered tools as deferred and replays
 	// search results as tool_reference blocks, which keeps the cached prefix.
 	nativeToolSearch := responsesClientToolSearchWins(descriptors)
@@ -325,10 +326,10 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 		pendingParts = append(pendingParts, reasoningPart)
 	}
 
-	var inputItems []ojson.Result
+	inputItems := plan.InputItems
 	if input := get("input"); input.Exists() {
 		if input.IsArray() {
-			inputItems = common.NormalizeResponsesToolCallOutputs(input.Array())
+			inputItems = plan.InputItems
 		} else if input.Type == ojson.String && strings.TrimSpace(input.String()) != "" {
 			contentPart := []byte(`{"type":"text","text":""}`)
 			contentPart, _ = ojson.SetBytes(contentPart, "text", input.String())
@@ -336,16 +337,8 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 		}
 	}
 
-	lastToolResult := map[string]ojson.Result{}
-	for _, item := range inputItems {
-		switch item.Get("type").String() {
-		case "function_call_output", "custom_tool_call_output":
-			rawID := common.ExtractResponsesCallID(item)
-			if rawID != "" {
-				lastToolResult[rawID] = item
-			}
-		}
-	}
+	lastToolResult := plan.ToolResults
+
 	emittedToolResults := map[string]struct{}{}
 	emittedRawToolUses := map[string]struct{}{}
 	unmappedItemTypes := map[string]int{}
@@ -367,7 +360,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 		pendingResizeNotices = nil
 	}
 
-	webSearchHistory := scanResponsesWebSearchHistory(inputItems)
+	webSearchHistory := plan.WebSearch
 	for itemIndex, item := range inputItems {
 		// System-level items are top-level blocks unless queued as in-place turns.
 		if text, inline := inlineResizeNotices[item.Index]; inline {
@@ -461,7 +454,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 								if data != "" {
 									cpDoc := ojson.NewDoc([]byte(`{"type":"image","source":{"type":"base64","media_type":"","data":""}}`))
 									_ = cpDoc.Set("source.media_type", mediaType)
-									_ = cpDoc.Set("source.data", data)
+									media.set(cpDoc, data)
 									contentPart = cpDoc.Bytes()
 								}
 							} else {
@@ -493,7 +486,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 							}
 							cpDoc := ojson.NewDoc([]byte(`{"type":"document","source":{"type":"base64","media_type":"","data":""}}`))
 							_ = cpDoc.Set("source.media_type", mediaType)
-							_ = cpDoc.Set("source.data", data)
+							media.set(cpDoc, data)
 							contentPart := common.AttachCacheControl(cpDoc.Bytes(), part)
 							partsJSON = append(partsJSON, contentPart)
 							if role == "" {
@@ -630,7 +623,7 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 			if strings.EqualFold(strings.TrimSpace(outputItem.Get("status").String()), "incomplete") {
 				_ = toolResultDoc.Set("is_error", true)
 			}
-			applyResponsesToolResultContentDoc(toolResultDoc, output)
+			applyResponsesToolResultContentDocWithMedia(toolResultDoc, output, media)
 
 			appendParts("user", toolResultDoc.Bytes())
 
@@ -854,7 +847,9 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 		}
 	}
 
-	return thinking.ApplyTranslatedSummaryToClaude(outDoc.Bytes(), rawJSON, "openai-response", modelName), drops.Err()
+	thinking.ApplySummaryConfigForModelDoc(outDoc, "claude", modelName, thinking.ExtractTranslatedSummaryConfig(rawJSON, "openai-response", "claude"))
+	media.hydrate(outDoc)
+	return outDoc.Bytes(), drops.Err()
 }
 
 func defaultClaudeResponsesMaxTokensForModel(modelName string) int {
@@ -1256,13 +1251,16 @@ func claudeThinkingSeparatorForToolUse(parts [][]byte) []byte {
 }
 
 func applyResponsesToolResultContentDoc(toolResultDoc *ojson.Doc, output ojson.Result) {
+	applyResponsesToolResultContentDocWithMedia(toolResultDoc, output, nil)
+}
+func applyResponsesToolResultContentDocWithMedia(toolResultDoc *ojson.Doc, output ojson.Result, media *deferredMedia) {
 	if output.Exists() && output.IsArray() {
 		var partsJSON [][]byte
 		hasImage := false
 		hasFile := false
 		droppedEmptyPart := false
 		output.ForEach(func(_, part ojson.Result) bool {
-			if partJSON := convertResponsesContentPartToClaude(part); len(partJSON) > 0 {
+			if partJSON := convertResponsesContentPartToClaudeWithMedia(part, media); len(partJSON) > 0 {
 				if !contentPartHasVisibleContent(partJSON) {
 					droppedEmptyPart = true
 					return true
@@ -1605,6 +1603,9 @@ func contentPartHasVisibleContent(part []byte) bool {
 }
 
 func convertResponsesContentPartToClaude(part ojson.Result) []byte {
+	return convertResponsesContentPartToClaudeWithMedia(part, nil)
+}
+func convertResponsesContentPartToClaudeWithMedia(part ojson.Result, media *deferredMedia) []byte {
 	ptype := part.Get("type").String()
 	switch ptype {
 	case "input_text", "output_text":
@@ -1637,7 +1638,7 @@ func convertResponsesContentPartToClaude(part ojson.Result) []byte {
 			}
 			cpDoc := ojson.NewDoc([]byte(`{"type":"image","source":{"type":"base64","media_type":"","data":""}}`))
 			_ = cpDoc.Set("source.media_type", mediaType)
-			_ = cpDoc.Set("source.data", data)
+			media.set(cpDoc, data)
 			return cpDoc.Bytes()
 		}
 		contentPart := []byte(`{"type":"image","source":{"type":"url","url":""}}`)
@@ -1662,7 +1663,7 @@ func convertResponsesContentPartToClaude(part ojson.Result) []byte {
 		}
 		cpDoc := ojson.NewDoc([]byte(`{"type":"document","source":{"type":"base64","media_type":"","data":""}}`))
 		_ = cpDoc.Set("source.media_type", mediaType)
-		_ = cpDoc.Set("source.data", data)
+		media.set(cpDoc, data)
 		return cpDoc.Bytes()
 	}
 	return nil
@@ -1746,8 +1747,11 @@ type responsesToolDescriptor struct {
 }
 
 func responsesToolDescriptors(root ojson.Result, toolSearch bool) []responsesToolDescriptor {
+	return responsesToolDescriptorsFromSources(responsesToolSources(root, toolSearch), toolSearch)
+}
+func responsesToolDescriptorsFromSources(sources []responsesToolSource, toolSearch bool) []responsesToolDescriptor {
 	var descriptors []responsesToolDescriptor
-	for _, source := range responsesToolSources(root, toolSearch) {
+	for _, source := range sources {
 		descriptors = appendResponsesToolDescriptors(descriptors, source.tools, source.priority, toolSearch)
 	}
 	if !responsesClientToolSearchWins(descriptors) {
@@ -2174,6 +2178,7 @@ func normalizeCodexAgentMessages(payload []byte) []byte {
 			updatedDoc = ojson.NewDoc(payload)
 		}
 		itemPath := "input." + strconv.Itoa(itemIndex)
+		itemDoc := ojson.NewDocString(item.Raw)
 		if content := item.Get("content"); content.IsArray() {
 			for partIndex, part := range content.Array() {
 				if strings.TrimSpace(part.Get("type").String()) != "encrypted_content" {
@@ -2183,22 +2188,25 @@ func normalizeCodexAgentMessages(payload []byte) []byte {
 				if enc.Type != ojson.String {
 					continue
 				}
-				partPath := itemPath + ".content." + strconv.Itoa(partIndex)
-				if errSet := updatedDoc.Set(partPath+".type", "input_text"); errSet != nil {
+				partPath := "content." + strconv.Itoa(partIndex)
+				if errSet := itemDoc.Set(partPath+".type", "input_text"); errSet != nil {
 					return payload
 				}
-				if errSet := updatedDoc.Set(partPath+".text", enc.String()); errSet != nil {
+				if errSet := itemDoc.Set(partPath+".text", enc.String()); errSet != nil {
 					return payload
 				}
-				if errDelete := updatedDoc.Delete(partPath + ".encrypted_content"); errDelete != nil {
+				if errDelete := itemDoc.Delete(partPath + ".encrypted_content"); errDelete != nil {
 					return payload
 				}
 			}
 		}
-		if errSet := updatedDoc.Set(itemPath+".role", "user"); errSet != nil {
+		if errSet := itemDoc.Set("role", "user"); errSet != nil {
 			return payload
 		}
-		if errSet := updatedDoc.Set(itemPath+".type", "message"); errSet != nil {
+		if errSet := itemDoc.Set("type", "message"); errSet != nil {
+			return payload
+		}
+		if errSet := updatedDoc.SetRawBytes(itemPath, itemDoc.Bytes()); errSet != nil {
 			return payload
 		}
 	}

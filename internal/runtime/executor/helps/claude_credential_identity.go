@@ -27,17 +27,7 @@ func ClaudeAgentSessionUUID(headers http.Header, originalPayload, translatedPayl
 // for a confirmed native caller. Other callers use protocol session fields,
 // execution metadata, or the stable derived conversation root.
 func ClaudeAgentSessionUUIDForRequest(headers http.Header, originalPayload, translatedPayload []byte, confirmedClaudeCode bool, metadataSets ...map[string]any) string {
-	if !confirmedClaudeCode {
-		headers = headers.Clone()
-		for key := range headers {
-			if strings.EqualFold(key, "X-Claude-Code-Session-Id") {
-				delete(headers, key)
-			}
-		}
-		originalPayload = withoutClaudeMetadataUserID(originalPayload)
-		translatedPayload = withoutClaudeMetadataUserID(translatedPayload)
-	}
-	return claudeAgentSessionUUID(headers, originalPayload, translatedPayload, metadataSets...)
+	return claudeAgentSessionUUIDWithMode(headers, originalPayload, translatedPayload, confirmedClaudeCode, metadataSets...)
 }
 
 type claudeExecutionMetadataKey struct{}
@@ -67,10 +57,17 @@ func ClaudeRequestHasExecutionMetadata(metadataSets ...map[string]any) bool {
 }
 
 func claudeAgentSessionUUID(headers http.Header, originalPayload, translatedPayload []byte, metadataSets ...map[string]any) string {
+	return claudeAgentSessionUUIDWithMode(headers, originalPayload, translatedPayload, true, metadataSets...)
+}
+func claudeAgentSessionUUIDWithMode(headers http.Header, originalPayload, translatedPayload []byte, confirmed bool, metadataSets ...map[string]any) string {
 	metadata := mergeClaudeSessionMetadata(metadataSets...)
-	identity := cliproxyauth.ExtractSessionID(headers, originalPayload, metadata)
+	extract := cliproxyauth.ExtractSessionID
+	if !confirmed {
+		extract = cliproxyauth.ExtractSessionIDWithoutClaudeSignals
+	}
+	identity := extract(headers, originalPayload, metadata)
 	if identity == "" && len(translatedPayload) > 0 {
-		identity = cliproxyauth.ExtractSessionID(headers, translatedPayload, metadata)
+		identity = extract(headers, translatedPayload, metadata)
 	}
 	if identity == "" {
 		return uuid.NewString()
@@ -353,6 +350,16 @@ func (v *claudeRootMetadataValidator) Write(p []byte) (int, error) {
 	for i < len(p) {
 		switch v.tok {
 		case claudeTokString:
+			// Large complete string spans use the SIMD JSON validator. Fragmented
+			// strings and escapes retain the strict streaming state machine below.
+			if v.strEscape == 0 && !v.isTopKey && i > 0 && p[i-1] == '"' {
+				if end := bytes.IndexByte(p[i:], '"'); end >= 0 && bytes.IndexByte(p[i:i+end], '\\') < 0 {
+					if !ojson.ValidBytes(p[i-1 : i+end+1]) {
+						return v.fail(fmt.Errorf("request must be a JSON object"))
+					}
+					i += end
+				}
+			}
 			if v.strEscape == 0 && !v.isTopKey {
 				for i < len(p) && p[i] != '"' && p[i] != '\\' && p[i] >= 0x20 {
 					i++

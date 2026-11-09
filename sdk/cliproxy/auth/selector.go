@@ -15,14 +15,13 @@ import (
 	"time"
 
 	"github.com/MoeForge/moego/ojson"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/credentialweight"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	cliproxysession "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/session"
+	log "github.com/sirupsen/logrus"
 )
 
 // RoundRobinSelector provides a simple provider scoped round-robin selection strategy.
@@ -1857,6 +1856,22 @@ func CanonicalSessionID(headers http.Header, payload []byte, metadata map[string
 func ExtractSessionID(headers http.Header, payload []byte, metadata map[string]any) string {
 	primary, _ := extractSessionIDs(headers, payload, metadata)
 	return primary
+}
+
+// ExtractSessionIDWithoutClaudeSignals preserves generic and internal identity
+// priority while excluding native-only claims from unconfirmed callers.
+func ExtractSessionIDWithoutClaudeSignals(headers http.Header, payload []byte, metadata map[string]any) string {
+	if info, ok := cliproxysession.ExtractSessionInfoWithoutClaudeSignals(headers, payload, metadata); ok && info.ClientType != "lcp" {
+		return info.SessionID
+	}
+	if id := normalizedSessionCandidate(cliproxysession.DerivedID(metadata)); id != "" {
+		return "derived:" + id
+	}
+	if len(payload) == 0 {
+		return ""
+	}
+	id, _ := extractMessageHashIDs(payload)
+	return id
 }
 
 func extractConversationAlias(payload []byte) string {

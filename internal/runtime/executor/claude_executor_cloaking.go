@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MoeForge/moego/ojson"
+	"github.com/gin-gonic/gin"
 	claudeauth "github.com/router-for-me/CLIProxyAPI/v8/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
@@ -24,8 +25,6 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/gin-gonic/gin"
 )
 
 func resolveIncomingClaudeHeaders(ctx context.Context, incoming http.Header) http.Header {
@@ -630,12 +629,12 @@ func isClaudeSubagentRequestDoc(headers http.Header, doc *ojson.Doc) bool {
 	return false
 }
 
-func claudePayloadHas1hTTLDoc(doc *ojson.Doc) bool {
+func claudePayloadHas1hTTLDoc(doc *ojson.Doc, cachedPaths ...[]string) bool {
 	if doc == nil || doc.Len() == 0 {
 		return false
 	}
 	has1h := false
-	forEachClaudeCacheControlPathDoc(doc, func(_ string, cc ojson.Result) bool {
+	walkClaudeCacheControlPathsDoc(doc, cachedPaths, func(_ string, cc ojson.Result) bool {
 		if cc.IsObject() && cc.Get("ttl").String() == "1h" {
 			has1h = true
 			return false
@@ -645,8 +644,8 @@ func claudePayloadHas1hTTLDoc(doc *ojson.Doc) bool {
 	return has1h
 }
 
-func claudeSubagentRequests1hDoc(headers http.Header, doc *ojson.Doc) bool {
-	if claudePayloadHas1hTTLDoc(doc) {
+func claudeSubagentRequests1hDoc(headers http.Header, doc *ojson.Doc, cachedPaths ...[]string) bool {
+	if claudePayloadHas1hTTLDoc(doc, cachedPaths...) {
 		return true
 	}
 	betas := strings.Join(helps.HeaderValuesCaseInsensitive(headers, "Anthropic-Beta"), ",")
@@ -2792,12 +2791,12 @@ func upgradeClaudeCacheControlTTL(payload []byte, ttl string) []byte {
 	return doc.Bytes()
 }
 
-func upgradeClaudeCacheControlTTLDoc(doc *ojson.Doc, ttl string) bool {
+func upgradeClaudeCacheControlTTLDoc(doc *ojson.Doc, ttl string, cachedPaths ...[]string) bool {
 	if ttl == "" || doc == nil || doc.Len() == 0 {
 		return false
 	}
 	changed := false
-	forEachClaudeCacheControlPathDoc(doc, func(path string, cacheControl ojson.Result) bool {
+	walkClaudeCacheControlPathsDoc(doc, cachedPaths, func(path string, cacheControl ojson.Result) bool {
 		if !cacheControl.IsObject() || cacheControl.Get("ttl").Exists() {
 			return true
 		}
@@ -2837,12 +2836,12 @@ func stripClaudeCacheControlTTL(payload []byte) []byte {
 	return doc.Bytes()
 }
 
-func stripClaudeCacheControlTTLDoc(doc *ojson.Doc) bool {
+func stripClaudeCacheControlTTLDoc(doc *ojson.Doc, cachedPaths ...[]string) bool {
 	if doc == nil || doc.Len() == 0 {
 		return false
 	}
 	changed := false
-	forEachClaudeCacheControlPathDoc(doc, func(path string, cacheControl ojson.Result) bool {
+	walkClaudeCacheControlPathsDoc(doc, cachedPaths, func(path string, cacheControl ojson.Result) bool {
 		if !cacheControl.IsObject() || !cacheControl.Get("ttl").Exists() {
 			return true
 		}
@@ -3810,14 +3809,14 @@ func normalizeCacheControlTTL(payload []byte) []byte {
 	return doc.Bytes()
 }
 
-func normalizeCacheControlTTLDoc(doc *ojson.Doc) bool {
+func normalizeCacheControlTTLDoc(doc *ojson.Doc, cachedPaths ...[]string) bool {
 	if doc == nil || doc.Len() == 0 {
 		return false
 	}
 
 	seen5m := false
 	modified := false
-	forEachClaudeCacheControlPathDoc(doc, func(path string, cc ojson.Result) bool {
+	walkClaudeCacheControlPathsDoc(doc, cachedPaths, func(path string, cc ojson.Result) bool {
 		if !isValidClaudeCacheControl(cc) {
 			return true
 		}
@@ -3864,7 +3863,7 @@ func enforceCacheControlLimit(payload []byte, maxBlocks int) []byte {
 	return doc.Bytes()
 }
 
-func enforceCacheControlLimitDoc(doc *ojson.Doc, maxBlocks int) bool {
+func enforceCacheControlLimitDoc(doc *ojson.Doc, maxBlocks int, cachedPaths ...[]string) bool {
 	if doc == nil || doc.Len() == 0 {
 		return false
 	}
@@ -3876,7 +3875,7 @@ func enforceCacheControlLimitDoc(doc *ojson.Doc, maxBlocks int) bool {
 	}
 
 	var toolPaths, systemPaths, messagePaths []string
-	forEachClaudeCacheControlPathDoc(doc, func(path string, cc ojson.Result) bool {
+	walkClaudeCacheControlPathsDoc(doc, cachedPaths, func(path string, cc ojson.Result) bool {
 		if !isValidClaudeCacheControl(cc) {
 			return true
 		}
@@ -4254,4 +4253,25 @@ func ensureModelMaxTokensDoc(doc *ojson.Doc, modelID string) bool {
 	}
 
 	return false
+}
+
+// Cache-control placement is frozen between ensure and the final TTL pass.
+// Paths remain valid while only cache_control values are edited or deleted.
+func collectClaudeCacheControlPathsDoc(doc *ojson.Doc) []string {
+	paths := make([]string, 0, 8)
+	forEachClaudeCacheControlPathDoc(doc, func(path string, _ ojson.Result) bool { paths = append(paths, path); return true })
+	return paths
+}
+func walkClaudeCacheControlPathsDoc(doc *ojson.Doc, cached [][]string, visit func(string, ojson.Result) bool) {
+	if len(cached) == 0 {
+		forEachClaudeCacheControlPathDoc(doc, visit)
+		return
+	}
+	for _, path := range cached[0] {
+		if cc := doc.Get(path + ".cache_control"); cc.Exists() {
+			if !visit(path, cc) {
+				return
+			}
+		}
+	}
 }

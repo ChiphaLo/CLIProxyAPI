@@ -18,13 +18,14 @@ import (
 // conversations get different values.
 func DeriveClaudeUserID(rawJSON []byte) string {
 	root := util.ParseGJSONBytesNoCopy(rawJSON)
+	get := util.IndexRootFields(root)
 
-	if v := root.Get("metadata.user_id"); v.Exists() && v.Type == ojson.String {
+	if v := get("metadata.user_id"); v.Exists() && v.Type == ojson.String {
 		if raw := v.String(); strings.TrimSpace(raw) != "" {
 			return strings.Clone(raw)
 		}
 	}
-	if v := root.Get("user"); v.Exists() && v.Type == ojson.String {
+	if v := get("user"); v.Exists() && v.Type == ojson.String {
 		if raw := v.String(); strings.TrimSpace(raw) != "" {
 			return strings.Clone(raw)
 		}
@@ -32,7 +33,7 @@ func DeriveClaudeUserID(rawJSON []byte) string {
 
 	var seed strings.Builder
 
-	if v := root.Get("prompt_cache_key"); v.Exists() {
+	if v := get("prompt_cache_key"); v.Exists() {
 		if value := strings.TrimSpace(v.String()); value != "" {
 			seed.WriteString("prompt_cache_key:")
 			seed.WriteString(value)
@@ -41,7 +42,7 @@ func DeriveClaudeUserID(rawJSON []byte) string {
 
 	if seed.Len() == 0 {
 		for _, path := range []string{"session_id", "sessionId"} {
-			if v := root.Get(path); v.Exists() {
+			if v := get(path); v.Exists() {
 				if value := strings.TrimSpace(v.String()); value != "" {
 					seed.WriteString("session_id:")
 					seed.WriteString(value)
@@ -52,7 +53,7 @@ func DeriveClaudeUserID(rawJSON []byte) string {
 	}
 
 	if seed.Len() == 0 {
-		conversation := root.Get("conversation")
+		conversation := get("conversation")
 		if sid := strings.TrimSpace(conversation.Get("id").String()); sid != "" {
 			seed.WriteString("conversation_id:")
 			seed.WriteString(sid)
@@ -61,7 +62,7 @@ func DeriveClaudeUserID(rawJSON []byte) string {
 				seed.WriteString("conversation_id:")
 				seed.WriteString(sid)
 			}
-		} else if v := root.Get("conversation_id"); v.Exists() {
+		} else if v := get("conversation_id"); v.Exists() {
 			if sid := strings.TrimSpace(v.String()); sid != "" {
 				seed.WriteString("conversation_id:")
 				seed.WriteString(sid)
@@ -77,25 +78,25 @@ func DeriveClaudeUserID(rawJSON []byte) string {
 	}
 
 	if seed.Len() == 0 {
-		if v := root.Get("model"); v.Exists() {
+		if v := get("model"); v.Exists() {
 			if value := strings.TrimSpace(v.String()); value != "" {
 				seed.WriteString("model:")
 				seed.WriteString(value)
 			}
 		}
-		if v := root.Get("instructions"); v.Exists() {
+		if v := get("instructions"); v.Exists() {
 			seed.WriteString(";instructions:")
 			seed.WriteString(v.String())
 		}
-		if v := root.Get("system"); v.Exists() {
+		if v := get("system"); v.Exists() {
 			seed.WriteString(";system:")
 			seed.WriteString(v.String())
 		}
-		if v := root.Get("systemInstruction"); v.Exists() {
+		if v := get("systemInstruction"); v.Exists() {
 			seed.WriteString(";systemInstruction:")
 			seed.WriteString(v.String())
 		}
-		if v := root.Get("system_instruction"); v.Exists() {
+		if v := get("system_instruction"); v.Exists() {
 			seed.WriteString(";system_instruction:")
 			seed.WriteString(v.String())
 		}

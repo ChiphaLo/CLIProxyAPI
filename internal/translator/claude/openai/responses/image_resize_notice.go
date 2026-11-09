@@ -14,6 +14,12 @@ var resizeNoticeLine = regexp.MustCompile(`^Image ([1-9][0-9]{0,6}) of ([1-9][0-
 // legacy/unknown model behavior, generic developer authority and explicit cache
 // placement unchanged. The notification itself is never demoted or discarded.
 func responsesInlineImageResizeNotices(model string, input ojson.Result) map[int]string {
+	if !input.IsArray() {
+		return nil
+	}
+	return responsesInlineImageResizeNoticesFromItems(model, input.Array())
+}
+func responsesInlineImageResizeNoticesFromItems(model string, items []ojson.Result) map[int]string {
 	model = strings.ToLower(strings.TrimSpace(model))
 	model = model[strings.LastIndexByte(model, '/')+1:]
 	switch model {
@@ -22,10 +28,6 @@ func responsesInlineImageResizeNotices(model string, input ojson.Result) map[int
 		return nil
 	}
 	result := map[int]string{}
-	if !input.IsArray() {
-		return result
-	}
-	items := input.Array()
 	for i, item := range items {
 		if i == 0 || !strings.EqualFold(item.Get("role").String(), "developer") || item.Get("cache_control").Exists() {
 			continue

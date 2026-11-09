@@ -178,7 +178,8 @@ func (e *ClaudeExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 	// Enforce Anthropic's cache_control block limit (max 4 breakpoints per request).
 	// Cloaking and ensureCacheControl may push the total over 4 when the client
 	// already sends multiple cache_control blocks.
-	enforceCacheControlLimitDoc(doc, 4)
+	cachePaths := collectClaudeCacheControlPathsDoc(doc)
+	enforceCacheControlLimitDoc(doc, 4, cachePaths)
 	stripPromptCacheOptionsDoc(doc)
 
 	// Native selects the 1h cache pool only for OAuth credentials and pairs it with
@@ -195,16 +196,16 @@ func (e *ClaudeExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 	// In native Claude Code, subagents default to 5m unless 1h is explicitly configured;
 	// probes omit both 1h cache and extended-cache-ttl.
 	isSubagent := isClaudeSubagentRequestDoc(incomingHeaders, doc)
-	subagent1h := isSubagent && claudeSubagentRequests1hDoc(incomingHeaders, doc)
+	subagent1h := isSubagent && claudeSubagentRequests1hDoc(incomingHeaders, doc, cachePaths)
 	if cpaOwnsCacheControl && fp.ProfileClaudeCodeCLI && (!isSubagent || subagent1h) && !isProbeOrHelper {
-		upgradeClaudeCacheControlTTLDoc(doc, claudeCacheControlTTL1h)
+		upgradeClaudeCacheControlTTLDoc(doc, claudeCacheControlTTL1h, cachePaths)
 	} else if (isProbeOrHelper || (isSubagent && !subagent1h)) && !explicitCacheMode {
-		stripClaudeCacheControlTTLDoc(doc)
+		stripClaudeCacheControlTTLDoc(doc, cachePaths)
 	}
 
 	// Normalize TTL values to prevent ordering violations under prompt-caching-scope-2026-01-05.
 	if !explicitCacheMode {
-		normalizeCacheControlTTLDoc(doc)
+		normalizeCacheControlTTLDoc(doc, cachePaths)
 	}
 
 	// Extract betas from body and convert to header

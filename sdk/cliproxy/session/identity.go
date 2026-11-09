@@ -233,15 +233,27 @@ func DerivedID(metadata map[string]any) string {
 // When opts.OriginalRequest is unset, it shares req.Payload as the read-only original request
 // baseline to avoid multi-megabyte allocations on large payloads. Callers that mutate req.Payload
 // in-place after Enrich must explicitly provide an independent opts.OriginalRequest.
-func Enrich(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (cliproxyexecutor.Request, cliproxyexecutor.Options) {
+func Enrich(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (resultReq cliproxyexecutor.Request, resultOpts cliproxyexecutor.Options) {
 	payload := opts.OriginalRequest
 	if len(payload) == 0 && len(req.Payload) > 0 {
 		opts.OriginalRequest = req.Payload
 		payload = opts.OriginalRequest
 	}
+	identity := requestIdentity(payload, opts.Metadata)
+	if identity != nil {
+		copy := *identity
+		identity = &copy
+	}
+	if identity == nil {
+		identity = &RequestIdentity{payload: payload, root: newSessionObject(util.ParseGJSONBytesNoCopy(payload))}
+	}
+	defer func() {
+		resultReq.Metadata = metadataWithValue(resultReq.Metadata, requestIdentityMetadataKey, identity)
+		resultOpts.Metadata = metadataWithValue(resultOpts.Metadata, requestIdentityMetadataKey, identity)
+	}()
 	executionID := firstNormalizedMetadataID(cliproxyexecutor.ExecutionSessionMetadataKey, opts.Metadata, req.Metadata)
 
-	if hasExplicitSession(opts.Headers, payload) {
+	if hasExplicitSessionFromRoot(opts.Headers, payload, identity.root) {
 		req.Metadata = metadataWithoutKey(req.Metadata, cliproxyexecutor.DerivedSessionIDMetadataKey)
 		opts.Metadata = metadataWithoutKey(opts.Metadata, cliproxyexecutor.DerivedSessionIDMetadataKey)
 		if executionID != "" {
@@ -251,7 +263,7 @@ func Enrich(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (clipro
 			req.Metadata = metadataWithoutKey(req.Metadata, cliproxyexecutor.ExecutionSessionMetadataKey)
 			opts.Metadata = metadataWithoutKey(opts.Metadata, cliproxyexecutor.ExecutionSessionMetadataKey)
 		}
-		if info, ok := ExtractSessionInfo(opts.Headers, payload, opts.Metadata); ok && info.SessionID != "" {
+		if info, ok := extractSessionInfoFromRoot(opts.Headers, payload, opts.Metadata, identity.root); ok && info.SessionID != "" {
 			canonicalSessionID := BoundSessionIdentity(info.SessionID)
 			req.Metadata = metadataWithValue(req.Metadata, cliproxyexecutor.CanonicalSessionIDMetadataKey, canonicalSessionID)
 			opts.Metadata = metadataWithValue(opts.Metadata, cliproxyexecutor.CanonicalSessionIDMetadataKey, canonicalSessionID)
@@ -336,7 +348,13 @@ func Enrich(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (clipro
 		if callerScope == "" {
 			callerScope = metadataString(req.Metadata, cliproxyexecutor.CallerScopeMetadataKey)
 		}
-		derivedID = DeriveID(opts.SourceFormat, payload, callerScope)
+		model := req.Model
+		if model == "" {
+			model = identity.root.Get("model").String()
+		}
+		cacheUser := strings.HasPrefix(model[strings.LastIndex(model, "/")+1:], "claude-") &&
+			(sourceFormatEqual(opts.SourceFormat, sdktranslator.FormatOpenAIResponse) || sourceFormatEqual(opts.SourceFormat, sdktranslator.FormatCodex))
+		derivedID = identity.derive(opts.SourceFormat, callerScope, cacheUser)
 	}
 	if derivedID == "" {
 		return req, opts
@@ -347,6 +365,9 @@ func Enrich(req cliproxyexecutor.Request, opts cliproxyexecutor.Options) (clipro
 }
 
 func hasExplicitSession(headers map[string][]string, payload []byte) bool {
+	return hasExplicitSessionFromRoot(headers, payload, newSessionObject(util.ParseGJSONBytesNoCopy(payload)))
+}
+func hasExplicitSessionFromRoot(headers map[string][]string, payload []byte, root sessionObject) bool {
 	for _, header := range []string{
 		"X-Claude-Code-Session-Id",
 		"X-Claude-Code-Agent-Id",
@@ -391,7 +412,6 @@ func hasExplicitSession(headers map[string][]string, payload []byte) bool {
 	}
 	// Parsing without copying matters here: this runs on every request and the
 	// payload can be multiple megabytes.
-	root := newSessionObject(util.ParseGJSONBytesNoCopy(payload))
 	reqRoot := root
 	req := root.Get("request")
 	hasNestedReq := req.Exists() && !root.Get("contents").Exists()
@@ -499,6 +519,13 @@ func DeriveID(format sdktranslator.Format, payload []byte, callerScope string) s
 	}
 	if sourceFormatEqual(format, sdktranslator.FormatOpenAIResponse) || sourceFormatEqual(format, sdktranslator.FormatCodex) {
 		return deriveResponsesID(format, payload, callerScope)
+	}
+	if root, _, ok := selectiveCanonicalRoot(format, payload); ok {
+		if len(root.User) == 0 {
+			return ""
+		}
+		root.CallerScope = strings.TrimSpace(callerScope)
+		return hashRoot(root)
 	}
 	var body map[string]any
 	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
@@ -829,6 +856,9 @@ func normalizeJSONValue(value any) any {
 }
 
 func hashRoot(root canonicalRoot) string {
+	return hashRootWithUser(root, "")
+}
+func hashRootWithUser(root canonicalRoot, userJSON string) string {
 	// Stream canonical media values to the hash without assembling a full copy.
 	doc := ojson.NewDoc([]byte(`{"version":null,"format":null,"caller_scope":null}`))
 	set := func(path string, value any) bool {
@@ -841,7 +871,11 @@ func hashRoot(root canonicalRoot) string {
 	if len(root.Instructions) > 0 && !set("instructions", root.Instructions) {
 		return ""
 	}
-	if len(root.User) > 0 {
+	if userJSON != "" {
+		if err := doc.SetRaw("user", userJSON); err != nil {
+			return ""
+		}
+	} else if len(root.User) > 0 {
 		if err := doc.SetRaw("user", "[]"); err != nil {
 			return ""
 		}

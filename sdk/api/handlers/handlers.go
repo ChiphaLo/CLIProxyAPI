@@ -303,6 +303,12 @@ func requestExecutionMetadata(ctx context.Context) map[string]any {
 	}
 
 	meta := make(map[string]any)
+	if ginCtx != nil {
+		if id := ginCtx.GetString("cpa:verified-derived-session"); id != "" {
+			meta[coreexecutor.DerivedSessionIDMetadataKey] = id
+		}
+	}
+
 	if key != "" {
 		meta[idempotencyKeyMetadataKey] = key
 	}
