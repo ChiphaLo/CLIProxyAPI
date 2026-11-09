@@ -112,8 +112,12 @@ func (s *ReceiptSink) HandleUsage(ctx context.Context, record usage.Record) {
 	ttft := time.Duration(0)
 	if record.TTFT > 0 {
 		ttft = record.TTFT
-		if !record.RequestedAt.IsZero() && !meta.Started.IsZero() {
-			ttft += max(record.RequestedAt.Sub(meta.Started), 0)
+		upstreamStarted := record.UpstreamRequestedAt
+		if upstreamStarted.IsZero() {
+			upstreamStarted = record.RequestedAt
+		}
+		if !upstreamStarted.IsZero() && !meta.Started.IsZero() {
+			ttft += max(upstreamStarted.Sub(meta.Started), 0)
 		}
 		ttft = min(ttft, duration)
 	}

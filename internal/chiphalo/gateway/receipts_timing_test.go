@@ -51,3 +51,32 @@ func TestReceiptTTFTIncludesAdmissionAndClampsToDuration(t *testing.T) {
 		})
 	}
 }
+
+func TestReceiptTTFTIncludesExecutorPreparation(t *testing.T) {
+	stamp := time.Unix(1800000000, 0)
+	path := filepath.Join(t.TempDir(), "usage.jsonl")
+	sink, err := OpenReceiptSink(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(context.Background(), metadataKey{}, requestMetadata{Started: stamp})
+	sink.HandleUsage(ctx, usage.Record{
+		RequestedAt: stamp.Add(time.Second), UpstreamRequestedAt: stamp.Add(2 * time.Second),
+		Latency: 3 * time.Second, TTFT: 500 * time.Millisecond,
+		RawUsageFormat: "responses", RawUsage: []byte(`{"input_tokens":10,"output_tokens":2}`),
+	})
+	if err = sink.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := billing.DecodeRow(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row.TTFTMS != 2500 || row.UpstreamTTFTMS != 500 || row.DurationMS != 4000 {
+		t.Fatalf("executor preparation omitted or upstream clock changed: %+v", row)
+	}
+}

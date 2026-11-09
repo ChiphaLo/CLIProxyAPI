@@ -71,11 +71,13 @@ type Record struct {
 	// Stream reports whether the request was executed in streaming mode.
 	Stream      bool
 	RequestedAt time.Time
-	Latency     time.Duration
-	TTFT        time.Duration
-	Failed      bool
-	Fail        Failure
-	Detail      Detail
+	// UpstreamRequestedAt marks the first outbound attempt after executor preparation.
+	UpstreamRequestedAt time.Time
+	Latency             time.Duration
+	TTFT                time.Duration
+	Failed              bool
+	Fail                Failure
+	Detail              Detail
 	// RawUsage is an optional, bounded copy of the original upstream usage object.
 	// It is populated only for requests that explicitly enable raw usage capture.
 	// RawUsageFormat is "chat", "responses", or "gemini"; none is normalized by CPA.

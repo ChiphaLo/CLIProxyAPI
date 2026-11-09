@@ -59,6 +59,7 @@ type UsageReporter struct {
 	firstPacketDuration  time.Duration
 	firstPacketSet       bool
 	ttftStart            time.Time
+	upstreamRequestedAt  time.Time
 	ttftSet              bool
 	once                 sync.Once
 	captureRawUsage      bool
@@ -450,6 +451,9 @@ func (r *UsageReporter) StartResponseTTFT() {
 	r.ttftMu.Lock()
 	if !r.ttftSet && r.ttftStart.IsZero() {
 		r.ttftStart = time.Now()
+		if r.upstreamRequestedAt.IsZero() {
+			r.upstreamRequestedAt = r.ttftStart
+		}
 	}
 	r.ttftMu.Unlock()
 }
@@ -714,6 +718,7 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 		Generate:             usage.GenerateFlag(r.generate),
 		Stream:               r.stream,
 		RequestedAt:          r.requestedAt,
+		UpstreamRequestedAt:  r.upstreamRequestTime(),
 		Latency:              r.latency(),
 		TTFT:                 r.ttftDuration(),
 		Failed:               failed,
@@ -795,6 +800,15 @@ func (r *UsageReporter) ttftDuration() time.Duration {
 		return r.firstPacketDuration
 	}
 	return 0
+}
+
+func (r *UsageReporter) upstreamRequestTime() time.Time {
+	if r == nil {
+		return time.Time{}
+	}
+	r.ttftMu.RLock()
+	defer r.ttftMu.RUnlock()
+	return r.upstreamRequestedAt
 }
 
 type usageTTFTRoundTripper struct {
