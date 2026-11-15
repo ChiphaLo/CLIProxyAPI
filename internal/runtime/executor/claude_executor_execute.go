@@ -98,6 +98,9 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 		return resp, err
 	}
 	helps.RestoreClaudeWebSearchResultsContextDoc(ctx, doc, webSearchSessionKey, webSearchTTL)
+	if _, errImages := helps.ResizeClaudeImagesDoc(doc); errImages != nil {
+		return resp, statusErr{code: http.StatusBadRequest, msg: errImages.Error()}
+	}
 	if rebuildMidSystemMessageEnabled(e.cfg, auth) {
 		rebuildMidSystemMessagesToTopLevelDoc(doc)
 	}
