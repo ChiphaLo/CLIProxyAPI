@@ -20,9 +20,11 @@ import (
 )
 
 const (
-	defaultClaudeFingerprintUserAgent      = "claude-cli/2.1.280 (external, cli)"
-	defaultClaudeFingerprintPackageVersion = "0.112.1"
-	defaultClaudeFingerprintRuntimeVersion = "v26.3.0"
+	// DefaultClaudeCodeVersion pins the measured Claude Code software profile.
+	DefaultClaudeCodeVersion               = "2.1.325"
+	defaultClaudeFingerprintUserAgent      = "claude-cli/" + DefaultClaudeCodeVersion + " (external, cli)"
+	defaultClaudeFingerprintPackageVersion = "0.128.0"
+	defaultClaudeFingerprintRuntimeVersion = "v26.12.1"
 	defaultClaudeFingerprintOS             = "MacOS"
 	defaultClaudeFingerprintArch           = "arm64"
 	claudeDeviceProfileTTL                 = 7 * 24 * time.Hour
@@ -123,6 +125,23 @@ func MapStainlessOS() string {
 
 func MapStainlessArch() string {
 	return mapStainlessArch()
+}
+
+// claudeClientCompatibilityProfile keeps measured older native clients valid
+// when the emulated software baseline advances. Explicit operator pins still win.
+func claudeClientCompatibilityProfile(cfg *config.Config) ClaudeDeviceProfile {
+	profile := defaultClaudeDeviceProfile(cfg)
+	if cfg == nil || strings.TrimSpace(cfg.ClaudeHeaderDefaults.UserAgent) == "" {
+		profile.UserAgent = "claude-cli/2.1.280 (external, cli)"
+	}
+	if cfg == nil || strings.TrimSpace(cfg.ClaudeHeaderDefaults.PackageVersion) == "" {
+		profile.PackageVersion = "0.112.1"
+	}
+	if cfg == nil || strings.TrimSpace(cfg.ClaudeHeaderDefaults.RuntimeVersion) == "" {
+		profile.RuntimeVersion = "v26.3.0"
+	}
+	profile.version, profile.hasVersion = parseClaudeCLIVersion(profile.UserAgent)
+	return profile
 }
 
 func defaultClaudeDeviceProfile(cfg *config.Config) ClaudeDeviceProfile {
@@ -638,14 +657,14 @@ func ApplyClaudeDeviceProfileHeaders(r *http.Request, profile ClaudeDeviceProfil
 	r.Header.Set("X-Stainless-Arch", profile.Arch)
 }
 
-// DefaultClaudeVersion returns the version string (e.g. "2.1.280") from the
+// DefaultClaudeVersion returns the version string (e.g. "2.1.325") from the
 // current baseline device profile. It extracts the version from the User-Agent.
 func DefaultClaudeVersion(cfg *config.Config) string {
 	profile := defaultClaudeDeviceProfile(cfg)
 	if version, ok := parseClaudeCLIVersion(profile.UserAgent); ok {
 		return strconv.Itoa(version.major) + "." + strconv.Itoa(version.minor) + "." + strconv.Itoa(version.patch)
 	}
-	return "2.1.280"
+	return DefaultClaudeCodeVersion
 }
 
 func ApplyClaudeDefaultDeviceProfileHeaders(r *http.Request, cfg *config.Config) {
@@ -670,17 +689,18 @@ func ApplyClaudeLegacyDeviceHeaders(r *http.Request, ginHeaders http.Header, cfg
 	}
 
 	if confirmedClaudeCode {
+		compatibility := claudeClientCompatibilityProfile(cfg)
 		validRuntime := func(value string) bool {
 			if !allowNewer && cfg != nil && strings.TrimSpace(cfg.ClaudeHeaderDefaults.RuntimeVersion) != "" {
 				return value == profile.RuntimeVersion
 			}
-			return plausibleClaudeRuntimeVersion(value, profile.RuntimeVersion)
+			return plausibleClaudeRuntimeVersion(value, compatibility.RuntimeVersion)
 		}
 		validPackage := func(value string) bool {
 			if !allowNewer && cfg != nil && strings.TrimSpace(cfg.ClaudeHeaderDefaults.PackageVersion) != "" {
 				return value == profile.PackageVersion
 			}
-			return plausibleClaudePackageVersion(value, profile.PackageVersion)
+			return plausibleClaudePackageVersion(value, compatibility.PackageVersion)
 		}
 		miscEnsure("X-Stainless-Runtime-Version", profile.RuntimeVersion, validRuntime)
 		miscEnsure("X-Stainless-Package-Version", profile.PackageVersion, validPackage)

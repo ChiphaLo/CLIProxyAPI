@@ -25,7 +25,8 @@ func confirmedClaudeCodeHeaders() http.Header {
 }
 
 func measuredClaudeCodeHelperHeaders(betaProfile string) http.Header {
-	profile := defaultClaudeDeviceProfile(&config.Config{})
+	// This factory describes the historical 2.1.280 helper captures.
+	profile := claudeClientCompatibilityProfile(&config.Config{})
 	headers := http.Header{
 		"Accept":            {"application/json"},
 		"Accept-Encoding":   {"gzip, deflate, br, zstd"},

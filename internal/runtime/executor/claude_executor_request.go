@@ -53,6 +53,7 @@ const (
 	claudeCacheDiagnosisBeta         = "cache-diagnosis-2026-04-07"
 	claudeRedactThinkingBeta         = "redact-thinking-2026-02-12"
 	claudeAFKModeBeta                = "afk-mode-2026-01-31"
+	claudeToolProvenanceBeta         = "tool-provenance-2026-10-26"
 )
 
 // claudeCodeCLIConstantBetas are the betas Claude Code sends on every
@@ -111,6 +112,7 @@ var claudeManagedBetaSet = func() map[string]bool {
 		claudeCacheDiagnosisBeta,
 		claudeRedactThinkingBeta,
 		claudeAFKModeBeta,
+		claudeToolProvenanceBeta,
 	}
 	managed = append(managed, claudeCodeCLIConstantBetas...)
 	managed = append(managed, claudeCodeTrailingBetas...)
@@ -131,7 +133,9 @@ func isManagedClaudeBeta(beta string) bool {
 //
 // Verified against api.anthropic.com with native 2.1.258 captures on interactive,
 // non-interactive, subagent, and multi-model paths (Sonnet, Opus, Fable, Haiku).
-// Claude Code 2.1.280 (measured 2026-09-23, binary 80abbfe) inserts
+// Current adaptive-model gates/order were remeasured with 2.1.325 on
+// 2026-11-16, including Haiku/Sonnet effort and tool provenance. Older model
+// paths retain their historical beta envelope. Claude Code 2.1.280 (measured 2026-09-23, binary 80abbfe) inserts
 // mid-conversation-tool-changes immediately after mid-conversation-system on the
 // same non-legacy models. The betas named in issue #6054 are feature-gated in
 // that binary, so they are emitted only for the model capability or body shape
@@ -175,9 +179,13 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 
 func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthToken bool, facts helps.ClaudeRequestFacts) string {
 	get, isProbeOrHelper := facts.Get, facts.IsProbeOrHelper
+	currentAdaptive := isClaudeCurrentAdaptiveModel(get("model").String())
+	currentHaiku := isClaudeHaiku55Model(get("model").String())
 
 	betas := make([]string, 0, len(claudeCodeCLIConstantBetas)+len(claudeCodeTrailingBetas)+10)
-	betas = append(betas, claudeCodeBeta)
+	if !currentHaiku {
+		betas = append(betas, claudeCodeBeta)
+	}
 	if oauthToken {
 		betas = append(betas, claudeOAuthBeta)
 	}
@@ -190,10 +198,20 @@ func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthTo
 		if beta == claudeRedactThinkingBeta && !redactThinking {
 			continue
 		}
+		if currentAdaptive && beta == "thinking-token-count-2026-05-13" {
+			continue
+		}
 		betas = append(betas, beta)
 	}
+	// Haiku inserts the client beta after its shared SDK feature betas.
+	if currentHaiku {
+		betas = append(betas, claudeCodeBeta)
+	}
 	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) {
-		betas = append(betas, claudeMidConvSystemBeta)
+		// Current adaptive models accept system turns without this legacy beta.
+		if !currentAdaptive || requested[claudeMidConvSystemBeta] {
+			betas = append(betas, claudeMidConvSystemBeta)
+		}
 		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(get("model").String()) {
 			betas = append(betas, claudePerTurnControlBeta)
 		}
@@ -215,6 +233,13 @@ func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthTo
 		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(get("model").String()) && facts.HasPerTurnTiming) {
 			betas = append(betas, claudePerTurnTimingBeta)
 		}
+	}
+	// Measured in the 2.1.325 CLI and SDK on all current adaptive models.
+	if requested[claudeToolProvenanceBeta] || (currentAdaptive && oauthToken && !isProbeOrHelper) {
+		betas = append(betas, claudeToolProvenanceBeta)
+	}
+	if currentAdaptive {
+		betas = append(betas, "thinking-token-count-2026-05-13")
 	}
 	if requested[claudeAdvisorToolBeta] || facts.HasAdvisorTool {
 		betas = append(betas, claudeAdvisorToolBeta)
@@ -291,14 +316,14 @@ func claudeCanonicalModel(model string) string {
 	if slash := strings.LastIndexByte(model, '/'); slash >= 0 {
 		model = model[slash+1:]
 	}
+	model = strings.ReplaceAll(model, "5.5", "5-5")
 	return model
 }
 
-// claudeModelHasPerTurnEffort reports models whose 2.1.280 catalog capability
-// per_turn_effort puts per-turn-control-2026-07-01 on every first-party request.
+// Current Claude Code model matching accepts both dashed and dotted versions.
 func isClaudeOpus55Model(model string) bool {
 	model = claudeCanonicalModel(model)
-	return model == "claude-opus-5-5" || strings.HasPrefix(model, "claude-opus-5-5[")
+	return model == "claude-opus-5-5" || strings.HasPrefix(model, "claude-opus-5-5-") || strings.HasPrefix(model, "claude-opus-5-5[")
 }
 
 func isClaudeSonnet55Model(model string) bool {
@@ -336,13 +361,23 @@ func isClaudeFable51OnlyModel(model string) bool {
 	return false
 }
 
+// isClaudeFable52Model matches only the current Fable family, not unrelated IDs.
+func isClaudeFable52Model(model string) bool {
+	model = strings.ReplaceAll(claudeCanonicalModel(model), "5.2", "5-2")
+	return model == "claude-fable-5-2" || strings.HasPrefix(model, "claude-fable-5-2-") || strings.HasPrefix(model, "claude-fable-5-2[")
+}
+
+func isClaudeCurrentAdaptiveModel(model string) bool {
+	return isClaudeOpus55Model(model) || isClaudeSonnet55Model(model) || isClaudeHaiku55Model(model) || isClaudeFable52Model(model)
+}
+
 // isClaudePreservedThinkingModel reports the models whose signed thinking
 // blocks Anthropic binds to the creation-time conversation prefix (system,
 // tools, and every earlier message). Replaying those blocks under a reshaped
 // prefix fails binding validation unless the request opts into dropping them.
 // See https://platform.claude.com/docs/en/build-with-claude/preserved-thinking
 func isClaudePreservedThinkingModel(model string) bool {
-	return isClaudeOpus55Model(model) || isClaudeSonnet55Model(model) || isClaudeHaiku55Model(model) || isClaudeFable51OnlyModel(model)
+	return isClaudeOpus55Model(model) || isClaudeSonnet55Model(model) || isClaudeHaiku55Model(model) || isClaudeFable51OnlyModel(model) || isClaudeFable52Model(model)
 }
 
 // claudeThinkingTypeAcceptsBlockBinding reports whether the body's thinking
@@ -437,10 +472,10 @@ func applyClaudePreservedThinkingBindingDoc(doc *ojson.Doc) bool {
 	return doc.Set("thinking.block_binding.prefix_mismatch_behavior", "drop_block") == nil
 }
 
-// claudeModelUsesProgressDisplay reports the 2.1.280 interactive CLI models that
+// claudeModelUsesProgressDisplay reports the measured 2.1.325 interactive models that
 // send thinking.display=updates unless the caller already chose a display mode.
 func claudeModelUsesProgressDisplay(model string) bool {
-	return isClaudeOpus55Model(model) || isClaudeFable51Model(model) || isClaudeSonnet5Model(model) || isClaudeSonnet55Model(model)
+	return isClaudeCurrentAdaptiveModel(model) || isClaudeFable51Model(model) || isClaudeSonnet5Model(model)
 }
 
 // applyClaudeCloakThinkingDisplay fills the latest CLI display only when the
@@ -473,7 +508,7 @@ func applyClaudeCloakThinkingDisplayDoc(doc *ojson.Doc, callerOwned bool) bool {
 }
 
 func claudeModelHasPerTurnEffort(model string) bool {
-	return isClaudeOpus55Model(model) || strings.HasPrefix(claudeCanonicalModel(model), "claude-fable-5-1")
+	return isClaudeCurrentAdaptiveModel(model) || isClaudeFable51OnlyModel(model)
 }
 
 // claudeModelHasPerTurnTiming reports models whose catalog lists per_turn_timing.
@@ -481,7 +516,7 @@ func claudeModelHasPerTurnEffort(model string) bool {
 // is set, so the beta follows the body or an explicit caller request.
 func claudeModelHasPerTurnTiming(model string) bool {
 	model = claudeCanonicalModel(model)
-	return claudeModelHasPerTurnEffort(model) || strings.HasPrefix(model, "claude-mythos-5-1")
+	return (claudeModelHasPerTurnEffort(model) && !isClaudeHaiku55Model(model)) || strings.HasPrefix(model, "claude-mythos-5-1")
 }
 
 func claudeIncludePerTurnControl(body []byte, requested map[string]bool) bool {
@@ -551,7 +586,7 @@ func claudeRequestSupportsEffort(body []byte, requested map[string]bool) bool {
 }
 
 func claudeRequestFieldsSupportEffort(get func(string) ojson.Result, probeOrHelper bool) bool {
-	return !probeOrHelper && !isClaudeHaikuModel(get("model").String()) &&
+	return !probeOrHelper && (!isClaudeHaikuModel(get("model").String()) || isClaudeHaiku55Model(get("model").String())) &&
 		!strings.EqualFold(strings.TrimSpace(get("thinking.type").String()), "disabled")
 }
 
@@ -1460,7 +1495,7 @@ func applyClaudeHeadersWithNativeProfile(
 	identityHeader("Anthropic-Version", "2023-06-01")
 	identityHeader("Anthropic-Dangerous-Direct-Browser-Access", "true")
 	identityHeader("X-App", "cli")
-	// Values below match Claude Code 2.1.280 / @anthropic-ai/sdk 0.112.1.
+	// Values below match the measured Claude Code 2.1.325 software profile.
 	identityHeader("X-Stainless-Retry-Count", "0")
 	identityHeader("X-Stainless-Runtime", "node")
 	identityHeader("X-Stainless-Lang", "js")
@@ -1516,6 +1551,9 @@ func applyClaudeHeadersWithNativeProfile(
 	if confirmedClaudeCode {
 		for _, hdr := range []string{
 			"X-Claude-Code-Request-Class",
+			"X-Claude-1p-Request-Class",
+			"X-Claude-Code-Prompt-Id",
+			"X-Claude-Code-Sandy-Plover",
 			"X-Claude-Code-Agent-Type",
 			"X-Claude-Code-Prev-Tool-Durations",
 			"X-Claude-Code-Compaction",

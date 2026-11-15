@@ -67,7 +67,8 @@ func renderToolSearchExecutorGolden(t *testing.T) map[string]string {
 			auth := &cliproxyauth.Auth{Attributes: attrs, Metadata: map[string]any{"account_uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}}
 			upstream := &midSystemUpstream{}
 			ctx := upstream.context(t, nil)
-			ex := NewClaudeExecutor(&config.Config{})
+			// Keep the historical software tuple pinned for this dev golden.
+			ex := NewClaudeExecutor(&config.Config{ClaudeHeaderDefaults: config.ClaudeHeaderDefaults{UserAgent: "claude-cli/2.1.280 (external, cli)", PackageVersion: "0.112.1", RuntimeVersion: "v26.3.0"}})
 			var errSend error
 			switch path {
 			case "execute":
