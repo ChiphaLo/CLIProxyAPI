@@ -42,6 +42,27 @@ func TestLogFormatterPrintsVersionField(t *testing.T) {
 	}
 }
 
+func TestLogFormatterPreservesRateLimitDiagnostics(t *testing.T) {
+	entry := log.NewEntry(log.New()).WithFields(log.Fields{
+		"rejected_windows": "5h,unified", "effective_cooldown": "4h8m15s",
+		"base_cooldown": "4h8m0s", "fuzz": "15s", "deadline": "2026-11-17T03:00:00+08:00",
+		"status": "fallback_exponential_backoff", "authorization": "secret-must-not-appear",
+	})
+	entry.Message = "parsed Anthropic rate limit reset headers"
+	formatted, err := (&LogFormatter{}).Format(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"rejected_windows", "effective_cooldown", "base_cooldown", "fuzz", "deadline", "status"} {
+		if !strings.Contains(string(formatted), key+"=") {
+			t.Fatalf("missing diagnostic %s: %s", key, formatted)
+		}
+	}
+	if strings.Contains(string(formatted), "secret-must-not-appear") {
+		t.Fatal("unapproved field leaked")
+	}
+}
+
 func TestLogFormatterPrintsMediaForwardingFields(t *testing.T) {
 	entry := log.NewEntry(log.New())
 	entry.Time = time.Date(2026, 7, 25, 7, 36, 4, 0, time.Local)

@@ -1332,6 +1332,7 @@ type statusErr struct {
 	credentialScoped   bool
 	streamTruncated    bool
 	transientRateLimit bool
+	upstreamCooldown   bool
 	// diagnostic is a content-free detail for logs only; it never reaches clients.
 	diagnostic string
 }
@@ -1345,6 +1346,10 @@ func (e statusErr) Error() string {
 func (e statusErr) StatusCode() int            { return e.code }
 func (e statusErr) RetryAfter() *time.Duration { return e.retryAfter }
 func (e statusErr) IsCredentialScoped() bool   { return e.credentialScoped }
+
+// IsRequestScoped prevents replaying an already-decided downstream cooldown.
+// The inner gateway owns credential availability; do not invent a second quota.
+func (e statusErr) IsRequestScoped() bool { return e.upstreamCooldown }
 
 // LogDiagnostic lets upstream failure logs explain a sanitized client message.
 func (e statusErr) LogDiagnostic() string { return e.diagnostic }
@@ -1360,11 +1365,20 @@ func (e statusErr) IsTransientRateLimit() bool { return e.transientRateLimit }
 const openAICompatTPMFallbackRetryAfter = time.Minute
 
 func newOpenAICompatStatusError(status int, headers http.Header, body []byte) statusErr {
-	return statusErr{
+	err := statusErr{
 		code:       status,
 		msg:        string(body),
 		retryAfter: openAICompatRetryAfter(status, headers, body, time.Now()),
 	}
+	if status == http.StatusTooManyRequests {
+		if cooldown, ok := helps.ParseBridgeModelCooldown(body); ok {
+			err.upstreamCooldown = true
+			if err.retryAfter == nil || *cooldown > *err.retryAfter {
+				err.retryAfter = cooldown
+			}
+		}
+	}
+	return err
 }
 
 // openAICompatRetryAfter preserves the provider's standard Retry-After signal.
