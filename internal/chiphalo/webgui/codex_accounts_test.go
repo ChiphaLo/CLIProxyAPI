@@ -44,7 +44,14 @@ func TestCodexManagementRoutesRequireLoginAndCSRF(t *testing.T) {
 	if w := request("PUT", true, true); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
-	if strings.Join(calls, ",") != "codex_accounts,update_codex_account" {
+	r := httptest.NewRequest("GET", "/api/codex-accounts/models?account_id=two", nil)
+	r.AddCookie(&http.Cookie{Name: "cpa_session", Value: token})
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if strings.Join(calls, ",") != "codex_accounts,update_codex_account,codex_account_models" {
 		t.Fatal(calls)
 	}
 }

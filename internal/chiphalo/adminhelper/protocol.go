@@ -28,7 +28,7 @@ var operations = map[string]bool{
 	"gui_provider_seed": true, "oauth_reset_credits": true, "consume_oauth_reset_credit": true,
 	"workbuddy_credits": true,
 	"claude_usage":      true,
-	"codex_accounts":    true, "update_codex_account": true,
+	"codex_accounts":    true, "update_codex_account": true, "codex_account_models": true,
 }
 
 type Result map[string]any

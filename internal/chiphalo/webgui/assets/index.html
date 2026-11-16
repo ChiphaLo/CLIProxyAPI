@@ -2182,7 +2182,8 @@ function openCodexAccountEditor(id,cx){
   s.innerHTML=`<div class="provider-editor" data-codex-editor="${esc(id)}">
     <div class="provider-editor-head"><div class="grow"><h3>${esc(a.name||a.prefix)} · Codex</h3></div><button type="button" class="switch ${a.enabled?'on':''}" data-codex-enabled aria-label="启用账号" aria-checked="${!!a.enabled}"></button></div>
     <div class="form-grid"><div class="field"><label class="form-label">名称</label><input class="form-input" data-codex-name maxlength="80" value="${esc(a.name)}"></div><div class="field"><label class="form-label">账号来源</label><input class="form-input mono" value="${esc(a.prefix)}" readonly></div></div>
-    <div class="divider"></div><div class="row"><h3 class="subhead grow">开放模型</h3><button type="button" class="btn btn-secondary btn-sm" data-codex-all>全选</button><button type="button" class="btn btn-secondary btn-sm" data-codex-none>取消全选</button></div>
+    <div class="divider"></div><div class="row"><h3 class="subhead grow">开放模型</h3><button type="button" class="btn btn-secondary btn-sm" data-codex-fetch>获取 /models</button><button type="button" class="btn btn-secondary btn-sm" data-codex-all>全选</button><button type="button" class="btn btn-secondary btn-sm" data-codex-none>取消全选</button></div>
+    <div data-codex-fetch-result aria-live="polite"></div>
     <div class="codex-model-list">${(a.models||[]).map((m,i)=>`<div class="codex-model-row"><label><input type="checkbox" data-codex-model="${i}" ${m.enabled?'checked':''}> <span class="mono">${esc(m.id)}</span></label><span class="muted">${m.contextWindow?fmt(m.contextWindow):'—'}</span><span class="reasoning-badges">${(m.thinking||[]).map(x=>`<span class="reasoning-badge">${esc(x)}</span>`).join('')}</span></div>`).join('')}</div>
     <div class="divider"></div><div class="row"><h3 class="subhead grow">模型价格 · USD / 1M tokens</h3><button type="button" class="btn btn-primary btn-sm" data-codex-prices disabled>保存价格</button></div><div class="price-editor" data-role="provider-prices"></div>
     <p class="hint">来源账号与前缀固定，不跨账号轮询。上下文和思考档位来自该账号已验证的目录；同步目录不会重新启用你停用的模型。</p>
@@ -2193,6 +2194,16 @@ function openCodexAccountEditor(id,cx){
   const enabled=editor.querySelector('[data-codex-enabled]');enabled.onclick=()=>{a.enabled=!a.enabled;enabled.classList.toggle('on',a.enabled);enabled.setAttribute('aria-checked',String(a.enabled));};
   const select=on=>editor.querySelectorAll('[data-codex-model]').forEach(node=>node.checked=on);
   editor.querySelector('[data-codex-all]').onclick=()=>select(true);editor.querySelector('[data-codex-none]').onclick=()=>select(false);
+  editor.querySelector('[data-codex-fetch]').onclick=async function(){
+    const out=editor.querySelector('[data-codex-fetch-result]');this.disabled=true;out.textContent='正在读取当前账号的上游模型列表…';
+    try{
+      const result=await api('/codex-accounts/models?account_id='+encodeURIComponent(id));
+      if(!editor.isConnected)return;
+      const known=new Set((a.models||[]).map(m=>m.name));
+      out.innerHTML=`<details open><summary>上游返回 ${Number(result.count||0)} 个模型</summary><div class="codex-model-list">${(result.models||[]).map(m=>`<div class="codex-model-row"><span class="mono">${esc(m.name)}</span><span class="muted">${m.context_window?fmt(m.context_window):'—'}</span><span class="muted">${known.has(m.name)?'已在账号目录':'未发布 · 需同步目录校验'}</span></div>`).join('')}</div><p class="hint">仅获取列表，不保存、不应用配置；新模型需通过“官方目录”中的同步校验后开放。</p></details>`;
+    }catch(e){if(editor.isConnected)out.textContent='获取失败：'+e.message;}
+    finally{this.disabled=false;}
+  };
   editor.querySelector('[data-codex-close]').onclick=closeSheet;
   editor.querySelector('[data-codex-catalog]').onclick=()=>openCodexDetails(cx);
   editor.querySelector('[data-codex-save]').onclick=async function(){
@@ -2225,7 +2236,7 @@ function openCodexDetails(cx){
       ${models.map(m=>{const levels=modelReasoningLevels(cx,m);const meta=(cx.context&&cx.context[m])||{};return `<div class="codex-model-row"><span class="mono">${esc(m)}</span><span class="muted">${meta.context_window?fmt(meta.context_window):"—"}</span><span class="reasoning-badges">${levels.map(x=>`<span class="reasoning-badge">${esc(x)}</span>`).join("")||`<span class="muted">未提供</span>`}</span></div>`}).join("")}
     </div>
     <div class="divider"></div>
-    <div class="row"><button class="btn btn-secondary btn-sm" id="syncCodex">重新同步 Codex 目录</button><button class="btn btn-secondary btn-sm" id="getGatewayModels">获取网关 /model</button><span class="muted grow" id="syncOut"></span></div>
+    <div class="row"><button class="btn btn-secondary btn-sm" id="syncCodex">重新同步 Codex 目录</button><button class="btn btn-secondary btn-sm" id="getGatewayModels">获取网关 /models</button><span class="muted grow" id="syncOut"></span></div>
     <div class="foot"><button class="btn btn-primary" id="codexClose">完成</button></div>
   </div>`;
   $("#sheetBack").classList.add("on");s.classList.add("on");
@@ -2245,7 +2256,7 @@ function openCodexDetails(cx){
   };
   $("#getGatewayModels").onclick=async()=>{
     const o=$("#syncOut"); o.textContent="获取中…";
-    try{ const r=await api("/model"); o.textContent=`当前网关 ${r.models.length} 个模型：${r.models.join(", ")}`; }catch(e){ o.textContent="获取失败: "+e.message; }
+    try{ const r=await api("/models"); o.textContent=`当前网关 ${r.models.length} 个模型：${r.models.join(", ")}`; }catch(e){ o.textContent="获取失败: "+e.message; }
   };
 }
 

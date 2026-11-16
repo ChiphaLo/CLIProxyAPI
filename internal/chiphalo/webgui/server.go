@@ -317,6 +317,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.statusResponse(w, r)
 	case path == "/api/apply" && r.Method == "POST":
 		s.apply(w, r)
+	case path == "/api/codex-accounts/models" && r.Method == "GET":
+		s.forward(w, r, "codex_account_models", map[string]any{"account_id": r.URL.Query().Get("account_id")})
 	case path == "/api/codex-accounts" && r.Method == "GET":
 		s.forward(w, r, "codex_accounts", nil)
 	case path == "/api/codex-accounts" && r.Method == "PUT":

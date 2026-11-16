@@ -75,6 +75,15 @@ func (s *Service) dispatchContext(ctx context.Context, op string, payload map[st
 	if op == "sync_codex" {
 		return s.syncCatalog(payload)
 	}
+	if op == "codex_account_models" {
+		select {
+		case s.probeSlots <- struct{}{}:
+			defer func() { <-s.probeSlots }()
+		default:
+			return failure("Codex model discovery busy")
+		}
+		return s.codexAccountModels(ctx, payload)
+	}
 	if op == "probe_provider_models" {
 		return s.probeModels(ctx, payload)
 	}
@@ -95,7 +104,7 @@ func (s *Service) dispatchContext(ctx context.Context, op string, payload map[st
 		return value
 	}
 	switch op {
-	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed", "codex_accounts", "update_codex_account":
+	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed", "codex_accounts", "update_codex_account", "codex_account_models":
 	default:
 		return failure("operation not migrated to Go helper")
 	}

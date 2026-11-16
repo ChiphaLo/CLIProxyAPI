@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/clientkeys"
@@ -40,7 +41,7 @@ func NewHTTPBackend(origin, env string) (*HTTPBackend, error) {
 }
 func (b *HTTPBackend) get(ctx context.Context, path string, authorized bool, target any) error {
 	// This is a bounded local control-plane read, not an upstream provider call.
-	if path != "/reset-credits" {
+	if path != "/reset-credits" && !strings.HasPrefix(path, "/codex-models?") {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
@@ -131,4 +132,13 @@ func (b *HTTPBackend) Await(ctx context.Context, digest string, models []string)
 		case <-ticker.C:
 		}
 	}
+}
+
+// ReadCodexModels reads the official catalog for one registered member. It does
+// not run model probes, publish models, refresh credentials, or consume resets.
+func (b *HTTPBackend) ReadCodexModels(ctx context.Context, id string, target any) error {
+	if !b.private || id == "" || len(id) > 256 || strings.ContainsAny(id, "\r\n\x00") {
+		return errors.New("registered Codex account required")
+	}
+	return b.get(ctx, "/codex-models?"+url.Values{"account_id": {id}}.Encode(), false, target)
 }

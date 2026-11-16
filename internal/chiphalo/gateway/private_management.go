@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -32,6 +33,7 @@ func (l *LiveProfile) PrivateManagement(configPath string, manager *coreauth.Man
 
 func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *coreauth.Manager, ready func() (int, map[string]any), fetcher quota.Fetcher, actions CatalogActions) http.Handler {
 	quotaSlot := make(chan struct{}, 1)
+	modelReadSlots := make(chan struct{}, 2)
 	catalogSlot := make(chan struct{}, 1)
 	consumeSlot := make(chan struct{}, 1)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -146,13 +148,17 @@ func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *c
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "accounts": rows})
 		case "/quota", "/reset-credits", "/codex-models":
-			if r.URL.RawQuery != "" || manager == nil {
+			if (r.URL.RawQuery != "" && r.URL.Path != "/codex-models") || manager == nil {
 				fail(400)
 				return
 			}
+			slot := quotaSlot
+			if r.URL.Path == "/codex-models" {
+				slot = modelReadSlots
+			}
 			select {
-			case quotaSlot <- struct{}{}:
-				defer func() { <-quotaSlot }()
+			case slot <- struct{}{}:
+				defer func() { <-slot }()
 			default:
 				fail(429)
 				return
@@ -164,6 +170,24 @@ func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *c
 				bindings = append(bindings, quota.Binding{ID: b.ID, Prefix: b.Prefix, Label: b.Label, Workspace: b.WorkspaceID, LegacySince: b.LegacySince})
 				byID[b.ID] = b.AuthID
 				enabled[b.ID] = b.Enabled()
+			}
+			if r.URL.Path == "/codex-models" && r.URL.RawQuery != "" {
+				query, err := url.ParseQuery(r.URL.RawQuery)
+				if err != nil || len(query) != 1 || len(query["account_id"]) != 1 || query.Get("account_id") == "" {
+					fail(400)
+					return
+				}
+				selected := []quota.Binding{}
+				for _, b := range bindings {
+					if b.ID == query.Get("account_id") {
+						selected = append(selected, b)
+					}
+				}
+				if len(selected) != 1 {
+					fail(400)
+					return
+				}
+				bindings = selected
 			}
 			lookup := func(ctx context.Context, b quota.Binding) (quota.Credential, error) {
 				if ctx.Err() != nil {

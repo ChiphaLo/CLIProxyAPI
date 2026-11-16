@@ -198,3 +198,35 @@ func (s *Service) updateCodexAccount(ctx context.Context, payload map[string]jso
 	}
 	return result
 }
+
+func (s *Service) codexAccountModels(ctx context.Context, payload map[string]json.RawMessage) Result {
+	if s.apply == nil || s.inventory == nil || allowed(payload, "account_id") != nil {
+		return failure("Codex model discovery unavailable")
+	}
+	var id string
+	if json.Unmarshal(payload["account_id"], &id) != nil {
+		return failure("registered Codex account required")
+	}
+	d, err := s.apply.codexDocuments()
+	if err != nil {
+		return failure(err.Error())
+	}
+	prefix := ""
+	for _, a := range d.accounts.Accounts {
+		if a.ID == id {
+			prefix = a.Prefix
+		}
+	}
+	if prefix == "" {
+		return failure("registered Codex account required")
+	}
+	var snapshot catalogsync.Snapshot
+	if s.inventory.ReadCodexModels(ctx, id, &snapshot) != nil || !snapshot.OK || len(snapshot.Accounts) != 1 {
+		return failure("official Codex model list unavailable; configuration was not changed")
+	}
+	a := snapshot.Accounts[0]
+	if a.ID != id || a.Prefix != prefix || a.Status != "ok" || a.Models == nil || len(a.Models) > 512 {
+		return failure("official Codex model list unavailable; configuration was not changed")
+	}
+	return Result{"ok": true, "account_id": id, "prefix": prefix, "models": a.Models, "count": len(a.Models), "source": catalogsync.OfficialModelsURL, "published": false}
+}
