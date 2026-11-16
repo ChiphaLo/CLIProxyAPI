@@ -117,6 +117,9 @@ func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot
 		beforeNames = append(beforeNames, name)
 	}
 	accountRows := mapValue(exposed["account_models"])
+	if reviewed, ok := exposed["reviewed_account_models"].(map[string]any); ok {
+		accountRows = reviewed
+	}
 	_, accountCatalogPresent := exposed["account_models"]
 	known, found := map[string]bool{}, map[string]Account{}
 	successfulDiscovery := false
@@ -296,6 +299,15 @@ func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot
 		return Plan{}, errors.New("catalog plan exceeds bounds or was canceled")
 	}
 	exposed["models"], exposed["account_models"] = afterNames, accountModels
+	if rawSettings, exists := exposed["account_settings"]; exists {
+		raw, _ := json.Marshal(rawSettings)
+		var settings map[string]AccountSetting
+		if configbundle.DecodeDraft(raw, &settings) != nil {
+			return Plan{}, errors.New("invalid Codex account settings")
+		}
+		exposed["reviewed_account_models"] = accountModels
+		exposed["account_models"] = SelectedAccountModels(accountModels, settings)
+	}
 	metadata["models"] = models
 	plan.Exposed, _ = json.MarshalIndent(exposed, "", "  ")
 	plan.Context, _ = json.MarshalIndent(metadata, "", "  ")

@@ -317,6 +317,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.statusResponse(w, r)
 	case path == "/api/apply" && r.Method == "POST":
 		s.apply(w, r)
+	case path == "/api/codex-accounts" && r.Method == "GET":
+		s.forward(w, r, "codex_accounts", nil)
+	case path == "/api/codex-accounts" && r.Method == "PUT":
+		s.forward(w, r, "update_codex_account", body)
 	case path == "/api/sync-codex" && r.Method == "POST":
 		s.forward(w, r, "sync_codex", body)
 	case path == "/api/oauth-resets/consume" && r.Method == "POST":

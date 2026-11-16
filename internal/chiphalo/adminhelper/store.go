@@ -95,7 +95,7 @@ func (s *Service) dispatchContext(ctx context.Context, op string, payload map[st
 		return value
 	}
 	switch op {
-	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed":
+	case "create_api_key", "update_api_key", "delete_api_key", "read_api_keys", "set_provider_secret", "delete_provider_secret", "apply_bundle", "status", "gateway_models", "gui_provider_seed", "codex_accounts", "update_codex_account":
 	default:
 		return failure("operation not migrated to Go helper")
 	}
@@ -119,6 +119,15 @@ func (s *Service) dispatchContext(ctx context.Context, op string, payload map[st
 			return failure("unknown request fields")
 		}
 		return s.readInventory(ctx, op)
+	}
+	if op == "codex_accounts" {
+		if len(payload) != 0 {
+			return failure("unknown request fields")
+		}
+		return s.codexAccounts(ctx)
+	}
+	if op == "update_codex_account" {
+		return s.updateCodexAccount(ctx, payload)
 	}
 	if op == "apply_bundle" {
 		if s.apply == nil {

@@ -1705,7 +1705,7 @@ function providerCard(p){
 
 function renderProviderList(){
   const list=$("#subsList");
-  list.innerHTML=(subsProviders.length?subsProviders.map(providerCard).join(""):`<div class="empty">暂无第三方订阅。点击“添加订阅”创建。</div>`)+`<button type="button" class="datagrid-row subs-cols" id="codexCard"></button>`;
+  list.innerHTML=(subsProviders.length?subsProviders.map(providerCard).join(""):`<div class="empty">暂无第三方订阅。点击“添加订阅”创建。</div>`)+`<div id="codexCard"></div>`;
   list.querySelectorAll("[data-provider]").forEach(tile=>tile.onclick=()=>openProviderEditor(tile.dataset.provider));
 }
 
@@ -2154,23 +2154,64 @@ async function loadOAuthAccounts(panel,{silent=false,force=false}={}){
   }
 }
 
+let codexAccountsState=null;
 function renderCodexCard(cx){
   const el=$("#codexCard");
-  const models=(cx.models||[]);
-  const xhigh=models.filter(m=>modelReasoningLevels(cx,m).includes("xhigh")).length;
-  el.innerHTML=`
-    <span class="row-main">
-      <span class="row-title">Codex OAuth</span>
-      <span class="row-sub">chatgpt.com · ChatGPT 订阅（只读）</span>
-    </span>
-    <span class="cell">${models.length} 个模型</span>
-    <span class="cell">${xhigh} 个支持 xhigh</span>
-    <span class="state"><i class="dot on"></i>已连接</span>
-    <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`;
-  el.onclick=()=>openCodexDetails(cx);
+  if(!el) return;
+  el.innerHTML='<div class="empty">正在读取 Codex 账号…</div>';
+  api('/codex-accounts').then(data=>{
+    if(!el.isConnected||page!=="subs") return;
+    codexAccountsState=data;
+    el.innerHTML=(data.accounts||[]).map(a=>`<button type="button" class="datagrid-row subs-cols" data-codex-account="${esc(a.id)}">
+      <span class="row-main"><span class="row-title">${esc(a.name||a.prefix)} · Codex</span><span class="row-sub">${esc(a.prefix)} · ${a.prefix==='codex'?'主账号，无前缀调用':esc(a.prefix)+'/'} · ChatGPT OAuth</span></span>
+      <span class="cell">${(a.models||[]).filter(m=>m.enabled).length} / ${(a.models||[]).length} 个模型</span><span class="cell">独立账号</span>
+      <span class="state"><i class="dot ${a.enabled?'on':''}"></i>${a.enabled?'已启用':'已停用'}</span>
+      <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>`).join('')||'<div class="empty">暂无已登录的 Codex 账号</div>';
+    el.querySelectorAll('[data-codex-account]').forEach(node=>node.onclick=()=>openCodexAccountEditor(node.dataset.codexAccount,cx));
+  }).catch(e=>{if(el.isConnected)el.innerHTML='<div class="empty">Codex 账号读取失败：'+esc(e.message)+'</div>';});
   let accounts=document.getElementById("oauthAccountsPanel");
   if(!accounts){accounts=document.createElement("div");accounts.id="oauthAccountsPanel";el.parentElement.after(accounts);}
   loadOAuthAccounts(accounts);
+}
+
+function openCodexAccountEditor(id,cx){
+  const source=(codexAccountsState&&codexAccountsState.accounts||[]).find(a=>a.id===id);
+  if(!source) return;
+  const a=JSON.parse(JSON.stringify(source)),revision=codexAccountsState.revision;
+  const s=$("#sheet");s.classList.add("wide");
+  s.innerHTML=`<div class="provider-editor" data-codex-editor="${esc(id)}">
+    <div class="provider-editor-head"><div class="grow"><h3>${esc(a.name||a.prefix)} · Codex</h3></div><button type="button" class="switch ${a.enabled?'on':''}" data-codex-enabled aria-label="启用账号" aria-checked="${!!a.enabled}"></button></div>
+    <div class="form-grid"><div class="field"><label class="form-label">名称</label><input class="form-input" data-codex-name maxlength="80" value="${esc(a.name)}"></div><div class="field"><label class="form-label">账号来源</label><input class="form-input mono" value="${esc(a.prefix)}" readonly></div></div>
+    <div class="divider"></div><div class="row"><h3 class="subhead grow">开放模型</h3><button type="button" class="btn btn-secondary btn-sm" data-codex-all>全选</button><button type="button" class="btn btn-secondary btn-sm" data-codex-none>取消全选</button></div>
+    <div class="codex-model-list">${(a.models||[]).map((m,i)=>`<div class="codex-model-row"><label><input type="checkbox" data-codex-model="${i}" ${m.enabled?'checked':''}> <span class="mono">${esc(m.id)}</span></label><span class="muted">${m.contextWindow?fmt(m.contextWindow):'—'}</span><span class="reasoning-badges">${(m.thinking||[]).map(x=>`<span class="reasoning-badge">${esc(x)}</span>`).join('')}</span></div>`).join('')}</div>
+    <div class="divider"></div><div class="row"><h3 class="subhead grow">模型价格 · USD / 1M tokens</h3><button type="button" class="btn btn-primary btn-sm" data-codex-prices disabled>保存价格</button></div><div class="price-editor" data-role="provider-prices"></div>
+    <p class="hint">来源账号与前缀固定，不跨账号轮询。上下文和思考档位来自该账号已验证的目录；同步目录不会重新启用你停用的模型。</p>
+    <div class="foot"><button type="button" class="btn btn-secondary" data-codex-catalog>官方目录</button><button type="button" class="btn btn-secondary" data-codex-close>取消</button><button type="button" class="btn btn-primary" data-codex-save>保存并应用</button></div>
+  </div>`;
+  $("#sheetBack").classList.add("on");s.classList.add("on");
+  const editor=s.querySelector('[data-codex-editor]');
+  const enabled=editor.querySelector('[data-codex-enabled]');enabled.onclick=()=>{a.enabled=!a.enabled;enabled.classList.toggle('on',a.enabled);enabled.setAttribute('aria-checked',String(a.enabled));};
+  const select=on=>editor.querySelectorAll('[data-codex-model]').forEach(node=>node.checked=on);
+  editor.querySelector('[data-codex-all]').onclick=()=>select(true);editor.querySelector('[data-codex-none]').onclick=()=>select(false);
+  editor.querySelector('[data-codex-close]').onclick=closeSheet;
+  editor.querySelector('[data-codex-catalog]').onclick=()=>openCodexDetails(cx);
+  editor.querySelector('[data-codex-save]').onclick=async function(){
+    this.disabled=true;
+    try{
+      const disabled_models=Array.from(editor.querySelectorAll('[data-codex-model]')).filter(node=>!node.checked).map(node=>a.models[Number(node.dataset.codexModel)].name);
+      await api('/codex-accounts',{method:'PUT',body:JSON.stringify({account_id:id,revision,name:editor.querySelector('[data-codex-name]').value.trim(),enabled:a.enabled,disabled_models})});
+      closeSheet();toast('Codex 账号设置已保存并应用');renderSubs();
+    }catch(e){toast(e.message,'err');this.disabled=false;}
+  };
+  let prices={};
+  const priceProvider={prefix:a.prefix==='codex'?'':a.prefix,models:(a.models||[]).map(m=>({clientName:m.name}))};
+  api('/prices').then(data=>{
+    if(!editor.isConnected)return;
+    prices=data.prices||{};const effective={...prices};
+    for(const m of a.models||[])if(!effective[m.id])effective[m.id]=prices[m.name]||{};
+    renderProviderPrices(editor,priceProvider,effective);editor.querySelector('[data-codex-prices]').disabled=false;
+  }).catch(e=>{if(editor.isConnected)editor.querySelector('[data-role="provider-prices"]').textContent='价格读取失败：'+e.message;});
+  editor.querySelector('[data-codex-prices]').onclick=async function(){this.disabled=true;try{prices=await saveProviderPrices(editor,prices);toast('模型价格已保存');}catch(e){toast(e.message,'err');}finally{this.disabled=false;}};
 }
 
 function openCodexDetails(cx){
