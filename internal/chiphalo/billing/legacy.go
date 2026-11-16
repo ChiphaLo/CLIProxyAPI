@@ -55,8 +55,8 @@ func RoundDecimal(value float64, places int) float64 {
 	return result
 }
 
-// Cost is a language-only port of calculate_usage_cost in the deployed GUI.
-// In particular, existing cache-write treatment is preserved, not corrected.
+// Cost preserves the deployed cache-write treatment and applies the user's
+// model-specific long-prompt pricing before the final receipt rounding.
 func Cost(row Row, prices map[string]*Rates) float64 {
 	rate := prices[row.Model]
 	if rate == nil && strings.Contains(row.Model, "/") {
@@ -78,6 +78,7 @@ func Cost(row Row, prices map[string]*Rates) float64 {
 	amount = float64(amount + float64(float64(cached)*rate.Cached))
 	amount = float64(amount + float64(float64(write)*rate.Write))
 	amount = float64(amount + float64(float64(output)*rate.Output))
+	amount *= claudePromptMultiplier(row)
 	return RoundDecimal(amount/1_000_000.0, 8)
 }
 

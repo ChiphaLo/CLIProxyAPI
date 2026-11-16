@@ -4,7 +4,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 )
+
+// claudePromptMultiplier implements the user's Haiku long-prompt tariff. Input
+// is the total prompt, including cache reads and writes; output does not affect
+// the threshold. Once exceeded, all price buckets use the higher rate, not just
+// tokens beyond the threshold. Token counts and configured base prices stay intact.
+func claudePromptMultiplier(row Row) float64 {
+	if row.Input <= 100_000 {
+		return 1
+	}
+	model := strings.ToLower(strings.TrimSpace(row.Model))
+	model = model[strings.LastIndexByte(model, '/')+1:]
+	if strings.HasPrefix(model, "claude-") {
+		for _, part := range strings.Split(model, "-") {
+			if part == "haiku" {
+				return 5
+			}
+		}
+	}
+	return 1
+}
 
 // ClaudeUsage adapts original Messages usage to the existing ledger schema.
 // Input includes the disjoint uncached, cache-read and cache-creation buckets.
