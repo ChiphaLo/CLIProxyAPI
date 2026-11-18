@@ -76,9 +76,18 @@ func mapValue(value any) map[string]any {
 // The caller supplies a fixed-account probe; an offline/failed discovery cannot
 // erase an account's existing reviewed catalog or borrow another member's result.
 func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot, exposedRaw, contextRaw []byte, probe Probe, clock time.Time) (Plan, error) {
+	return BuildScopedPlan(ctx, bindings, discovery, exposedRaw, contextRaw, probe, clock, nil)
+}
+
+// BuildScopedPlan reviews only the selected models of one account when scope
+// is set; every other reviewed account catalog is carried over unchanged.
+func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot, exposedRaw, contextRaw []byte, probe Probe, clock time.Time, scope *Scope) (Plan, error) {
 	plan := Plan{Added: []string{}, Removed: []string{}, Rejected: []Rejected{}}
 	if ctx == nil || probe == nil || !discovery.OK || len(bindings) == 0 || len(bindings) > 128 {
 		return plan, errors.New("explicit account catalog discovery and review required")
+	}
+	if scope.Validate() != nil {
+		return plan, errors.New("invalid scoped catalog review")
 	}
 	if ctx.Err() != nil {
 		return plan, errors.New("catalog review canceled before publication")
@@ -128,6 +137,9 @@ func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot
 			return plan, errors.New("ambiguous registered catalog account")
 		}
 		known[binding.ID] = true
+	}
+	if scope != nil && !known[scope.AccountID] {
+		return plan, errors.New("scoped catalog account is not registered")
 	}
 	for _, account := range discovery.Accounts {
 		if !known[account.ID] || found[account.ID].ID != "" {
@@ -189,6 +201,21 @@ func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot
 		if account.Status != "ok" {
 			plan.Rejected = append(plan.Rejected, Rejected{Account: binding.ID, Reason: "account discovery unavailable"})
 		} else {
+			if scope != nil && scope.AccountID == binding.ID {
+				listed := map[string]string{}
+				for _, model := range account.Models {
+					listed[model.Name] = model.Visibility
+				}
+				for _, name := range scope.Models {
+					visibility, ok := listed[name]
+					switch {
+					case !ok:
+						plan.Rejected = append(plan.Rejected, Rejected{Account: binding.ID, Model: publicID(binding.Prefix, name), Reason: "model is not listed by the upstream account catalog"})
+					case visibility == "hide" || visibility == "internal":
+						plan.Rejected = append(plan.Rejected, Rejected{Account: binding.ID, Model: publicID(binding.Prefix, name), Reason: "model is hidden by the upstream account catalog"})
+					}
+				}
+			}
 			for _, model := range account.Models {
 				if !Eligible(model.Name) || model.Visibility == "hide" || model.Visibility == "internal" {
 					continue
@@ -200,6 +227,9 @@ func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot
 				}
 				owner := safeText(mapValue(models[contextID])["source_account_id"], 256)
 				if slices.Contains(kept, model.Name) && contextValid(models[contextID]) && (owner == "" || owner == binding.ID) {
+					continue
+				}
+				if !scope.allows(binding.ID, model.Name) {
 					continue
 				}
 				// Keep each explicit sync bounded; later operator runs can review

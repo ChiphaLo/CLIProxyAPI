@@ -55,7 +55,15 @@ func (p *LegacyProfile) privateCatalogIDs(cfg *config.Config, manager *coreauth.
 // ReviewCatalog is an explicit read/probe operation. It creates a CAS proposal,
 // never writes files or registers provisional probe models into the live SDK.
 func (l *LiveProfile) ReviewCatalog(ctx context.Context, configPath string, manager *coreauth.Manager, fetcher quota.Fetcher) (catalogsync.Publication, error) {
+	return l.ReviewCatalogScoped(ctx, configPath, manager, fetcher, nil)
+}
+
+// ReviewCatalogScoped reviews only the selected account models when scope is set.
+func (l *LiveProfile) ReviewCatalogScoped(ctx context.Context, configPath string, manager *coreauth.Manager, fetcher quota.Fetcher, scope *catalogsync.Scope) (catalogsync.Publication, error) {
 	var publication catalogsync.Publication
+	if scope.Validate() != nil {
+		return publication, errors.New("invalid scoped catalog review")
+	}
 	profile, err := l.Refresh()
 	if err != nil {
 		return publication, err
@@ -120,7 +128,7 @@ func (l *LiveProfile) ReviewCatalog(ctx context.Context, configPath string, mana
 		seed, _ = json.Marshal(object)
 	}
 	discovery := catalogsync.Discover(ctx, bindings, lookup, catalogsync.Fetcher{Transport: fetcher.Transport, ClientVersion: catalogsync.ClientVersion(cfg.CodexHeaderDefaults.UserAgent)}, time.Now)
-	plan, err := catalogsync.BuildPlan(ctx, bindings, discovery, seed, raws["context"], l.CatalogProbe(cfg, manager, fetcher.Transport), time.Now())
+	plan, err := catalogsync.BuildScopedPlan(ctx, bindings, discovery, seed, raws["context"], l.CatalogProbe(cfg, manager, fetcher.Transport), time.Now(), scope)
 	if err != nil {
 		return publication, err
 	}

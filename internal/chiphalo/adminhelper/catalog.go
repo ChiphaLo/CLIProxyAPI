@@ -1,6 +1,7 @@
 package adminhelper
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,13 +13,14 @@ import (
 	"slices"
 	"time"
 
+	"github.com/MoeForge/moego/ojson"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/catalogsync"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/privatefile"
 )
 
 type catalogReviewer interface {
-	ReviewCatalog(context.Context) (catalogsync.Publication, error)
+	ReviewCatalog(context.Context, *catalogsync.Scope) (catalogsync.Publication, error)
 }
 type catalogJob struct {
 	id      string
@@ -28,13 +30,22 @@ type catalogJob struct {
 }
 
 func (s *Service) syncCatalog(payload map[string]json.RawMessage) Result {
-	if allowed(payload, "job_id") != nil {
+	if allowed(payload, "job_id", "account_id", "models") != nil {
 		return failure("unknown catalog sync fields")
 	}
 	jobID := ""
 	if raw, ok := payload["job_id"]; ok {
 		if json.Unmarshal(raw, &jobID) != nil || !requestIdentity.MatchString(jobID) {
 			return failure("invalid catalog job identity")
+		}
+	}
+	var scope *catalogsync.Scope
+	_, hasAccount := payload["account_id"]
+	_, hasModels := payload["models"]
+	if hasAccount || hasModels {
+		scope = &catalogsync.Scope{}
+		if jobID != "" || json.Unmarshal(payload["account_id"], &scope.AccountID) != nil || json.Unmarshal(payload["models"], &scope.Models) != nil || scope.Validate() != nil {
+			return failure("invalid scoped catalog review")
 		}
 	}
 	s.catalogMu.Lock()
@@ -49,6 +60,9 @@ func (s *Service) syncCatalog(payload map[string]json.RawMessage) Result {
 		return s.catalogJob.result
 	}
 	if s.catalogJob != nil && s.catalogJob.pending {
+		if scope != nil {
+			return failure("another catalog review is in progress; retry after it completes")
+		}
 		return Result{"ok": true, "pending": true, "job_id": s.catalogJob.id, "output": "Existing catalog review in progress"}
 	}
 	if s.apply == nil {
@@ -71,7 +85,7 @@ func (s *Service) syncCatalog(payload map[string]json.RawMessage) Result {
 		defer cancel()
 		result := failure("catalog proposal unavailable; published files were not changed")
 		if s.audit(job.id, "sync_codex", "job_started", false, 0) == nil {
-			proposal, err := reviewer.ReviewCatalog(ctx)
+			proposal, err := reviewer.ReviewCatalog(ctx, scope)
 			if err == nil {
 				result = s.publishCatalogJob(ctx, proposal)
 			}
@@ -153,20 +167,39 @@ func (p *Applier) PublishCatalog(ctx context.Context, proposal catalogsync.Publi
 		return failure("published SDK catalog not ready")
 	}
 	if !proposal.Changed {
-		return Result{"ok": true, "output": "Catalog already reviewed; no files changed"}
+		return Result{"ok": true, "added": []string{}, "rejected": rejectedRows(proposal.Rejected), "rejected_count": len(proposal.Rejected), "output": "Catalog already reviewed; no files changed"}
 	}
 	next := map[string][]byte{catalogFiles[0]: proposal.Context, catalogFiles[1]: proposal.Exposed}
-	extra := Result{"added_count": len(proposal.Added), "removed_count": len(proposal.Removed), "rejected_count": len(proposal.Rejected), "more_pending": proposal.MorePending, "output": fmt.Sprintf("Added %d, removed %d, review rejected %d", len(proposal.Added), len(proposal.Removed), len(proposal.Rejected))}
+	extra := Result{"added": slices.Clone(proposal.Added), "rejected": rejectedRows(proposal.Rejected), "added_count": len(proposal.Added), "removed_count": len(proposal.Removed), "rejected_count": len(proposal.Rejected), "more_pending": proposal.MorePending, "output": fmt.Sprintf("Added %d, removed %d, review rejected %d", len(proposal.Added), len(proposal.Removed), len(proposal.Rejected))}
 	return p.publish(ctx, old, next, actual, proposal.NewModels, catalogFiles, proposal.Config, proposal.Accounts, extra)
 }
 
-func (b *HTTPBackend) catalogPost(ctx context.Context, path string, target any, limit int64) error {
+// rejectedRows keeps the GUI reply bounded and free of upstream payloads.
+func rejectedRows(items []catalogsync.Rejected) []map[string]any {
+	rows := []map[string]any{}
+	for _, item := range items {
+		if len(rows) >= 32 {
+			break
+		}
+		rows = append(rows, map[string]any{"account_id": item.Account, "model": item.Model, "reason": item.Reason, "status": item.Status})
+	}
+	return rows
+}
+
+func (b *HTTPBackend) catalogPost(ctx context.Context, path string, body []byte, target any, limit int64) error {
 	if !b.private || path != "/catalog-review" && path != "/reload-reviewed-models" {
 		return errors.New("private catalog action unavailable")
 	}
-	r, err := http.NewRequestWithContext(ctx, "POST", b.origin+path, nil)
+	var reader io.Reader
+	if len(body) != 0 {
+		reader = bytes.NewReader(body)
+	}
+	r, err := http.NewRequestWithContext(ctx, "POST", b.origin+path, reader)
 	if err != nil {
 		return errors.New("private catalog request unavailable")
+	}
+	if reader != nil {
+		r.Header.Set("Content-Type", "application/json")
 	}
 	resp, err := b.client.Do(r)
 	if err != nil {
@@ -179,14 +212,25 @@ func (b *HTTPBackend) catalogPost(ctx context.Context, path string, target any, 
 	}
 	return nil
 }
-func (b *HTTPBackend) ReviewCatalog(ctx context.Context) (catalogsync.Publication, error) {
+func (b *HTTPBackend) ReviewCatalog(ctx context.Context, scope *catalogsync.Scope) (catalogsync.Publication, error) {
 	var p catalogsync.Publication
-	err := b.catalogPost(ctx, "/catalog-review", &p, 8*1024*1024)
+	var body []byte
+	if scope != nil {
+		if scope.Validate() != nil {
+			return p, errors.New("invalid scoped catalog review")
+		}
+		doc := ojson.NewDoc([]byte("{}"))
+		if doc.Set("account_id", scope.AccountID) != nil || doc.Set("models", scope.Models) != nil {
+			return p, errors.New("scoped catalog request unavailable")
+		}
+		body = doc.Bytes()
+	}
+	err := b.catalogPost(ctx, "/catalog-review", body, &p, 8*1024*1024)
 	return p, err
 }
 func (b *HTTPBackend) ReloadReviewed(ctx context.Context) error {
 	var value Result
-	if err := b.catalogPost(ctx, "/reload-reviewed-models", &value, 4096); err != nil {
+	if err := b.catalogPost(ctx, "/reload-reviewed-models", nil, &value, 4096); err != nil {
 		return err
 	}
 	if value["ok"] != true {

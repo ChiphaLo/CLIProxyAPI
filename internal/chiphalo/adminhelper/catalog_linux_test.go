@@ -23,6 +23,7 @@ type catalogBackend struct {
 	newSeen          bool
 	reloads          int
 	started, release chan struct{}
+	scope            *catalogsync.Scope
 }
 
 func (b *catalogBackend) Catalog(context.Context) ([]string, error) {
@@ -62,7 +63,8 @@ func (b *catalogBackend) ReloadReviewed(ctx context.Context) error {
 	}
 	return nil
 }
-func (b *catalogBackend) ReviewCatalog(ctx context.Context) (catalogsync.Publication, error) {
+func (b *catalogBackend) ReviewCatalog(ctx context.Context, scope *catalogsync.Scope) (catalogsync.Publication, error) {
+	b.scope = scope
 	if b.started != nil {
 		close(b.started)
 		select {
@@ -172,6 +174,33 @@ func TestCatalogBackgroundJobIsSingleWorkerAndDoesNotBlockKeyReads(t *testing.T)
 	requireOK(t, result)
 	if result["pending"] != false || b.reloads != 1 {
 		t.Fatal("completed background review status incorrect")
+	}
+	s.stopCatalogJobs()
+}
+func TestScopedCatalogJobForwardsSelectionAndRejectsOverlap(t *testing.T) {
+	s, _, b, _ := catalogFixture(t)
+	b.started, b.release = make(chan struct{}), make(chan struct{})
+	scoped := map[string]json.RawMessage{"account_id": json.RawMessage(`"one"`), "models": json.RawMessage(`["gpt-new-fixture"]`)}
+	first := s.dispatch("sync_codex", scoped)
+	requireOK(t, first)
+	<-b.started
+	if b.scope == nil || b.scope.AccountID != "one" || !slices.Equal(b.scope.Models, []string{"gpt-new-fixture"}) {
+		t.Fatal("selected models were not forwarded to the reviewer")
+	}
+	if overlap := s.dispatch("sync_codex", scoped); overlap["ok"] == true {
+		t.Fatal("scoped review joined an unrelated running job")
+	}
+	close(b.release)
+	s.catalogWorkers.Wait()
+	result := s.dispatch("sync_codex", map[string]json.RawMessage{"job_id": set(first["job_id"])})
+	requireOK(t, result)
+	if added, _ := result["added"].([]string); !slices.Equal(added, []string{"gpt-new-fixture"}) {
+		t.Fatal("scoped review result lacks added model detail", result)
+	}
+	for _, bad := range []map[string]json.RawMessage{{"account_id": json.RawMessage(`"one"`)}, {"account_id": json.RawMessage(`"one"`), "models": json.RawMessage(`[]`)}, {"account_id": json.RawMessage(`"one"`), "models": json.RawMessage(`["gpt-new-fixture"]`), "job_id": set(first["job_id"])}} {
+		if s.dispatch("sync_codex", bad)["ok"] == true {
+			t.Fatal("invalid scoped review accepted", bad)
+		}
 	}
 	s.stopCatalogJobs()
 }

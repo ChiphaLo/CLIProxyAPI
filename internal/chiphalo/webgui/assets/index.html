@@ -2184,35 +2184,73 @@ function openCodexAccountEditor(id,cx){
     <div class="form-grid"><div class="field"><label class="form-label">名称</label><input class="form-input" data-codex-name maxlength="80" value="${esc(a.name)}"></div><div class="field"><label class="form-label">账号来源</label><input class="form-input mono" value="${esc(a.prefix)}" readonly></div></div>
     <div class="divider"></div><div class="row"><h3 class="subhead grow">开放模型</h3><button type="button" class="btn btn-secondary btn-sm" data-codex-fetch>获取 /models</button><button type="button" class="btn btn-secondary btn-sm" data-codex-all>全选</button><button type="button" class="btn btn-secondary btn-sm" data-codex-none>取消全选</button></div>
     <div data-codex-fetch-result aria-live="polite"></div>
-    <div class="codex-model-list">${(a.models||[]).map((m,i)=>`<div class="codex-model-row"><label><input type="checkbox" data-codex-model="${i}" ${m.enabled?'checked':''}> <span class="mono">${esc(m.id)}</span></label><span class="muted">${m.contextWindow?fmt(m.contextWindow):'—'}</span><span class="reasoning-badges">${(m.thinking||[]).map(x=>`<span class="reasoning-badge">${esc(x)}</span>`).join('')}</span></div>`).join('')}</div>
+    <div class="codex-model-list" data-codex-models></div>
     <div class="divider"></div><div class="row"><h3 class="subhead grow">模型价格 · USD / 1M tokens</h3><button type="button" class="btn btn-primary btn-sm" data-codex-prices disabled>保存价格</button></div><div class="price-editor" data-role="provider-prices"></div>
-    <p class="hint">来源账号与前缀固定，不跨账号轮询。上下文和思考档位来自该账号已验证的目录；同步目录不会重新启用你停用的模型。</p>
+    <p class="hint">来源账号与前缀固定，不跨账号轮询。勾选新模型后保存，会先用该账号逐个校验再开放；取消勾选即从 /models 移除。</p>
     <div class="foot"><button type="button" class="btn btn-secondary" data-codex-catalog>官方目录</button><button type="button" class="btn btn-secondary" data-codex-close>取消</button><button type="button" class="btn btn-primary" data-codex-save>保存并应用</button></div>
   </div>`;
   $("#sheetBack").classList.add("on");s.classList.add("on");
   const editor=s.querySelector('[data-codex-editor]');
   const enabled=editor.querySelector('[data-codex-enabled]');enabled.onclick=()=>{a.enabled=!a.enabled;enabled.classList.toggle('on',a.enabled);enabled.setAttribute('aria-checked',String(a.enabled));};
-  const select=on=>editor.querySelectorAll('[data-codex-model]').forEach(node=>node.checked=on);
+  const publicId=name=>a.prefix==='codex'?name:a.prefix+'/'+name;
+  const rows=(a.models||[]).map(m=>({...m,state:'reviewed'}));
+  const syncChecks=()=>editor.querySelectorAll('[data-codex-model]').forEach(node=>{rows[Number(node.dataset.codexModel)].enabled=node.checked;});
+  const renderModels=()=>{
+    const tag={new:'新',hidden:'上游隐藏',unlisted:'上游未列出'};
+    editor.querySelector('[data-codex-models]').innerHTML=rows.map((m,i)=>`<div class="codex-model-row"><label><input type="checkbox" data-codex-model="${i}" ${m.enabled?'checked':''} ${m.state==='hidden'?'disabled':''}> <span class="mono">${esc(m.id)}</span>${tag[m.state]?` <span class="reasoning-badge">${tag[m.state]}</span>`:''}</label><span class="muted">${m.contextWindow?fmt(m.contextWindow):'—'}</span><span class="reasoning-badges">${(m.thinking||[]).map(x=>`<span class="reasoning-badge">${esc(x)}</span>`).join('')}</span></div>`).join('')||'<div class="empty">暂无模型，点击“获取 /models”</div>';
+  };
+  renderModels();
+  const select=on=>{editor.querySelectorAll('[data-codex-model]').forEach(node=>{if(!node.disabled)node.checked=on;});syncChecks();};
   editor.querySelector('[data-codex-all]').onclick=()=>select(true);editor.querySelector('[data-codex-none]').onclick=()=>select(false);
   editor.querySelector('[data-codex-fetch]').onclick=async function(){
-    const out=editor.querySelector('[data-codex-fetch-result]');this.disabled=true;out.textContent='正在读取当前账号的上游模型列表…';
+    const out=editor.querySelector('[data-codex-fetch-result]');this.disabled=true;out.textContent='正在读取当前账号的上游模型列表…';syncChecks();
     try{
       const result=await api('/codex-accounts/models?account_id='+encodeURIComponent(id));
       if(!editor.isConnected)return;
-      const known=new Set((a.models||[]).map(m=>m.name));
-      out.innerHTML=`<details open><summary>上游返回 ${Number(result.count||0)} 个模型</summary><div class="codex-model-list">${(result.models||[]).map(m=>`<div class="codex-model-row"><span class="mono">${esc(m.name)}</span><span class="muted">${m.context_window?fmt(m.context_window):'—'}</span><span class="muted">${known.has(m.name)?'已在账号目录':'未发布 · 需同步目录校验'}</span></div>`).join('')}</div><p class="hint">仅获取列表，不保存、不应用配置；新模型需通过“官方目录”中的同步校验后开放。</p></details>`;
+      const upstream=new Map((result.models||[]).map(m=>[m.name,m]));
+      for(let i=rows.length-1;i>=0;i--)if(rows[i].state!=='reviewed')rows.splice(i,1);
+      for(const m of rows)if(!upstream.has(m.name))m.state='unlisted';
+      const known=new Set(rows.map(m=>m.name));
+      let added=0;
+      for(const m of upstream.values()){
+        if(known.has(m.name))continue;
+        const hidden=m.visibility==='hide'||m.visibility==='internal';
+        rows.push({name:m.name,id:publicId(m.name),enabled:false,contextWindow:m.context_window||0,thinking:m.supported_reasoning_levels||[],state:hidden?'hidden':'new'});
+        if(!hidden)added++;
+      }
+      renderModels();
+      out.textContent=`上游 ${Number(result.count||0)} 个模型${added?`，${added} 个可添加`:''}`;
     }catch(e){if(editor.isConnected)out.textContent='获取失败：'+e.message;}
     finally{this.disabled=false;}
   };
   editor.querySelector('[data-codex-close]').onclick=closeSheet;
   editor.querySelector('[data-codex-catalog]').onclick=()=>openCodexDetails(cx);
   editor.querySelector('[data-codex-save]').onclick=async function(){
-    this.disabled=true;
+    this.disabled=true;syncChecks();
+    const out=editor.querySelector('[data-codex-fetch-result]');
     try{
-      const disabled_models=Array.from(editor.querySelectorAll('[data-codex-model]')).filter(node=>!node.checked).map(node=>a.models[Number(node.dataset.codexModel)].name);
-      await api('/codex-accounts',{method:'PUT',body:JSON.stringify({account_id:id,revision,name:editor.querySelector('[data-codex-name]').value.trim(),enabled:a.enabled,disabled_models})});
-      closeSheet();toast('Codex 账号设置已保存并应用');renderSubs();
-    }catch(e){toast(e.message,'err');this.disabled=false;}
+      const wanted=rows.filter(m=>m.state==='new'&&m.enabled).map(m=>m.name);
+      let current=a.models||[],rev=revision,notice='';
+      if(wanted.length){
+        if(wanted.length>16)throw new Error('一次最多添加 16 个模型');
+        out.textContent='正在用该账号校验新模型…';
+        let r=await api('/sync-codex',{method:'POST',body:JSON.stringify({account_id:id,models:wanted})});
+        while(r.pending){
+          await new Promise(resolve=>setTimeout(resolve,1500));
+          r=await api('/sync-codex',{method:'POST',body:JSON.stringify({job_id:r.job_id})});
+        }
+        if(!r.ok)throw new Error(String(r.error||r.output||'模型校验失败'));
+        const rejected=(r.rejected||[]).filter(x=>x.account_id===id&&x.model);
+        notice=`已添加 ${(r.added||[]).length} 个`+(rejected.length?`，未通过：${rejected.map(x=>x.model).join(', ')}`:'');
+        const fresh=await api('/codex-accounts');
+        codexAccountsState=fresh;rev=fresh.revision;
+        current=((fresh.accounts||[]).find(x=>x.id===id)||{}).models||[];
+      }
+      const off=new Set(rows.filter(m=>m.state!=='new'&&m.state!=='hidden'&&!m.enabled).map(m=>m.name));
+      const disabled_models=current.filter(m=>off.has(m.name)).map(m=>m.name);
+      await api('/codex-accounts',{method:'PUT',body:JSON.stringify({account_id:id,revision:rev,name:editor.querySelector('[data-codex-name]').value.trim(),enabled:a.enabled,disabled_models})});
+      closeSheet();toast(notice?'Codex 账号已保存：'+notice:'Codex 账号设置已保存并应用');renderSubs();
+    }catch(e){if(editor.isConnected)out.textContent='';toast(e.message,'err');this.disabled=false;}
   };
   let prices={};
   const priceProvider={prefix:a.prefix==='codex'?'':a.prefix,models:(a.models||[]).map(m=>({clientName:m.name}))};

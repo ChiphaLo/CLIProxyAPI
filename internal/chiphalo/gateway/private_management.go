@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,10 +67,20 @@ func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *c
 				return
 			}
 			if r.Method == http.MethodPost && (r.URL.Path == "/catalog-review" || r.URL.Path == "/reload-reviewed-models") && r.URL.RawQuery == "" && actions.Reload != nil {
-				body, err := io.ReadAll(io.LimitReader(r.Body, 3))
-				if err != nil || len(body) != 0 {
+				body, err := io.ReadAll(io.LimitReader(r.Body, 4097))
+				if err != nil || len(body) > 4096 || r.URL.Path == "/reload-reviewed-models" && len(body) != 0 {
 					fail(400)
 					return
+				}
+				var scope *catalogsync.Scope
+				if len(body) != 0 {
+					scope = &catalogsync.Scope{}
+					decoder := json.NewDecoder(bytes.NewReader(body))
+					decoder.DisallowUnknownFields()
+					if decoder.Decode(scope) != nil || decoder.More() || scope.Validate() != nil {
+						fail(400)
+						return
+					}
 				}
 				if r.URL.Path == "/reload-reviewed-models" {
 					if err := actions.Reload(r.Context()); err != nil {
@@ -90,7 +101,7 @@ func (l *LiveProfile) PrivateManagementWithActions(configPath string, manager *c
 					fail(503)
 					return
 				}
-				publication, err := l.ReviewCatalog(r.Context(), configPath, manager, fetcher)
+				publication, err := l.ReviewCatalogScoped(r.Context(), configPath, manager, fetcher, scope)
 				if err != nil {
 					fail(503)
 					return
