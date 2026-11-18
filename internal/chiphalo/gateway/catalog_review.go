@@ -128,7 +128,7 @@ func (l *LiveProfile) ReviewCatalogScoped(ctx context.Context, configPath string
 		seed, _ = json.Marshal(object)
 	}
 	discovery := catalogsync.Discover(ctx, bindings, lookup, catalogsync.Fetcher{Transport: fetcher.Transport, ClientVersion: catalogsync.ClientVersion(cfg.CodexHeaderDefaults.UserAgent)}, time.Now)
-	plan, err := catalogsync.BuildScopedPlan(ctx, bindings, discovery, seed, raws["context"], l.CatalogProbe(cfg, manager, fetcher.Transport), time.Now(), scope)
+	plan, err := catalogsync.BuildScopedPlan(ctx, bindings, discovery, seed, raws["context"], scope)
 	if err != nil {
 		return publication, err
 	}

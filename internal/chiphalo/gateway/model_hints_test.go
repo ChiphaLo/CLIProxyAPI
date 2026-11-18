@@ -69,6 +69,20 @@ func TestNewSDKModelNeedsAnExactMemberLiveReview(t *testing.T) {
 	if _, err := live.ModelHints(t.Context(), f.auths["codex"], nil); err == nil {
 		t.Fatal("unknown model without reviewed reasoning was activated")
 	}
+	entry["supported_reasoning_levels"] = []string{"medium"}
+	entry["source_kind"] = "official catalog"
+	delete(entry, "verified_at")
+	raw, _ = json.Marshal(document)
+	_ = os.WriteFile(filepath.Join(dir, "context-windows.json"), raw, 0600)
+	if hints, err := live.ModelHints(t.Context(), f.auths["codex"], nil); err != nil || len(hints) != 1 {
+		t.Fatal("official per-account catalog model was not registered", err)
+	}
+	entry["source_account_id"] = "codex2-member"
+	raw, _ = json.Marshal(document)
+	_ = os.WriteFile(filepath.Join(dir, "context-windows.json"), raw, 0600)
+	if _, err := live.ModelHints(t.Context(), f.auths["codex"], nil); err == nil {
+		t.Fatal("another member's official catalog row was borrowed")
+	}
 }
 
 func TestReviewedModelHintsLegacyStaleAllowlistDoesNotWithholdLiveModels(t *testing.T) {

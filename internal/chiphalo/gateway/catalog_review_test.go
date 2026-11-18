@@ -65,8 +65,8 @@ func TestCatalogReviewProducesAccountLocalCASWithoutProvisionalRegistration(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(publication.NewModels, []string{"codex2/gpt-6-astra", "codex2/gpt-new-codex2", "gpt-6-astra", "gpt-new-codex"}) || posts["codex"] != 2 || posts["codex2"] != 2 {
-		t.Fatal("review failed to preserve member catalog and fixed probes", publication.NewModels, posts)
+	if !reflect.DeepEqual(publication.NewModels, []string{"codex2/gpt-6-astra", "codex2/gpt-new-codex2", "gpt-6-astra", "gpt-new-codex"}) || len(posts) != 0 {
+		t.Fatal("review failed to publish the official member catalogs without inference", publication.NewModels, posts)
 	}
 	for name, raw := range files {
 		current, _ := os.ReadFile(filepath.Join(dir, name))

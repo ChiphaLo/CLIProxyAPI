@@ -7,18 +7,11 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/configbundle"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
 )
 
-type ProbeResult struct {
-	OK            bool
-	Status        int
-	ReportedModel string
-}
-type Probe func(context.Context, quota.Binding, Model, string) ProbeResult
 type Rejected struct {
 	Account string `json:"account_id"`
 	Model   string `json:"model"`
@@ -40,22 +33,6 @@ func publicID(prefix, name string) string {
 	}
 	return prefix + "/" + name
 }
-func verifiedProbe(value ProbeResult, name string) bool {
-	if !value.OK {
-		return false
-	}
-	if value.ReportedModel == "" {
-		return true
-	}
-	_, actual, prefixed := strings.Cut(value.ReportedModel, "/")
-	if !prefixed {
-		actual = value.ReportedModel
-	} else {
-		parts := strings.Split(value.ReportedModel, "/")
-		actual = parts[len(parts)-1]
-	}
-	return actual == name
-}
 func contextValid(value any) bool {
 	m, _ := value.(map[string]any)
 	if m == nil || window(m["context_window"]) == 0 {
@@ -73,17 +50,19 @@ func mapValue(value any) map[string]any {
 }
 
 // BuildPlan performs no file publication, credential lookup, pricing or refresh.
-// The caller supplies a fixed-account probe; an offline/failed discovery cannot
-// erase an account's existing reviewed catalog or borrow another member's result.
-func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot, exposedRaw, contextRaw []byte, probe Probe, clock time.Time) (Plan, error) {
-	return BuildScopedPlan(ctx, bindings, discovery, exposedRaw, contextRaw, probe, clock, nil)
+// Model membership and capabilities come from each account's official /models
+// catalog; an offline/failed discovery cannot erase an account's existing catalog
+// or borrow another member's result.
+func BuildPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot, exposedRaw, contextRaw []byte) (Plan, error) {
+	return BuildScopedPlan(ctx, bindings, discovery, exposedRaw, contextRaw, nil)
 }
 
-// BuildScopedPlan reviews only the selected models of one account when scope
-// is set; every other reviewed account catalog is carried over unchanged.
-func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot, exposedRaw, contextRaw []byte, probe Probe, clock time.Time, scope *Scope) (Plan, error) {
+// BuildScopedPlan adds only the selected models of one account when scope is
+// set and refreshes that account's listed models; other accounts are unchanged.
+func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Snapshot, exposedRaw, contextRaw []byte, scope *Scope) (Plan, error) {
+
 	plan := Plan{Added: []string{}, Removed: []string{}, Rejected: []Rejected{}}
-	if ctx == nil || probe == nil || !discovery.OK || len(bindings) == 0 || len(bindings) > 128 {
+	if ctx == nil || !discovery.OK || len(bindings) == 0 || len(bindings) > 128 {
 		return plan, errors.New("explicit account catalog discovery and review required")
 	}
 	if scope.Validate() != nil {
@@ -155,7 +134,6 @@ func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Sn
 		return plan, errors.New("account catalog inventory incomplete")
 	}
 	accountModels, union := map[string][]string{}, map[string]bool{}
-	probed := 0
 	for _, binding := range bindings {
 		account := found[binding.ID]
 		if account.Prefix != binding.Prefix {
@@ -225,72 +203,43 @@ func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Sn
 				if binding.Prefix == "codex" && models[id] == nil {
 					contextID = "codex/" + model.Name
 				}
-				owner := safeText(mapValue(models[contextID])["source_account_id"], 256)
-				selected := scope != nil && scope.allows(binding.ID, model.Name)
-				// An explicit scoped selection re-verifies reviewed models so stale
-				// context or reasoning metadata can be refreshed for that account only.
-				if !selected && slices.Contains(kept, model.Name) && contextValid(models[contextID]) && (owner == "" || owner == binding.ID) {
-					continue
-				}
-				if !scope.allows(binding.ID, model.Name) {
-					continue
-				}
-				// Keep each explicit sync bounded; later operator runs can review
-				// the remaining names, without growing the private reply envelope.
-				if probed >= 16 {
-					plan.MorePending = true
+				listed := slices.Contains(kept, model.Name)
+				if scope != nil && (scope.AccountID != binding.ID || !listed && !scope.allows(binding.ID, model.Name)) {
 					continue
 				}
 				if ctx.Err() != nil {
 					return Plan{}, errors.New("catalog review canceled before publication")
 				}
-				probed++
-				base := probe(ctx, binding, model, "")
-				if ctx.Err() != nil {
-					return Plan{}, errors.New("catalog review canceled before publication")
+				levels := []map[string]string{}
+				for _, level := range model.Thinking {
+					if thinkingLevel(level) {
+						levels = append(levels, map[string]string{"effort": level})
+					}
 				}
-				if !verifiedProbe(base, model.Name) {
-					plan.Rejected = append(plan.Rejected, Rejected{Account: binding.ID, Model: id, Reason: "default probe failed or reported a different model", Status: base.Status})
-					continue
-				}
-				levels := model.Thinking
+				old := mapValue(models[contextID])
 				if len(levels) == 0 {
-					levels = []string{"low", "medium", "high", "xhigh", "max", "ultra", "none", "minimal"}
-				}
-				supported := []map[string]string{}
-				for _, level := range levels {
-					if ctx.Err() != nil {
-						return Plan{}, errors.New("catalog review canceled before publication")
+					// Keep an existing published entry instead of erasing usable
+					// capabilities when the official row omits reasoning levels.
+					if !listed || !contextValid(old) {
+						plan.Rejected = append(plan.Rejected, Rejected{Account: binding.ID, Model: id, Reason: "official catalog lists no reasoning levels"})
 					}
-					if !thinkingLevel(level) {
-						continue
-					}
-					result := probe(ctx, binding, model, level)
-					// Retry a transient level failure once so one dropped probe does
-					// not leave the same model with different levels per account.
-					if !verifiedProbe(result, model.Name) && transientProbe(result) && ctx.Err() == nil {
-						result = probe(ctx, binding, model, level)
-					}
-					if verifiedProbe(result, model.Name) {
-						supported = append(supported, map[string]string{"effort": level})
-					}
-				}
-				if len(supported) == 0 {
-					plan.Rejected = append(plan.Rejected, Rejected{Account: binding.ID, Model: id, Reason: "no verified explicit reasoning level; default success was not treated as medium support"})
 					continue
 				}
-				defaultLevel := supported[0]["effort"]
-				for _, level := range supported {
+				defaultLevel := levels[0]["effort"]
+				for _, level := range levels {
 					if level["effort"] == "medium" {
 						defaultLevel = level["effort"]
 					}
 				}
-				for _, level := range supported {
+				for _, level := range levels {
 					if level["effort"] == model.DefaultThinking {
 						defaultLevel = level["effort"]
 					}
 				}
 				limit, maxLimit := model.Window, model.MaxWindow
+				if limit == 0 {
+					limit = window(old["context_window"])
+				}
 				if limit == 0 {
 					limit = 272000
 				}
@@ -301,14 +250,16 @@ func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Sn
 				if len(inputs) == 0 {
 					inputs = []string{"text"}
 				}
-				entry := maps.Clone(mapValue(models[contextID]))
-				for key, value := range map[string]any{"context_length": limit, "context_window": limit, "max_context_window": maxLimit, "default_reasoning_level": defaultLevel, "supported_reasoning_levels": supported, "input_modalities": inputs, "upstream_slug": binding.Prefix + "/" + model.Name, "source": "fixed-account OAuth Responses probe", "source_kind": "live OAuth probe", "verified_at": clock.UTC().Format(time.RFC3339Nano), "source_account_id": binding.ID} {
+				entry := maps.Clone(old)
+				delete(entry, "verified_at")
+				for key, value := range map[string]any{"context_length": limit, "context_window": limit, "max_context_window": maxLimit, "default_reasoning_level": defaultLevel, "supported_reasoning_levels": levels, "input_modalities": inputs, "upstream_slug": binding.Prefix + "/" + model.Name, "source": "official Codex /models catalog", "source_kind": "official catalog", "source_account_id": binding.ID} {
 					entry[key] = value
 				}
 				if model.MultiAgent != "" {
 					entry["multi_agent_version"] = model.MultiAgent
 				}
 				models[id] = entry
+
 				if !slices.Contains(kept, model.Name) {
 					kept = append(kept, model.Name)
 					plan.Added = append(plan.Added, id)

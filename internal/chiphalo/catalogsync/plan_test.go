@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/chiphalo/quota"
 )
@@ -19,21 +17,11 @@ func fixturePlan() ([]quota.Binding, Snapshot, []byte, []byte) {
 	discovery := Snapshot{OK: true, Accounts: []Account{{ID: "one", Prefix: "codex", Status: "ok", Models: []Model{{Name: "gpt-6-luna"}, newModel}}, {ID: "two", Prefix: "codex2", Status: "unavailable", Models: []Model{}}}}
 	return bindings, discovery, old, metadata
 }
-func TestCatalogPlanKeepsMembershipMetadataAndUnrelatedRoutes(t *testing.T) {
+func TestCatalogPlanPublishesOfficialCatalogAndKeepsUnrelatedRoutes(t *testing.T) {
 	bindings, discovery, old, metadata := fixturePlan()
-	calls := []string{}
-	probe := func(_ context.Context, b quota.Binding, m Model, level string) ProbeResult {
-		calls = append(calls, b.ID+":"+m.Name+":"+level)
-		return ProbeResult{OK: level != "high", Status: 200, ReportedModel: "provider/" + m.Name}
-	}
-	plan, err := BuildPlan(t.Context(), bindings, discovery, old, metadata, probe, time.Unix(100, 0))
-	if err != nil || !plan.Changed || !reflect.DeepEqual(plan.Added, []string{"gpt-6-astra"}) || len(plan.Removed) != 2 || len(calls) != 5 {
-		t.Fatalf("unexpected catalog plan: %v", err)
-	}
-	for _, call := range calls {
-		if !strings.HasPrefix(call, "one:gpt-6-astra:") {
-			t.Fatal("old metadata was reprobed or another account was used")
-		}
+	plan, err := BuildPlan(t.Context(), bindings, discovery, old, metadata)
+	if err != nil || !plan.Changed || !reflect.DeepEqual(plan.Added, []string{"gpt-6-astra"}) || len(plan.Removed) != 2 {
+		t.Fatalf("unexpected catalog plan: %v %v", err, plan.Added)
 	}
 	var exposed, ctx map[string]any
 	_ = json.Unmarshal(plan.Exposed, &exposed)
@@ -46,31 +34,21 @@ func TestCatalogPlanKeepsMembershipMetadataAndUnrelatedRoutes(t *testing.T) {
 	if models["1x/gpt-5.6-sol"].(map[string]any)["extension"] != "do-not-change" || models["gpt-6-luna"].(map[string]any)["extension"] != "keep" {
 		t.Fatal("operator metadata or unrelated API route was rewritten")
 	}
-	if entry := models["gpt-6-astra"].(map[string]any); entry["default_reasoning_level"] != "medium" || entry["source_account_id"] != "one" || entry["multi_agent_version"] != "v2" {
-		t.Fatal("verified capabilities or source attribution were not retained")
+	entry := models["gpt-6-astra"].(map[string]any)
+	if entry["default_reasoning_level"] != "high" || entry["source_account_id"] != "one" || entry["multi_agent_version"] != "v2" || len(entry["supported_reasoning_levels"].([]any)) != 4 || entry["max_context_window"] != float64(1000000) {
+		t.Fatalf("official catalog capabilities were not published: %v", entry)
 	}
-	repeated, err := BuildPlan(t.Context(), bindings, discovery, plan.Exposed, plan.Context, func(context.Context, quota.Binding, Model, string) ProbeResult {
-		t.Error("unchanged reviewed models were reprobed")
-		return ProbeResult{}
-	}, time.Unix(200, 0))
+	repeated, err := BuildPlan(t.Context(), bindings, discovery, plan.Exposed, plan.Context)
 	if err != nil || repeated.Changed {
-		t.Fatal("an unchanged reviewed catalog produced needless writes")
+		t.Fatal("an unchanged official catalog produced needless writes")
 	}
 }
-func TestCatalogPlanRejectsDifferentModelAndUnprovenReasoning(t *testing.T) {
-	for _, kind := range []string{"different-model", "no-reasoning"} {
-		t.Run(kind, func(t *testing.T) {
-			bindings, discovery, old, metadata := fixturePlan()
-			plan, err := BuildPlan(t.Context(), bindings, discovery, old, metadata, func(_ context.Context, _ quota.Binding, _ Model, level string) ProbeResult {
-				if kind == "different-model" {
-					return ProbeResult{OK: true, ReportedModel: "gpt-6-luna"}
-				}
-				return ProbeResult{OK: level == "", ReportedModel: "gpt-6-astra"}
-			}, time.Unix(100, 0))
-			if err != nil || len(plan.Added) != 0 || len(plan.Rejected) < 2 {
-				t.Fatal("a mismatched or unproven capability was advertised")
-			}
-		})
+func TestCatalogPlanRejectsNewModelWithoutReasoningLevels(t *testing.T) {
+	bindings, discovery, old, metadata := fixturePlan()
+	discovery.Accounts[0].Models[1].Thinking = nil
+	plan, err := BuildPlan(t.Context(), bindings, discovery, old, metadata)
+	if err != nil || len(plan.Added) != 0 || len(plan.Rejected) < 2 {
+		t.Fatal("a model without official reasoning levels was advertised")
 	}
 }
 func TestCatalogPlanRejectsOfflineUnregisteredAndCanceledDiscovery(t *testing.T) {
@@ -91,7 +69,7 @@ func TestCatalogPlanRejectsOfflineUnregisteredAndCanceledDiscovery(t *testing.T)
 			case "canceled":
 				cancel()
 			}
-			if _, err := BuildPlan(ctx, bindings, discovery, old, metadata, func(context.Context, quota.Binding, Model, string) ProbeResult { return ProbeResult{OK: true} }, time.Unix(100, 0)); err == nil {
+			if _, err := BuildPlan(ctx, bindings, discovery, old, metadata); err == nil {
 				t.Fatal("an ambiguous, unavailable or canceled discovery could be published")
 			}
 		})
@@ -101,10 +79,7 @@ func TestCatalogPlanReadsLegacyListAndObjectNames(t *testing.T) {
 	bindings, discovery, _, metadata := fixturePlan()
 	discovery.Accounts[0].Models = []Model{{Name: "gpt-6-luna"}}
 	for _, old := range []string{`["gpt-6-luna"]`, `{"models":[{"id":"codex/gpt-6-luna"}]}`} {
-		plan, err := BuildPlan(t.Context(), bindings, discovery, []byte(old), metadata, func(context.Context, quota.Binding, Model, string) ProbeResult {
-			t.Error("valid existing metadata was not preserved")
-			return ProbeResult{}
-		}, time.Unix(100, 0))
+		plan, err := BuildPlan(t.Context(), bindings, discovery, []byte(old), metadata)
 		if err != nil || len(plan.Added) != 0 {
 			t.Fatal("a supported legacy catalog shape was discarded")
 		}

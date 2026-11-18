@@ -39,7 +39,3 @@ func (s *Scope) Validate() error {
 func (s *Scope) allows(accountID, name string) bool {
 	return s == nil || s.AccountID == accountID && slices.Contains(s.Models, name)
 }
-
-func transientProbe(value ProbeResult) bool {
-	return value.Status == 0 || value.Status == 429 || value.Status >= 500
-}

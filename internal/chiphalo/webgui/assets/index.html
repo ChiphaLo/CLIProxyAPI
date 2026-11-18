@@ -2188,7 +2188,7 @@ function openCodexAccountEditor(id,cx){
     <div data-codex-fetch-result aria-live="polite"></div>
     <div class="codex-model-list" data-codex-models></div>
     <div class="divider"></div><div class="row"><h3 class="subhead grow">模型价格 · USD / 1M tokens</h3><button type="button" class="btn btn-primary btn-sm" data-codex-prices disabled>保存价格</button></div><div class="price-editor" data-role="provider-prices"></div>
-    <p class="hint">来源账号与前缀固定，不跨账号轮询。勾选新模型后保存，会先用该账号逐个校验再开放；取消勾选即从 /models 移除。</p>
+    <p class="hint">来源账号与前缀固定，不跨账号轮询。模型、上下文与思考档位直接取自该账号官方 /models；取消勾选即停用。</p>
     <div class="foot"><button type="button" class="btn btn-secondary" data-codex-catalog>官方目录</button><button type="button" class="btn btn-secondary" data-codex-close>取消</button><button type="button" class="btn btn-primary" data-codex-save>保存并应用</button></div>
   </div>`;
   $("#sheetBack").classList.add("on");s.classList.add("on");
@@ -2201,6 +2201,7 @@ function openCodexAccountEditor(id,cx){
     const tag={new:'新',hidden:'上游隐藏',unlisted:'上游未列出'};
     editor.querySelector('[data-codex-models]').innerHTML=rows.map((m,i)=>`<div class="codex-model-row"><label><input type="checkbox" data-codex-model="${i}" ${m.enabled?'checked':''} ${m.state==='hidden'?'disabled':''}> <span class="mono">${esc(m.id)}</span>${tag[m.state]?` <span class="reasoning-badge">${tag[m.state]}</span>`:''}</label><span class="muted">${m.contextWindow?fmt(m.contextWindow):'—'}</span><span class="reasoning-badges">${(m.thinking||[]).map(x=>`<span class="reasoning-badge">${esc(x)}</span>`).join('')}</span></div>`).join('')||'<div class="empty">暂无模型，点击“获取 /models”</div>';
   };
+  let fetched=false;
   renderModels();
   const select=on=>{editor.querySelectorAll('[data-codex-model]').forEach(node=>{if(!node.disabled)node.checked=on;});syncChecks();};
   editor.querySelector('[data-codex-all]').onclick=()=>select(true);editor.querySelector('[data-codex-none]').onclick=()=>select(false);
@@ -2220,7 +2221,7 @@ function openCodexAccountEditor(id,cx){
         rows.push({name:m.name,id:publicId(m.name),enabled:false,contextWindow:m.context_window||0,thinking:m.supported_reasoning_levels||[],state:hidden?'hidden':'new'});
         if(!hidden)added++;
       }
-      renderModels();
+      fetched=true;renderModels();
       out.textContent=`上游 ${Number(result.count||0)} 个模型${added?`，${added} 个可添加`:''}`;
     }catch(e){if(editor.isConnected)out.textContent='获取失败：'+e.message;}
     finally{this.disabled=false;}
@@ -2231,19 +2232,19 @@ function openCodexAccountEditor(id,cx){
     this.disabled=true;syncChecks();
     const out=editor.querySelector('[data-codex-fetch-result]');
     try{
-      const wanted=rows.filter(m=>m.state==='new'&&m.enabled).map(m=>m.name);
+      const wanted=fetched?rows.filter(m=>m.enabled&&(m.state==='new'||m.state==='reviewed')).map(m=>m.name):[];
       let current=a.models||[],rev=revision,notice='';
       if(wanted.length){
-        if(wanted.length>16)throw new Error('一次最多添加 16 个模型');
-        out.textContent='正在用该账号校验新模型…';
+        if(wanted.length>16)throw new Error('一次最多同步 16 个模型');
+        out.textContent='正在应用官方 /models…';
         let r=await api('/sync-codex',{method:'POST',body:JSON.stringify({account_id:id,models:wanted})});
         while(r.pending){
           await new Promise(resolve=>setTimeout(resolve,1500));
           r=await api('/sync-codex',{method:'POST',body:JSON.stringify({job_id:r.job_id})});
         }
-        if(!r.ok)throw new Error(String(r.error||r.output||'模型校验失败'));
+        if(!r.ok)throw new Error(String(r.error||r.output||'同步失败'));
         const rejected=(r.rejected||[]).filter(x=>x.account_id===id&&x.model);
-        notice=`已添加 ${(r.added||[]).length} 个`+(rejected.length?`，未通过：${rejected.map(x=>x.model).join(', ')}`:'');
+        notice=`新增 ${(r.added||[]).length} 个`+(rejected.length?`，未添加：${rejected.map(x=>x.model).join(', ')}`:'');
         const fresh=await api('/codex-accounts');
         codexAccountsState=fresh;rev=fresh.revision;
         current=((fresh.accounts||[]).find(x=>x.id===id)||{}).models||[];
@@ -2286,7 +2287,7 @@ function openCodexDetails(cx){
     try{
       let r=await api("/sync-codex",{method:"POST"});
       while(r.pending){
-        o.textContent="正在逐账号验证模型能力…";
+        o.textContent="正在读取官方 /models…";
         await new Promise(resolve=>setTimeout(resolve,1500));
         r=await api("/sync-codex",{method:"POST",body:JSON.stringify({job_id:r.job_id})});
       }

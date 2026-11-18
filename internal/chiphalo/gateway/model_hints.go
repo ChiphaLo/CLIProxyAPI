@@ -85,10 +85,13 @@ func (l *LiveProfile) ModelHints(ctx context.Context, auth *coreauth.Auth, basel
 			return nil, errors.New("reviewed model capability belongs to a different member")
 		}
 		info := &registry.ModelInfo{ID: name, Object: "model", OwnedBy: "openai", Type: "codex", MetadataModelID: name}
+		// Official per-account /models rows are trusted directly; older entries
+		// remain valid when they carry a timestamped live probe review.
+		reviewed := hint.Kind == "official catalog" || hint.Kind == "live OAuth probe" && hint.Verified != ""
 		if source := byName[name]; source != nil {
 			cloned := *source
 			info = &cloned
-		} else if hint.Owner != owner || hint.Kind != "live OAuth probe" || hint.Verified == "" || hint.Window < 1024 {
+		} else if hint.Owner != owner || !reviewed || hint.Window < 1024 {
 			if !profile.Accounts.HasAccountCatalog() && hint.Owner == "" {
 				// Legacy exposure is an allowlist, not proof that every historical
 				// name was routable. Keep the stock intersection without activating
@@ -98,8 +101,10 @@ func (l *LiveProfile) ModelHints(ctx context.Context, auth *coreauth.Auth, basel
 			return nil, errors.New("new model lacks an account-local live review")
 		}
 		if byName[name] == nil {
-			if _, err := time.Parse(time.RFC3339Nano, hint.Verified); err != nil {
-				return nil, errors.New("new model live review timestamp invalid")
+			if hint.Kind == "live OAuth probe" {
+				if _, err := time.Parse(time.RFC3339Nano, hint.Verified); err != nil {
+					return nil, errors.New("new model live review timestamp invalid")
+				}
 			}
 			if len(hint.Levels) == 0 || string(hint.Levels) == "null" {
 				return nil, errors.New("new model lacks reviewed reasoning capabilities")
