@@ -440,6 +440,7 @@ input[type="number"].form-input,input[type="number"].form-input{font-variant-num
 .sheet h3{font-size:16px;font-weight:600;letter-spacing:-.01em}
 .sheet .foot{display:flex;justify-content:flex-end;gap:var(--space-2);margin-top:var(--space-5);padding-top:var(--space-4);border-top:1px solid var(--separator)}
 .sheet .field+.field{margin-top:var(--space-4)}
+.sheet .form-grid .field+.field{margin-top:0}
 
 .provider-editor{display:flex;flex-direction:column;min-width:0}
 .provider-editor-head{display:flex;align-items:center;gap:var(--space-3);padding-bottom:var(--space-4);border-bottom:1px solid var(--separator)}
@@ -761,6 +762,7 @@ textarea{padding-top:9px;padding-bottom:9px}
 .form-input:hover,input:not([type="checkbox"]):not([type="radio"]):hover,select:hover,textarea:hover{border-color:var(--text-tertiary)}
 .form-input:focus,input:not([type="checkbox"]):not([type="radio"]):focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
 .form-input[disabled]{background:var(--surface-subtle);color:var(--text-tertiary)}
+input.form-input[readonly],input.form-input[readonly]:hover{background:var(--surface-subtle);color:var(--text-secondary);border-color:var(--separator-strong)}
 select.form-input,select{
   appearance:none;-webkit-appearance:none;padding-right:32px;
   background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6.25 8 10.25 12 6.25' fill='none' stroke='%2385858c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -2181,7 +2183,7 @@ function openCodexAccountEditor(id,cx){
   const s=$("#sheet");s.classList.add("wide");
   s.innerHTML=`<div class="provider-editor" data-codex-editor="${esc(id)}">
     <div class="provider-editor-head"><div class="grow"><h3>${esc(a.name||a.prefix)} · Codex</h3></div><button type="button" class="switch ${a.enabled?'on':''}" data-codex-enabled aria-label="启用账号" aria-checked="${!!a.enabled}"></button></div>
-    <div class="form-grid"><div class="field"><label class="form-label">名称</label><input class="form-input" data-codex-name maxlength="80" value="${esc(a.name)}"></div><div class="field"><label class="form-label">账号来源</label><input class="form-input mono" value="${esc(a.prefix)}" readonly></div></div>
+    <div class="form-grid"><div class="field"><label class="form-label">名称</label><input class="form-input" data-codex-name maxlength="80" value="${esc(a.name)}"></div><div class="field"><label class="form-label">账号来源</label><input class="form-input" value="${esc(a.prefix)}" readonly></div></div>
     <div class="divider"></div><div class="row"><h3 class="subhead grow">开放模型</h3><button type="button" class="btn btn-secondary btn-sm" data-codex-fetch>获取 /models</button><button type="button" class="btn btn-secondary btn-sm" data-codex-all>全选</button><button type="button" class="btn btn-secondary btn-sm" data-codex-none>取消全选</button></div>
     <div data-codex-fetch-result aria-live="polite"></div>
     <div class="codex-model-list" data-codex-models></div>

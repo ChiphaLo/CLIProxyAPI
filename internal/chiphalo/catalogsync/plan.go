@@ -226,7 +226,10 @@ func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Sn
 					contextID = "codex/" + model.Name
 				}
 				owner := safeText(mapValue(models[contextID])["source_account_id"], 256)
-				if slices.Contains(kept, model.Name) && contextValid(models[contextID]) && (owner == "" || owner == binding.ID) {
+				selected := scope != nil && scope.allows(binding.ID, model.Name)
+				// An explicit scoped selection re-verifies reviewed models so stale
+				// context or reasoning metadata can be refreshed for that account only.
+				if !selected && slices.Contains(kept, model.Name) && contextValid(models[contextID]) && (owner == "" || owner == binding.ID) {
 					continue
 				}
 				if !scope.allows(binding.ID, model.Name) {

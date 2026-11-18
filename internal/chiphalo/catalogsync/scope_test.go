@@ -51,3 +51,29 @@ func TestScopedCatalogPlanRejectsInvalidScope(t *testing.T) {
 		}
 	}
 }
+
+func TestScopedCatalogPlanRefreshesSelectedReviewedModel(t *testing.T) {
+	bindings, discovery, old, metadata := fixturePlan()
+	discovery.Accounts[0].Models[0] = Model{Name: "gpt-6-luna", Window: 500000, Thinking: []string{"high", "max"}, Visibility: "list"}
+	calls := 0
+	probe := func(_ context.Context, b quota.Binding, m Model, _ string) ProbeResult {
+		calls++
+		if b.ID != "one" || m.Name != "gpt-6-luna" {
+			t.Fatalf("refresh probed outside its scope: %s %s", b.ID, m.Name)
+		}
+		return ProbeResult{OK: true, ReportedModel: m.Name}
+	}
+	plan, err := BuildScopedPlan(t.Context(), bindings, discovery, old, metadata, probe, time.Unix(100, 0), &Scope{AccountID: "one", Models: []string{"gpt-6-luna"}})
+	if err != nil || len(plan.Added) != 0 || calls != 3 {
+		t.Fatalf("selected reviewed model was not refreshed: %v %v %d", err, plan.Added, calls)
+	}
+	var ctx map[string]any
+	_ = json.Unmarshal(plan.Context, &ctx)
+	models := ctx["models"].(map[string]any)
+	if entry := models["gpt-6-luna"].(map[string]any); entry["context_window"] != float64(500000) || len(entry["supported_reasoning_levels"].([]any)) != 2 || entry["extension"] != "keep" {
+		t.Fatalf("refreshed metadata incorrect: %v", entry)
+	}
+	if entry := models["codex2/gpt-6-luna"].(map[string]any); entry["context_window"] != float64(272000) {
+		t.Fatal("refresh changed the other account")
+	}
+}
