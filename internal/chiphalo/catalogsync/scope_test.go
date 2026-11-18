@@ -53,6 +53,30 @@ func TestScopedCatalogPlanRejectsInvalidScope(t *testing.T) {
 }
 
 func TestScopedCatalogPlanRefreshesSelectedReviewedModel(t *testing.T) {
+	t.Run("transient level retry", func(t *testing.T) {
+		bindings, discovery, old, metadata := fixturePlan()
+		discovery.Accounts[0].Models[0] = Model{Name: "gpt-6-luna", Window: 272000, Thinking: []string{"max", "ultra"}, Visibility: "list"}
+		seen := map[string]int{}
+		probe := func(_ context.Context, _ quota.Binding, m Model, level string) ProbeResult {
+			seen[level]++
+			switch {
+			case level == "ultra":
+				return ProbeResult{Status: 400}
+			case level == "max" && seen[level] == 1:
+				return ProbeResult{}
+			}
+			return ProbeResult{OK: true, ReportedModel: m.Name}
+		}
+		plan, err := BuildScopedPlan(t.Context(), bindings, discovery, old, metadata, probe, time.Unix(100, 0), &Scope{AccountID: "one", Models: []string{"gpt-6-luna"}})
+		if err != nil || seen["max"] != 2 || seen["ultra"] != 1 {
+			t.Fatalf("transient retry incorrect: %v %v", err, seen)
+		}
+		var ctx map[string]any
+		_ = json.Unmarshal(plan.Context, &ctx)
+		if levels := ctx["models"].(map[string]any)["gpt-6-luna"].(map[string]any)["supported_reasoning_levels"].([]any); len(levels) != 1 {
+			t.Fatalf("retried level not recorded: %v", levels)
+		}
+	})
 	bindings, discovery, old, metadata := fixturePlan()
 	discovery.Accounts[0].Models[0] = Model{Name: "gpt-6-luna", Window: 500000, Thinking: []string{"high", "max"}, Visibility: "list"}
 	calls := 0

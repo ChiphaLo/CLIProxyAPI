@@ -265,7 +265,13 @@ func BuildScopedPlan(ctx context.Context, bindings []quota.Binding, discovery Sn
 					if !thinkingLevel(level) {
 						continue
 					}
-					if verifiedProbe(probe(ctx, binding, model, level), model.Name) {
+					result := probe(ctx, binding, model, level)
+					// Retry a transient level failure once so one dropped probe does
+					// not leave the same model with different levels per account.
+					if !verifiedProbe(result, model.Name) && transientProbe(result) && ctx.Err() == nil {
+						result = probe(ctx, binding, model, level)
+					}
+					if verifiedProbe(result, model.Name) {
 						supported = append(supported, map[string]string{"effort": level})
 					}
 				}
