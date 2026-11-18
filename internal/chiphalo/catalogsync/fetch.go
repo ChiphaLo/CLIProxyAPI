@@ -19,7 +19,11 @@ import (
 )
 
 const OfficialModelsURL = "https://chatgpt.com/backend-api/codex/models"
-const DefaultClientVersion = "0.159.0"
+
+// DefaultClientVersion tracks the current stable Codex CLI. The official
+// catalog hides models whose minimal_client_version exceeds this value
+// (gpt-6.2-astra and gpt-6.2-sol require 0.166.0).
+const DefaultClientVersion = "0.169.1"
 
 var versionPattern = regexp.MustCompile(`^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$`)
 var namePattern = regexp.MustCompile(`^gpt-[A-Za-z0-9._-]{1,120}$`)
