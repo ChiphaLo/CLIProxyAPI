@@ -53,6 +53,29 @@ func TestCatalogProbeUsesStockFinalPayloadAndOneExactMember(t *testing.T) {
 	}
 }
 
+func TestCatalogProbeAcceptsReasoningBudgetIncompleteOnly(t *testing.T) {
+	for reason, want := range map[string]bool{"max_output_tokens": true, "content_filter": false} {
+		t.Run(reason, func(t *testing.T) {
+			live, f, _ := liveFixture(t)
+			auth := f.auths["codex"].Clone()
+			auth.Metadata["access_token"] = "probe-fixture"
+			if _, err := f.manager.Update(t.Context(), auth); err != nil {
+				t.Fatal(err)
+			}
+			factory := func(string) (http.RoundTripper, error) {
+				return quotaRoundTrip(func(*http.Request) (*http.Response, error) {
+					body := `data: {"type":"response.output_item.done","output_index":0,"item":{"type":"reasoning","summary":[]}}` + "\n\n" + `data: {"type":"response.incomplete","response":{"id":"resp_probe","model":"gpt-6-astra","status":"incomplete","incomplete_details":{"reason":"` + reason + `"},"output":[],"usage":{"input_tokens":7,"output_tokens":16,"output_tokens_details":{"reasoning_tokens":16},"total_tokens":23}}}` + "\n\n"
+					return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+				}), nil
+			}
+			result := live.CatalogProbe(&config.Config{}, f.manager, factory)(t.Context(), quota.Binding{ID: "codex-member", Prefix: "codex", Workspace: "same-team"}, catalogsync.Model{Name: "gpt-6-astra"}, "max")
+			if result.OK != want {
+				t.Fatalf("incomplete reason %s accepted=%v", reason, result.OK)
+			}
+		})
+	}
+}
+
 func TestCatalogProbePayloadOverridesAreNotFalseCapabilityEvidence(t *testing.T) {
 	for _, field := range []string{"model", "reasoning.effort", "input", "tools"} {
 		t.Run(field, func(t *testing.T) {

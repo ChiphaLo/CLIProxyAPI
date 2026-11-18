@@ -153,10 +153,18 @@ func (l *LiveProfile) CatalogProbe(cfg *config.Config, manager *coreauth.Manager
 			return result
 		}
 		var value struct {
-			Status string `json:"status"`
-			Model  string `json:"model"`
+			Status     string `json:"status"`
+			Model      string `json:"model"`
+			Incomplete struct {
+				Reason string `json:"reason"`
+			} `json:"incomplete_details"`
 		}
-		if !guard.sent || json.Unmarshal(response.Payload, &value) != nil || value.Status != "completed" || value.Model == "" {
+		if !guard.sent || json.Unmarshal(response.Payload, &value) != nil || value.Model == "" {
+			return result
+		}
+		// Higher reasoning levels can spend the tiny probe budget before any
+		// text; the upstream still accepted the requested effort in that case.
+		if value.Status != "completed" && (value.Status != "incomplete" || value.Incomplete.Reason != "max_output_tokens") {
 			return result
 		}
 		result.OK, result.Status, result.ReportedModel = true, 200, value.Model
