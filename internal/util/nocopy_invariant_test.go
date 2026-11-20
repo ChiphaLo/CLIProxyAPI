@@ -117,6 +117,9 @@ var reviewedInPlaceByteWrites = map[string]reviewedInPlaceByteWrite{
 	"internal/client/codex/live/tcp_proxy.go":                       {1, "copies header and payload into a freshly allocated frame"},
 	"internal/home/client.go":                                       {1, "zeroes a secret buffer after json.Unmarshal has copied every value out"},
 	"internal/pluginstore/auth.go":                                  {1, "zeroes a locally built credential buffer after base64 encoding copied it out"},
+	"internal/chiphalo/quotafit/numeric.go":                         {2, "writes float64 solver vectors and copies matrix rows into a private work matrix; no byte of any payload is rewritten"},
+	"internal/chiphalo/clientkeys/provider.go":                      {1, "copies a decoded digest into a local fixed-size array"},
+	"internal/chiphalo/webgui/usage_projection.go":                  {1, "copies a hash sum into a block's fixed-size digest array"},
 	"sdk/cliproxy/auth/selector_weighted.go":                        {2, "shifts weightedPoolMember bookkeeping structs when inserting or removing members; no byte of any JSON payload is rewritten"},
 }
 
