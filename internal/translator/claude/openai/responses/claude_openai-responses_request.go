@@ -68,7 +68,7 @@ func ConvertOpenAIResponsesRequestToClaudeWithCompatContext(ctx context.Context,
 // a config reload cannot mix the two behaviors within one request.
 func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string, inputRawJSON []byte, stream, preserveEmptyThinkingBlocks, toolSearch bool) ([]byte, error) {
 	rawJSON := normalizeCodexAgentMessages(inputRawJSON)
-	media := &deferredMedia{}
+	media := newDeferredMedia(common.DeferredMediaFromContext(ctx))
 	var drops common.UserTurnDrops
 	var toolOutputErr error
 
@@ -374,17 +374,19 @@ func convertOpenAIResponsesRequestToClaude(ctx context.Context, modelName string
 			pendingResizeNotices = append(pendingResizeNotices, text)
 			continue
 		}
-		if isResponsesSystemLevelRole(item.Get("role").String()) {
+		// One pass reads both keys; either may follow a large content value.
+		head := ojson.GetMany(item.Raw, "role", "type")
+		if isResponsesSystemLevelRole(head[0].String()) {
 			if entryIdx, ok := systemInputEntryByIndex[itemIndex]; ok && systemInputEntries[entryIdx].eligible {
 				pendingSystemEntryIndices = append(pendingSystemEntryIndices, entryIdx)
 			}
 			continue
 		}
-		typ := item.Get("type").String()
+		typ := head[1].String()
 		if typ != "function_call_output" && typ != "custom_tool_call_output" {
 			flushResizeNotices()
 		}
-		if typ == "" && item.Get("role").String() != "" {
+		if typ == "" && head[0].String() != "" {
 			typ = "message"
 		}
 		switch typ {

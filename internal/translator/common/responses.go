@@ -308,13 +308,14 @@ func responsesToolOutputExplicitCallID(item ojson.Result) string {
 }
 
 func isCodexDelegationToolOutput(item ojson.Result) bool {
-	if strings.TrimSpace(item.Get("type").String()) != "function_call_output" {
+	fields := ojson.GetMany(item.Raw, "type", "namespace", "name")
+	if strings.TrimSpace(fields[0].String()) != "function_call_output" {
 		return false
 	}
-	if strings.TrimSpace(item.Get("namespace").String()) != "codex_app" {
+	if strings.TrimSpace(fields[1].String()) != "codex_app" {
 		return false
 	}
-	switch strings.TrimSpace(item.Get("name").String()) {
+	switch strings.TrimSpace(fields[2].String()) {
 	case "create_thread", "send_message_to_thread":
 		return true
 	default:

@@ -104,6 +104,16 @@ func applyPayloadConfigWithTrackedPathsForExecutorDoc(cfg *config.Config, target
 	return applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg, targetExecutor, model, protocol, fromProtocol, root, doc, original, requestedModel, requestPath, headers, nil, trackedPaths...)
 }
 
+// PayloadRulesConfigured reports whether cfg defines payload rules, the only
+// consumers of the original payload passed to the payload config helpers.
+func PayloadRulesConfigured(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	rules := cfg.Payload
+	return len(rules.Default) != 0 || len(rules.DefaultRaw) != 0 || len(rules.Override) != 0 || len(rules.OverrideRaw) != 0 || len(rules.Replace) != 0 || len(rules.Filter) != 0
+}
+
 func applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg *config.Config, targetExecutor, model, protocol, fromProtocol, root string, doc *ojson.Doc, original []byte, requestedModel, requestPath string, headers http.Header, auth *cliproxyauth.Auth, trackedPaths ...string) (map[string]bool, bool) {
 	payloadConfigEvaluations.Add(1)
 	touched := make(map[string]bool)
@@ -156,7 +166,7 @@ func applyPayloadConfigWithTrackedPathsForExecutorAndAuthDoc(cfg *config.Config,
 	}
 
 	rules := cfg.Payload
-	hasPayloadRules := len(rules.Default) != 0 || len(rules.DefaultRaw) != 0 || len(rules.Override) != 0 || len(rules.OverrideRaw) != 0 || len(rules.Replace) != 0 || len(rules.Filter) != 0
+	hasPayloadRules := PayloadRulesConfigured(cfg)
 	if hasPayloadRules {
 		model = strings.TrimSpace(model)
 		requestedModel = strings.TrimSpace(requestedModel)

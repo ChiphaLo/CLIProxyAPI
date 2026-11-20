@@ -562,12 +562,22 @@ func ResponsesToolReverseIdentityMap(rawJSON []byte) map[string]ResponsesToolIde
 	if len(rawJSON) == 0 || !ojson.ValidBytes(rawJSON) {
 		return nil
 	}
-	root := ojson.ParseBytes(rawJSON)
+	root := ParseGJSONBytesNoCopy(rawJSON)
 	if req := root.Get("request"); req.Exists() && (req.Get("model").Exists() || req.Get("input").Exists() || req.Get("tools").Exists()) {
 		root = req
 	}
 	_, _, reverseMap := buildGeminiFunctionDeclarations(root, false)
-	return reverseMap
+	if len(reverseMap) == 0 {
+		return reverseMap
+	}
+	// The map outlives rawJSON's borrowed view, so it owns its strings.
+	owned := make(map[string]ResponsesToolIdentity, len(reverseMap))
+	for name, identity := range reverseMap {
+		identity.Name = strings.Clone(identity.Name)
+		identity.Namespace = strings.Clone(identity.Namespace)
+		owned[strings.Clone(name)] = identity
+	}
+	return owned
 }
 
 // MapResponsesToolName returns the mapped Gemini function name if present in forwardMap, else sanitized name.

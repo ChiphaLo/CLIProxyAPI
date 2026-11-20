@@ -11,6 +11,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/clienterror"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
+	translatorcommon "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/common"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
@@ -86,7 +87,9 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 	ctx = helps.WithClaudeWebSearchResultRestore(ctx, webSearchSessionKey, webSearchTTL)
 
 	isCompat := helps.APIKeyModelIsCompat(req)
-	originalTranslated, body, err := helps.TranslateRequestPairReturningError(ctx, opts.Headers, e.cfg, from, to, baseModel, originalPayload, req.Payload, upstreamStream, isCompat)
+	// Large media stays out of the documents edited below until the final body.
+	media := &translatorcommon.DeferredMedia{}
+	originalTranslated, body, err := helps.TranslateRequestPairReturningError(translatorcommon.WithDeferredMedia(ctx, media), opts.Headers, e.cfg, from, to, baseModel, originalPayload, req.Payload, upstreamStream, isCompat)
 	if err != nil {
 		return resp, err
 	}
@@ -98,7 +101,7 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 		return resp, err
 	}
 	helps.RestoreClaudeWebSearchResultsContextDoc(ctx, doc, webSearchSessionKey, webSearchTTL)
-	if _, errImages := helps.ResizeClaudeImagesDoc(doc); errImages != nil {
+	if _, errImages := helps.ResizeClaudeImagesDocResolving(doc, media.Resolve); errImages != nil {
 		return resp, statusErr{code: http.StatusBadRequest, msg: errImages.Error()}
 	}
 	if rebuildMidSystemMessageEnabled(e.cfg, auth) {
@@ -256,7 +259,7 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 	stripPromptCacheOptionsDoc(doc)
 	// User rules match the fully prepared business body and are applied only once.
 	touchedPayloadPaths := helps.ApplyPayloadConfigWithTrackedPathsDoc(
-		e.cfg, baseModel, to.String(), from.String(), "", doc, stripTranslatedDefaultMaxTokens(from, originalPayload, originalTranslated),
+		e.cfg, baseModel, to.String(), from.String(), "", doc, stripTranslatedDefaultMaxTokens(e.cfg, from, originalPayload, originalTranslated),
 		helps.PayloadRequestedModel(opts, req.Model), helps.PayloadRequestPath(opts), opts.Headers,
 		"diagnostics", "betas",
 	)
@@ -264,7 +267,7 @@ func (e *ClaudeExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, r
 		diagnosticsState = claudeDiagnosticsRequestState{}
 	}
 	extraBetas, _ = extractAndRemoveBetasDoc(doc)
-	bodyForUpstream := doc.Bytes()
+	bodyForUpstream := media.HydrateJSON(doc.Bytes())
 	body = bodyForUpstream
 	bodyForTranslation := bodyForUpstream
 	advisorState.FilterUnknownIDsFromFinalBody(bodyForUpstream)

@@ -837,9 +837,7 @@ func (s *xaiImageRefScanner) Write(p []byte) (int, error) {
 	for i < len(p) {
 		if s.inStr {
 			if !s.strEsc && !s.strIsKey && s.valTarget == xaiValIgnore {
-				for i < len(p) && p[i] != '"' && p[i] != '\\' {
-					i++
-				}
+				i += jsonStringSpecialIndex(p[i:])
 				if i >= len(p) {
 					break
 				}

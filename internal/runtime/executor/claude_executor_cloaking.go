@@ -667,35 +667,30 @@ func isClaudeTitleHelperRequestDoc(doc *ojson.Doc) bool {
 	} else if matchesSystemTitleInstruction(system.String()) {
 		return true
 	}
-	messages := doc.Get("messages")
-	if messages.IsArray() {
-		for _, msg := range messages.Array() {
-			if msg.Get("role").String() == "system" {
-				content := msg.Get("content")
-				if content.IsArray() {
-					for _, part := range content.Array() {
-						if matchesSystemTitleInstruction(part.Get("text").String()) {
-							return true
-						}
-					}
-				} else if matchesSystemTitleInstruction(content.String()) {
-					return true
-				}
-			}
+	found := false
+	util.ForEachDocArrayElement(doc, "messages", func(_ int, msg ojson.Result) bool {
+		if msg.Get("role").String() != "system" {
+			return true
 		}
-	}
-	return false
+		content := msg.Get("content")
+		if !content.IsArray() {
+			found = matchesSystemTitleInstruction(content.String())
+			return !found
+		}
+		content.ForEach(func(_, part ojson.Result) bool {
+			found = matchesSystemTitleInstruction(part.Get("text").String())
+			return !found
+		})
+		return !found
+	})
+	return found
 }
 
 func isClaudeNewPromptTurnDoc(doc *ojson.Doc) bool {
 	if doc == nil || isClaudeProbeOrHelperRequestDoc(doc) {
 		return false
 	}
-	messages := doc.Get("messages")
-	if !messages.IsArray() {
-		return true
-	}
-	arr := messages.Array()
+	arr := claudeDocMessageList(doc)
 	if len(arr) == 0 {
 		return true
 	}
@@ -957,7 +952,7 @@ func checkSystemInstructionsWithSigningModeAtDoc(
 	if isClaudeFable51Model(model) && !isClaudeProbeOrHelperRequestDoc(doc) {
 		systemBlocks = append(systemBlocks, buildTextBlock(claudeCodeFableReportingOutcomes, nil))
 	}
-	_ = doc.SetRawBytes("system", []byte("["+strings.Join(systemBlocks, ",")+"]"))
+	_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(systemBlocks))
 	if strictMode {
 		injectClaudeCodeCurrentDateInternalDoc(doc, currentDate, isExplicit)
 		return true
@@ -972,7 +967,7 @@ func checkSystemInstructionsWithSigningModeAtDoc(
 		for _, block := range forwardedSystemBlocks {
 			systemBlocks = append(systemBlocks, buildForwardedSystemBlock(block.Text, block, isExplicit))
 		}
-		_ = doc.SetRawBytes("system", []byte("["+strings.Join(systemBlocks, ",")+"]"))
+		_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(systemBlocks))
 		injectClaudeCodeCurrentDateInternalDoc(doc, currentDate, isExplicit)
 		return true
 	}
@@ -982,7 +977,7 @@ func checkSystemInstructionsWithSigningModeAtDoc(
 		for _, block := range forwardedSystemBlocks {
 			systemBlocks = append(systemBlocks, buildForwardedSystemBlock(block.Text, block, isExplicit))
 		}
-		_ = doc.SetRawBytes("system", []byte("["+strings.Join(systemBlocks, ",")+"]"))
+		_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(systemBlocks))
 	} else {
 		insertClaudeMidConversationSystemBlocksDoc(doc, forwardedSystemBlocks, isExplicit)
 	}
@@ -1037,7 +1032,7 @@ func relocateClaudeSystemPromptForCountTokensWithPolicyDoc(doc *ojson.Doc, stric
 		for _, block := range forwardedSystemBlocks {
 			blocks = append(blocks, buildForwardedSystemBlock(block.Text, block, isExplicit))
 		}
-		return doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]")) == nil
+		return util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks)) == nil
 	}
 	if errDelete := doc.Delete("system"); errDelete != nil {
 		return false
@@ -1051,7 +1046,7 @@ func relocateClaudeSystemPromptForCountTokensWithPolicyDoc(doc *ojson.Doc, stric
 		for _, block := range forwardedSystemBlocks {
 			blocks = append(blocks, buildForwardedSystemBlock(block.Text, block, isExplicit))
 		}
-		_ = doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]"))
+		_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks))
 		return true
 	}
 	insertClaudeMidConversationSystemBlocksDoc(doc, forwardedSystemBlocks, isExplicit)
@@ -1316,7 +1311,7 @@ func prependClaudeSystemReminderBlocksToFirstUserMessageDoc(doc *ojson.Doc, bloc
 		if insertAt == len(contentBlocks) {
 			rawBlocks = append(rawBlocks, reminderBlocks...)
 		}
-		return doc.SetRawBytes(contentPath, []byte("["+strings.Join(rawBlocks, ",")+"]")) == nil
+		return util.SetDocRawOwned(doc, contentPath, joinRawJSONArray(rawBlocks)) == nil
 	} else if content.Type == ojson.String {
 		rawBlocks := make([]string, 0, len(blocks)+1)
 		for _, b := range blocks {
@@ -1328,7 +1323,7 @@ func prependClaudeSystemReminderBlocksToFirstUserMessageDoc(doc *ojson.Doc, bloc
 			}
 		}
 		rawBlocks = append(rawBlocks, buildTextBlock(content.String(), nil))
-		return doc.SetRawBytes(contentPath, []byte("["+strings.Join(rawBlocks, ",")+"]")) == nil
+		return util.SetDocRawOwned(doc, contentPath, joinRawJSONArray(rawBlocks)) == nil
 	}
 	return false
 }
@@ -1357,7 +1352,12 @@ func claudeHistoryHasAdvisorCallOrResultDoc(doc *ojson.Doc) bool {
 	if doc == nil {
 		return false
 	}
-	return claudeMessagesHaveAdvisorCallOrResult(doc.Get("messages"))
+	found := false
+	util.ForEachDocArrayElement(doc, "messages", func(_ int, message ojson.Result) bool {
+		found = claudeMessageHasAdvisorCallOrResult(message)
+		return !found
+	})
+	return found
 }
 
 func claudeMessagesHaveAdvisorCallOrResult(messages ojson.Result) bool {
@@ -1365,37 +1365,44 @@ func claudeMessagesHaveAdvisorCallOrResult(messages ojson.Result) bool {
 		return false
 	}
 	for _, msg := range messages.Array() {
-		content := msg.Get("content")
-		if content.IsArray() {
-			for _, block := range content.Array() {
-				blockType := block.Get("type").String()
-				switch blockType {
-				case "advisor_tool_result", "advisor_redacted_result":
+		if claudeMessageHasAdvisorCallOrResult(msg) {
+			return true
+		}
+	}
+	return false
+}
+
+func claudeMessageHasAdvisorCallOrResult(msg ojson.Result) bool {
+	content := msg.Get("content")
+	if content.IsArray() {
+		for _, block := range content.Array() {
+			blockType := block.Get("type").String()
+			switch blockType {
+			case "advisor_tool_result", "advisor_redacted_result":
+				return true
+			case "server_tool_use":
+				if block.Get("name").String() == "advisor" {
 					return true
-				case "server_tool_use":
-					if block.Get("name").String() == "advisor" {
-						return true
-					}
-				case "tool_result":
-					inner := block.Get("content")
-					if inner.IsArray() {
-						for _, b := range inner.Array() {
-							if b.Get("type").String() == "advisor_redacted_result" {
-								return true
-							}
-						}
-					} else if inner.IsObject() {
-						if inner.Get("type").String() == "advisor_redacted_result" {
+				}
+			case "tool_result":
+				inner := block.Get("content")
+				if inner.IsArray() {
+					for _, b := range inner.Array() {
+						if b.Get("type").String() == "advisor_redacted_result" {
 							return true
 						}
 					}
+				} else if inner.IsObject() {
+					if inner.Get("type").String() == "advisor_redacted_result" {
+						return true
+					}
 				}
 			}
-		} else if content.IsObject() {
-			blockType := content.Get("type").String()
-			if blockType == "advisor_tool_result" || blockType == "advisor_redacted_result" {
-				return true
-			}
+		}
+	} else if content.IsObject() {
+		blockType := content.Get("type").String()
+		if blockType == "advisor_tool_result" || blockType == "advisor_redacted_result" {
+			return true
 		}
 	}
 	return false
@@ -1447,11 +1454,7 @@ func claudeMidConversationSystemMessagesAtEndDoc(doc *ojson.Doc) bool {
 		return false
 	}
 
-	messages := doc.Get("messages")
-	if !messages.IsArray() {
-		return false
-	}
-	messageBlocks := messages.Array()
+	messageBlocks := claudeDocMessageList(doc)
 	insertAt := claudeLeadingUserRunEnd(messageBlocks, firstUserIdx)
 	return insertAt == len(messageBlocks) || insertAt > firstUserIdx+1
 }
@@ -1481,11 +1484,7 @@ func insertClaudeMidConversationSystemBlocksDoc(doc *ojson.Doc, blocks []forward
 		return false
 	}
 
-	messages := doc.Get("messages")
-	if !messages.IsArray() {
-		return false
-	}
-	messageBlocks := messages.Array()
+	messageBlocks := claudeDocMessageList(doc)
 	insertAt := claudeLeadingUserRunEnd(messageBlocks, firstUserIdx)
 	if len(messageBlocks)-insertAt >= len(blocks) {
 		matches := true
@@ -1516,7 +1515,36 @@ func insertClaudeMidConversationSystemBlocksDoc(doc *ojson.Doc, blocks []forward
 	if insertAt == len(messageBlocks) {
 		rawMessages = append(rawMessages, systemMessages...)
 	}
-	return doc.SetRawBytes("messages", []byte("["+strings.Join(rawMessages, ",")+"]")) == nil
+	return util.SetDocRawOwned(doc, "messages", joinRawJSONArray(rawMessages)) == nil
+}
+
+// claudeDocMessageList returns the messages of doc element by element, so an
+// edited message array is not serialized as a whole.
+func claudeDocMessageList(doc *ojson.Doc) []ojson.Result {
+	var messages []ojson.Result
+	util.ForEachDocArrayElement(doc, "messages", func(_ int, message ojson.Result) bool {
+		messages = append(messages, message)
+		return true
+	})
+	return messages
+}
+
+// joinRawJSONArray builds one JSON array from raw element texts in a single
+// allocation.
+func joinRawJSONArray(elements []string) []byte {
+	size := len(elements) + 1
+	for _, element := range elements {
+		size += len(element)
+	}
+	out := make([]byte, 0, size)
+	out = append(out, '[')
+	for i, element := range elements {
+		if i > 0 {
+			out = append(out, ',')
+		}
+		out = append(out, element...)
+	}
+	return append(out, ']')
 }
 
 func claudeMessageContentText(content ojson.Result) string {
@@ -1682,7 +1710,7 @@ func reconcileClaudeCodeSystemPlacementAfterPayloadDoc(doc *ojson.Doc, state cla
 		}
 		rawMessages = append(rawMessages, message.Raw)
 	}
-	if errSet := doc.SetRawBytes("messages", []byte("["+strings.Join(rawMessages, ",")+"]")); errSet != nil {
+	if errSet := util.SetDocRawOwned(doc, "messages", joinRawJSONArray(rawMessages)); errSet != nil {
 		return false
 	}
 	blocks := make([]forwardedClaudeSystemPromptBlock, 0, len(state.texts))
@@ -1822,7 +1850,7 @@ func reconcileClaudeCodeFableModelAfterPayloadDoc(
 					blocks = append(blocks, blk.Raw)
 				}
 				if removed {
-					_ = doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]"))
+					_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks))
 					changed = true
 				}
 			} else if strings.ReplaceAll(system.String(), "\u200B", "") == claudeCodeFableReportingOutcomes {
@@ -1881,7 +1909,7 @@ func reconcileClaudeCodeFableModelAfterPayloadDoc(
 					blocks = append(blocks, blk.Raw)
 				}
 				blocks = append(blocks, buildTextBlock(claudeCodeFableReportingOutcomes, nil))
-				_ = doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]"))
+				_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks))
 				changed = true
 			} else if system.Type == ojson.String {
 				str := system.String()
@@ -1889,13 +1917,13 @@ func reconcileClaudeCodeFableModelAfterPayloadDoc(
 					buildTextBlock(str, nil),
 					buildTextBlock(claudeCodeFableReportingOutcomes, nil),
 				}
-				_ = doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]"))
+				_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks))
 				changed = true
 			} else if !system.Exists() {
 				blocks := []string{
 					buildTextBlock(claudeCodeFableReportingOutcomes, nil),
 				}
-				_ = doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]"))
+				_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks))
 				changed = true
 			}
 		}
@@ -1940,7 +1968,7 @@ func reconcileClaudeCodeFableModelAfterPayloadDoc(
 				blocks = append(blocks, blk.Raw)
 			}
 			if removed {
-				_ = doc.SetRawBytes("system", []byte("["+strings.Join(blocks, ",")+"]"))
+				_ = util.SetDocRawOwned(doc, "system", joinRawJSONArray(blocks))
 				changed = true
 			}
 		} else if strings.ReplaceAll(system.String(), "\u200B", "") == claudeCodeFableReportingOutcomes {
@@ -2253,8 +2281,7 @@ func injectClaudeCodeCurrentDateInternalDoc(doc *ojson.Doc, date string, isExpli
 			userCC = nil
 		}
 		userBlock := buildTextBlock(content.String(), userCC)
-		newArray := "[" + dateBlock + "," + userBlock + "]"
-		return doc.SetRawBytes(contentPath, []byte(newArray)) == nil
+		return util.SetDocRawOwned(doc, contentPath, joinRawJSONArray([]string{dateBlock, userBlock})) == nil
 	}
 	if !content.IsArray() {
 		return false
@@ -2290,7 +2317,7 @@ func injectClaudeCodeCurrentDateInternalDoc(doc *ojson.Doc, date string, isExpli
 	rawBlocks = append(rawBlocks, "")
 	copy(rawBlocks[insertAt+1:], rawBlocks[insertAt:])
 	rawBlocks[insertAt] = dateBlock
-	return doc.SetRawBytes(contentPath, []byte("["+strings.Join(rawBlocks, ",")+"]")) == nil
+	return util.SetDocRawOwned(doc, contentPath, joinRawJSONArray(rawBlocks)) == nil
 }
 
 // claudeCodeContextManagement is the context_management object Claude Code
@@ -2524,7 +2551,7 @@ func stripClaudeCodeSystemBlocksDoc(doc *ojson.Doc) bool {
 		}
 		return changed
 	}
-	if errSet := doc.SetRawBytes("system", []byte("["+strings.Join(kept, ",")+"]")); errSet == nil {
+	if errSet := util.SetDocRawOwned(doc, "system", joinRawJSONArray(kept)); errSet == nil {
 		return true
 	}
 	return changed
@@ -3623,6 +3650,19 @@ func claudeHexValue(c byte) uint16 {
 	}
 }
 
+// jsonStringSpecialIndex returns the index of the first quote or backslash in
+// p, or len(p) when string content runs past p.
+func jsonStringSpecialIndex(p []byte) int {
+	end := bytes.IndexByte(p, '"')
+	if end < 0 {
+		end = len(p)
+	}
+	if escape := bytes.IndexByte(p[:end], '\\'); escape >= 0 {
+		return escape
+	}
+	return end
+}
+
 func (s *claudeStreamDocScanner) Write(p []byte) (int, error) {
 	if s.err != nil {
 		return 0, s.err
@@ -3635,9 +3675,7 @@ func (s *claudeStreamDocScanner) Write(p []byte) (int, error) {
 		switch s.tok {
 		case claudeScanTokString:
 			if s.strEsc == 0 && (s.strTarget == claudeStrIgnore || (s.strTarget == claudeStrCheckNonSpace && s.strHasNonSpace)) {
-				for i < len(p) && p[i] != '"' && p[i] != '\\' {
-					i++
-				}
+				i += jsonStringSpecialIndex(p[i:])
 				if i >= len(p) {
 					break
 				}

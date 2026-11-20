@@ -3,6 +3,7 @@ package executor
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/url"
 	"sort"
 	"strings"
@@ -36,9 +37,10 @@ type claudeCCHJSONMember struct {
 }
 
 type claudeCCHJSONScanner struct {
-	body  []byte
-	pos   int
-	edits []claudeCCHNormalizationEdit
+	body    []byte
+	pos     int
+	edits   []claudeCCHNormalizationEdit
+	members []claudeCCHJSONMember
 }
 
 type claudeCCHUpstreamKind uint8
@@ -319,14 +321,9 @@ func signAnthropicMessagesBody(body []byte) ([]byte, error) {
 
 	unsignedBody := bytes.Clone(body)
 	copy(unsignedBody[cchOffset:cchOffset+claudeCCHLength], claudeCCHZero)
-	normalizedBody, err := normalizeClaudeCCHInput(unsignedBody)
-	if err != nil {
-		return nil, fmt.Errorf("normalize Claude CCH input: %w", err)
-	}
-
 	hasher := xxHash64.New(claudeCCHSeed)
-	if _, err = hasher.Write(normalizedBody); err != nil {
-		return nil, fmt.Errorf("hash Claude CCH input: %w", err)
+	if err := writeClaudeCCHInput(hasher, unsignedBody); err != nil {
+		return nil, fmt.Errorf("normalize Claude CCH input: %w", err)
 	}
 	cch := fmt.Sprintf("%05x", hasher.Sum64()&0xFFFFF)
 	copy(unsignedBody[cchOffset:cchOffset+claudeCCHLength], cch)
@@ -389,36 +386,43 @@ func isLowerHex(value []byte) bool {
 // normalizeClaudeCCHInput builds the hash view without reserializing JSON.
 // Model string values are emptied, while dispatch-only members are omitted.
 func normalizeClaudeCCHInput(body []byte) ([]byte, error) {
+	normalized := bytes.NewBuffer(make([]byte, 0, len(body)))
+	if err := writeClaudeCCHInput(normalized, body); err != nil {
+		return nil, err
+	}
+	return normalized.Bytes(), nil
+}
+
+// writeClaudeCCHInput streams the CCH hash view of body to w.
+func writeClaudeCCHInput(w io.Writer, body []byte) error {
 	if !json.Valid(body) {
-		return nil, fmt.Errorf("invalid JSON body")
+		return fmt.Errorf("invalid JSON body")
 	}
 
-	scanner := claudeCCHJSONScanner{
-		body:  body,
-		edits: make([]claudeCCHNormalizationEdit, 0),
-	}
+	scanner := claudeCCHJSONScanner{body: body}
 	if err := scanner.parseValue(true); err != nil {
-		return nil, err
+		return err
 	}
 	scanner.skipWhitespace()
 	if scanner.pos != len(body) {
-		return nil, fmt.Errorf("unexpected JSON data at byte %d", scanner.pos)
+		return fmt.Errorf("unexpected JSON data at byte %d", scanner.pos)
 	}
 
 	sort.Slice(scanner.edits, func(i, j int) bool {
 		return scanner.edits[i].start < scanner.edits[j].start
 	})
-	normalized := make([]byte, 0, len(body))
 	last := 0
 	for _, edit := range scanner.edits {
 		if edit.start < last || edit.end > len(body) {
-			return nil, fmt.Errorf("overlapping CCH normalization edit at byte %d", edit.start)
+			return fmt.Errorf("overlapping CCH normalization edit at byte %d", edit.start)
 		}
-		normalized = append(normalized, body[last:edit.start]...)
+		if _, err := w.Write(body[last:edit.start]); err != nil {
+			return err
+		}
 		last = edit.end
 	}
-	normalized = append(normalized, body[last:]...)
-	return normalized, nil
+	_, err := w.Write(body[last:])
+	return err
 }
 
 func (scanner *claudeCCHJSONScanner) parseValue(collect bool) error {
@@ -462,7 +466,7 @@ func (scanner *claudeCCHJSONScanner) parseObject(collect bool) error {
 		return nil
 	}
 
-	members := make([]claudeCCHJSONMember, 0)
+	membersStart := len(scanner.members)
 	commaBefore := -1
 	for {
 		scanner.skipWhitespace()
@@ -495,13 +499,15 @@ func (scanner *claudeCCHJSONScanner) parseObject(collect bool) error {
 		if scanner.consume(',') {
 			commaAfter = scanner.pos - 1
 		}
-		members = append(members, claudeCCHJSONMember{
-			start:       memberStart,
-			end:         memberEnd,
-			commaBefore: commaBefore,
-			commaAfter:  commaAfter,
-			excluded:    excluded,
-		})
+		if collect {
+			scanner.members = append(scanner.members, claudeCCHJSONMember{
+				start:       memberStart,
+				end:         memberEnd,
+				commaBefore: commaBefore,
+				commaAfter:  commaAfter,
+				excluded:    excluded,
+			})
+		}
 		if commaAfter >= 0 {
 			commaBefore = commaAfter
 			continue
@@ -513,7 +519,8 @@ func (scanner *claudeCCHJSONScanner) parseObject(collect bool) error {
 	}
 
 	if collect {
-		scanner.addExcludedMemberEdits(members)
+		scanner.addExcludedMemberEdits(scanner.members[membersStart:])
+		scanner.members = scanner.members[:membersStart]
 	}
 	return nil
 }
@@ -548,15 +555,17 @@ func (scanner *claudeCCHJSONScanner) parseString() (start, end int, err error) {
 	start = scanner.pos
 	scanner.pos++
 	for scanner.pos < len(scanner.body) {
-		switch scanner.body[scanner.pos] {
-		case '\\':
-			scanner.pos += 2
-		case '"':
-			scanner.pos++
-			return start, scanner.pos, nil
-		default:
-			scanner.pos++
+		rest := scanner.body[scanner.pos:]
+		quote := bytes.IndexByte(rest, '"')
+		if quote < 0 {
+			break
 		}
+		if escape := bytes.IndexByte(rest[:quote], '\\'); escape >= 0 {
+			scanner.pos += escape + 2
+			continue
+		}
+		scanner.pos += quote + 1
+		return start, scanner.pos, nil
 	}
 	return 0, 0, fmt.Errorf("unterminated JSON string at byte %d", start)
 }

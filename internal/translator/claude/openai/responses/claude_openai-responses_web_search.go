@@ -215,15 +215,17 @@ func responsesWebSearchItemIsPaused(item ojson.Result) bool {
 		!item.Get("results").Exists()
 }
 
-// responsesItemIsTurnBoundary reports a user turn. Tool outputs do not end the
-// assistant turn: Anthropic runs a deferred search right after them.
-func responsesItemIsTurnBoundary(item ojson.Result) bool {
-	typ := item.Get("type").String()
-	role := item.Get("role").String()
+// responsesItemTurnBoundary reports whether item is a user turn, reading type
+// and role in one pass, and returns the item's declared type. Tool outputs do
+// not end the assistant turn: Anthropic runs a deferred search right after them.
+func responsesItemTurnBoundary(item ojson.Result) (bool, string) {
+	fields := ojson.GetMany(item.Raw, "type", "role")
+	declared := fields[0].String()
+	typ, role := declared, fields[1].String()
 	if typ == "" && role != "" {
 		typ = "message"
 	}
-	return typ == "message" && role != "assistant"
+	return typ == "message" && role != "assistant", declared
 }
 
 func scanResponsesWebSearchHistory(items []ojson.Result) responsesWebSearchHistory {
@@ -232,20 +234,25 @@ func scanResponsesWebSearchHistory(items []ojson.Result) responsesWebSearchHisto
 		skip:          map[int]bool{},
 		pausedQuery:   map[int]string{},
 	}
+	boundaries := make([]bool, len(items))
+	types := make([]string, len(items))
+	for index, item := range items {
+		boundaries[index], types[index] = responsesItemTurnBoundary(item)
+	}
 	boundary := false
 	for index := len(items) - 1; index >= 0; index-- {
 		history.boundaryAfter[index] = boundary
-		if responsesItemIsTurnBoundary(items[index]) {
+		if boundaries[index] {
 			boundary = true
 		}
 	}
 	pending := map[string]int{}
 	for index, item := range items {
-		if responsesItemIsTurnBoundary(item) {
+		if boundaries[index] {
 			clear(pending)
 			continue
 		}
-		if item.Get("type").String() != "web_search_call" {
+		if types[index] != "web_search_call" {
 			continue
 		}
 		id := strings.TrimSpace(item.Get("id").String())

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 )
 
 type ClaudeMessagesSignatureSanitizeOptions struct {
@@ -61,17 +62,12 @@ func RestoreCodexCommentaryMarkersDoc(doc *ojson.Doc) int {
 	if doc == nil {
 		return 0
 	}
-	messages := doc.Get("messages")
-	if !messages.IsArray() {
-		return 0
-	}
-	messageResults := messages.Array()
 	restored := 0
 	var droppedMessages []int
-	for i, message := range messageResults {
+	util.ForEachDocArrayElement(doc, "messages", func(i int, message ojson.Result) bool {
 		content := message.Get("content")
 		if !content.IsArray() {
-			continue
+			return true
 		}
 		contentResults := content.Array()
 		var droppedParts []int
@@ -91,16 +87,17 @@ func RestoreCodexCommentaryMarkersDoc(doc *ojson.Doc) int {
 			}
 		}
 		if len(droppedParts) == 0 {
-			continue
+			return true
 		}
 		if len(droppedParts) == len(contentResults) {
 			droppedMessages = append(droppedMessages, i)
-			continue
+			return true
 		}
 		for k := len(droppedParts) - 1; k >= 0; k-- {
 			_ = doc.Delete(fmt.Sprintf("messages.%d.content.%d", i, droppedParts[k]))
 		}
-	}
+		return true
+	})
 	for k := len(droppedMessages) - 1; k >= 0; k-- {
 		_ = doc.Delete(fmt.Sprintf("messages.%d", droppedMessages[k]))
 	}

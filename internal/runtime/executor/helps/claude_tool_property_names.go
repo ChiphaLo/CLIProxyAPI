@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/MoeForge/moego/ojson"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -129,13 +130,13 @@ func NormalizeClaudeToolPropertyNamesDoc(doc *ojson.Doc) {
 		}
 		return true
 	})
-	doc.Get("messages").ForEach(func(messageIndex, message ojson.Result) bool {
+	util.ForEachDocArrayElement(doc, "messages", func(messageIndex int, message ojson.Result) bool {
 		message.Get("content").ForEach(func(partIndex, part ojson.Result) bool {
 			if part.Get("type").String() != "tool_addition" || part.Get("tool.type").String() != "tool_definition" {
 				return true
 			}
 			if claudeToolNeedsSchemaFallback(part.Get("tool.definition")) {
-				paths = append(paths, fmt.Sprintf("messages.%d.content.%d.tool.definition", messageIndex.Int(), partIndex.Int()))
+				paths = append(paths, fmt.Sprintf("messages.%d.content.%d.tool.definition", messageIndex, partIndex.Int()))
 			}
 			return true
 		})

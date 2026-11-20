@@ -11,6 +11,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/registry"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/thinking"
+	translatorcommon "github.com/router-for-me/CLIProxyAPI/v8/internal/translator/common"
 	coreusage "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/usage"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
@@ -686,10 +687,20 @@ func (a *thinkingAdapter) Apply(body []byte, config thinking.ThinkingConfig, mod
 }
 
 func (h *Host) NormalizeRequest(ctx context.Context, from, to sdktranslator.Format, model string, body []byte, stream bool) []byte {
-	current := bytes.Clone(body)
+	// Plugins receive a private, fully hydrated copy; without a normalizer the
+	// body passes through.
+	current := body
+	cloned := false
 	for _, record := range h.activeRecords() {
 		if h.isPluginFused(record.id) || record.plugin.Capabilities.RequestNormalizer == nil {
 			continue
+		}
+		if !cloned {
+			// Hydration builds a new body; a body without handles is copied.
+			if current = translatorcommon.DeferredMediaFromContext(ctx).HydrateJSON(body); len(current) == len(body) {
+				current = bytes.Clone(body)
+			}
+			cloned = true
 		}
 		if normalized, ok := h.callRequestNormalizer(ctx, record, from, to, model, current, stream); ok {
 			current = normalized

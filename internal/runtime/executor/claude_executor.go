@@ -123,18 +123,13 @@ func sanitizeClaudeMessagesForClaudeUpstreamDoc(doc *ojson.Doc, targetModel stri
 	if doc == nil {
 		return report, false
 	}
-	messages := doc.Get("messages")
-	if !messages.IsArray() {
-		return report, false
-	}
-	messageResults := messages.Array()
 	modified := false
 	var droppedMessages []int
 
-	for i, message := range messageResults {
+	util.ForEachDocArrayElement(doc, "messages", func(i int, message ojson.Result) bool {
 		content := message.Get("content")
 		if !content.IsArray() {
-			continue
+			return true
 		}
 		contentResults := content.Array()
 		var droppedParts []int
@@ -201,13 +196,14 @@ func sanitizeClaudeMessagesForClaudeUpstreamDoc(doc *ojson.Doc, targetModel stri
 		if len(droppedParts) > 0 {
 			if len(droppedParts) == len(contentResults) {
 				droppedMessages = append(droppedMessages, i)
-				continue
+				return true
 			}
 			for k := len(droppedParts) - 1; k >= 0; k-- {
 				_ = doc.Delete(fmt.Sprintf("messages.%d.content.%d", i, droppedParts[k]))
 			}
 		}
-	}
+		return true
+	})
 
 	for k := len(droppedMessages) - 1; k >= 0; k-- {
 		_ = doc.Delete(fmt.Sprintf("messages.%d", droppedMessages[k]))
@@ -362,8 +358,8 @@ const defaultModelMaxTokens = 1024
 // max_tokens from originalTranslated when the caller's original request did not
 // explicitly supply an output token limit in the source protocol, allowing
 // payload.default rules targeting max_tokens to take effect.
-func stripTranslatedDefaultMaxTokens(from sdktranslator.Format, originalPayload, originalTranslated []byte) []byte {
-	if len(originalTranslated) == 0 || from == sdktranslator.FormatClaude {
+func stripTranslatedDefaultMaxTokens(cfg *config.Config, from sdktranslator.Format, originalPayload, originalTranslated []byte) []byte {
+	if len(originalTranslated) == 0 || from == sdktranslator.FormatClaude || !helps.PayloadRulesConfigured(cfg) {
 		return originalTranslated
 	}
 	hasExplicitMaxTokens := func(paths ...string) bool {

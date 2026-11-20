@@ -422,21 +422,32 @@ func claudeDocHasSignedThinkingBlock(doc *ojson.Doc) bool {
 	if doc == nil {
 		return false
 	}
-	return claudeMessagesHaveSignedThinkingBlock(doc.Get("messages"))
+	found := false
+	util.ForEachDocArrayElement(doc, "messages", func(_ int, msg ojson.Result) bool {
+		found = claudeMessageHasSignedThinkingBlock(msg)
+		return !found
+	})
+	return found
 }
 
 func claudeMessagesHaveSignedThinkingBlock(messages ojson.Result) bool {
 	found := false
 	messages.ForEach(func(_, msg ojson.Result) bool {
-		msg.Get("content").ForEach(func(_, block ojson.Result) bool {
-			switch strings.TrimSpace(block.Get("type").String()) {
-			case "thinking":
-				found = strings.TrimSpace(block.Get("signature").String()) != ""
-			case "redacted_thinking":
-				found = strings.TrimSpace(block.Get("data").String()) != ""
-			}
-			return !found
-		})
+		found = claudeMessageHasSignedThinkingBlock(msg)
+		return !found
+	})
+	return found
+}
+
+func claudeMessageHasSignedThinkingBlock(msg ojson.Result) bool {
+	found := false
+	msg.Get("content").ForEach(func(_, block ojson.Result) bool {
+		switch strings.TrimSpace(block.Get("type").String()) {
+		case "thinking":
+			found = strings.TrimSpace(block.Get("signature").String()) != ""
+		case "redacted_thinking":
+			found = strings.TrimSpace(block.Get("data").String()) != ""
+		}
 		return !found
 	})
 	return found
@@ -2395,85 +2406,82 @@ func remapOAuthToolNamesWithOptionsDoc(doc *ojson.Doc, mcpAliases claudeMCPAlias
 		}
 	}
 
-	messages := doc.Get("messages")
-	if messages.Exists() && messages.IsArray() {
-		messages.ForEach(func(msgIndex, msg ojson.Result) bool {
-			content := msg.Get("content")
-			if !content.Exists() || !content.IsArray() {
-				return true
-			}
-			content.ForEach(func(contentIndex, part ojson.Result) bool {
-				partType := part.Get("type").String()
-				switch partType {
-				case "tool_use":
-					name := strings.Clone(part.Get("name").String())
-					if newName, renamed := rewriteName(name); renamed {
-						path := fmt.Sprintf("messages.%d.content.%d.name", msgIndex.Int(), contentIndex.Int())
-						if doc.Set(path, newName) == nil {
-							changed = true
-							recordRename(name, newName)
-						}
+	util.ForEachDocArrayElement(doc, "messages", func(msgIndex int, msg ojson.Result) bool {
+		content := msg.Get("content")
+		if !content.Exists() || !content.IsArray() {
+			return true
+		}
+		content.ForEach(func(contentIndex, part ojson.Result) bool {
+			partType := part.Get("type").String()
+			switch partType {
+			case "tool_use":
+				name := strings.Clone(part.Get("name").String())
+				if newName, renamed := rewriteName(name); renamed {
+					path := fmt.Sprintf("messages.%d.content.%d.name", msgIndex, contentIndex.Int())
+					if doc.Set(path, newName) == nil {
+						changed = true
+						recordRename(name, newName)
 					}
-				case "tool_reference":
-					toolName := strings.Clone(part.Get("tool_name").String())
-					if newName, renamed := rewriteName(toolName); renamed {
-						path := fmt.Sprintf("messages.%d.content.%d.tool_name", msgIndex.Int(), contentIndex.Int())
-						if doc.Set(path, newName) == nil {
-							changed = true
-							recordRename(toolName, newName)
-						}
+				}
+			case "tool_reference":
+				toolName := strings.Clone(part.Get("tool_name").String())
+				if newName, renamed := rewriteName(toolName); renamed {
+					path := fmt.Sprintf("messages.%d.content.%d.tool_name", msgIndex, contentIndex.Int())
+					if doc.Set(path, newName) == nil {
+						changed = true
+						recordRename(toolName, newName)
 					}
-				case "tool_result":
-					nestedContent := part.Get("content")
-					if nestedContent.Exists() && nestedContent.IsArray() {
-						nestedContent.ForEach(func(nestedIndex, nestedPart ojson.Result) bool {
-							if nestedPart.Get("type").String() == "tool_reference" {
-								nestedToolName := strings.Clone(nestedPart.Get("tool_name").String())
-								if newName, renamed := rewriteName(nestedToolName); renamed {
-									nestedPath := fmt.Sprintf("messages.%d.content.%d.content.%d.tool_name", msgIndex.Int(), contentIndex.Int(), nestedIndex.Int())
-									if doc.Set(nestedPath, newName) == nil {
-										changed = true
-										recordRename(nestedToolName, newName)
-									}
+				}
+			case "tool_result":
+				nestedContent := part.Get("content")
+				if nestedContent.Exists() && nestedContent.IsArray() {
+					nestedContent.ForEach(func(nestedIndex, nestedPart ojson.Result) bool {
+						if nestedPart.Get("type").String() == "tool_reference" {
+							nestedToolName := strings.Clone(nestedPart.Get("tool_name").String())
+							if newName, renamed := rewriteName(nestedToolName); renamed {
+								nestedPath := fmt.Sprintf("messages.%d.content.%d.content.%d.tool_name", msgIndex, contentIndex.Int(), nestedIndex.Int())
+								if doc.Set(nestedPath, newName) == nil {
+									changed = true
+									recordRename(nestedToolName, newName)
 								}
 							}
-							return true
-						})
-					}
-				case "tool_search_tool_result":
-					toolRefs := part.Get("content.tool_references")
-					if toolRefs.Exists() && toolRefs.IsArray() {
-						toolRefs.ForEach(func(refIndex, refPart ojson.Result) bool {
-							if refPart.Get("type").String() == "tool_reference" {
-								refToolName := strings.Clone(refPart.Get("tool_name").String())
-								if newName, renamed := rewriteName(refToolName); renamed {
-									refPath := fmt.Sprintf("messages.%d.content.%d.content.tool_references.%d.tool_name", msgIndex.Int(), contentIndex.Int(), refIndex.Int())
-									if doc.Set(refPath, newName) == nil {
-										changed = true
-										recordRename(refToolName, newName)
-									}
+						}
+						return true
+					})
+				}
+			case "tool_search_tool_result":
+				toolRefs := part.Get("content.tool_references")
+				if toolRefs.Exists() && toolRefs.IsArray() {
+					toolRefs.ForEach(func(refIndex, refPart ojson.Result) bool {
+						if refPart.Get("type").String() == "tool_reference" {
+							refToolName := strings.Clone(refPart.Get("tool_name").String())
+							if newName, renamed := rewriteName(refToolName); renamed {
+								refPath := fmt.Sprintf("messages.%d.content.%d.content.tool_references.%d.tool_name", msgIndex, contentIndex.Int(), refIndex.Int())
+								if doc.Set(refPath, newName) == nil {
+									changed = true
+									recordRename(refToolName, newName)
 								}
 							}
-							return true
-						})
-					}
-				case "tool_addition", "tool_removal":
-					if namePath := claudeToolChangeNamePath(part); namePath != "" {
-						changeToolName := strings.Clone(part.Get(namePath).String())
-						if newName, renamed := rewriteName(changeToolName); renamed {
-							changePath := fmt.Sprintf("messages.%d.content.%d.%s", msgIndex.Int(), contentIndex.Int(), namePath)
-							if doc.Set(changePath, newName) == nil {
-								changed = true
-								recordRename(changeToolName, newName)
-							}
+						}
+						return true
+					})
+				}
+			case "tool_addition", "tool_removal":
+				if namePath := claudeToolChangeNamePath(part); namePath != "" {
+					changeToolName := strings.Clone(part.Get(namePath).String())
+					if newName, renamed := rewriteName(changeToolName); renamed {
+						changePath := fmt.Sprintf("messages.%d.content.%d.%s", msgIndex, contentIndex.Int(), namePath)
+						if doc.Set(changePath, newName) == nil {
+							changed = true
+							recordRename(changeToolName, newName)
 						}
 					}
 				}
-				return true
-			})
+			}
 			return true
 		})
-	}
+		return true
+	})
 
 	return reverseMap, changed
 }

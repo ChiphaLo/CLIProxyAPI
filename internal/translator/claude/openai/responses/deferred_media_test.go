@@ -1,12 +1,52 @@
 package responses
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/MoeForge/moego/ojson"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/translator/common"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v8/sdk/translator"
 )
+
+func deferredMediaTestRequest(data string) []byte {
+	part := map[string]any{"type": "input_image", "image_url": "data:image/png;base64," + data}
+	file := map[string]any{"type": "input_file", "file_data": "data:application/pdf;base64," + data}
+	body, _ := json.Marshal(map[string]any{"input": []any{
+		map[string]any{"role": "user", "content": []any{part, file}},
+		map[string]any{"type": "function_call", "call_id": "call_1", "name": "read", "arguments": "{}"},
+		map[string]any{"type": "function_call_output", "call_id": "call_1", "output": []any{part, file}},
+	}, "tools": []any{map[string]any{"type": "function", "name": "read", "parameters": map[string]any{"type": "object"}}}})
+	return body
+}
+
+func TestDeferredMediaCallerHydrationMatchesTranslatorHydration(t *testing.T) {
+	for _, data := range []string{
+		strings.Repeat("QUJD", 4096),
+		strings.Repeat("ABC+/=&<>\"\\\n\u2028", 1000) + "QUJD",
+	} {
+		body := deferredMediaTestRequest(data)
+		want, err := ConvertOpenAIResponsesRequestToClaude("claude-opus-5-5", body, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		media := &common.DeferredMedia{}
+		ctx := common.WithDeferredMedia(context.Background(), media)
+		deferred := ConvertOpenAIResponsesRequestEnvelopeToClaude(ctx, sdktranslator.RequestEnvelope{Model: "claude-opus-5-5", Body: body, Stream: true})
+		if deferred.Err != nil {
+			t.Fatal(deferred.Err)
+		}
+		if !strings.Contains(string(deferred.Body), "cpa-media:") || len(deferred.Body) >= len(want) {
+			t.Fatal("caller-owned media was hydrated by the translator")
+		}
+		if got := media.HydrateJSON(deferred.Body); !bytes.Equal(got, want) {
+			t.Fatalf("caller hydration differs:\n got %.300s\nwant %.300s", got, want)
+		}
+	}
+}
 
 func TestDeferredMediaPreservesLargeAndEscapedSources(t *testing.T) {
 	data := strings.Repeat("ABC+/=&<>\"\\\n", 10000) + "QUJD"

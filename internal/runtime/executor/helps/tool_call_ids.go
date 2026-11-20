@@ -8,6 +8,7 @@ import (
 
 	"github.com/MoeForge/moego/base64"
 	"github.com/MoeForge/moego/ojson"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/util"
 )
 
 const devinToolIDPrefix = "cpa_tid_v1_"
@@ -134,7 +135,7 @@ func NormalizeClaudeToolCallIDsDoc(doc *ojson.Doc) bool {
 	}
 	var targets []idTarget
 	used := make(map[string]bool)
-	for msgIdx, message := range doc.Get("messages").Array() {
+	util.ForEachDocArrayElement(doc, "messages", func(msgIdx int, message ojson.Result) bool {
 		for blockIdx, block := range message.Get("content").Array() {
 			field := ""
 			switch block.Get("type").String() {
@@ -159,7 +160,8 @@ func NormalizeClaudeToolCallIDsDoc(doc *ojson.Doc) bool {
 				})
 			}
 		}
-	}
+		return true
+	})
 	if len(targets) == 0 {
 		return false
 	}

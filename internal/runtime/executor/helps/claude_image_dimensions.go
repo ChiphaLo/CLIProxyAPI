@@ -41,6 +41,13 @@ var claudeImageResizeCache = struct {
 // ResizeClaudeImagesDoc applies Anthropic's per-request image dimension limits.
 // It runs after protocol conversion and before caller payload rules.
 func ResizeClaudeImagesDoc(doc *ojson.Doc) (int, error) {
+	return ResizeClaudeImagesDocResolving(doc, func(data string) string { return data })
+}
+
+// ResizeClaudeImagesDocResolving is ResizeClaudeImagesDoc for a document whose
+// image data may be deferred: resolve maps each source.data value to the image
+// it stands for.
+func ResizeClaudeImagesDocResolving(doc *ojson.Doc, resolve func(string) string) (int, error) {
 	model := strings.ToLower(doc.Get("model").String())
 	model = model[strings.LastIndex(model, "/")+1:]
 	if !strings.HasPrefix(model, "claude-") {
@@ -75,7 +82,7 @@ func ResizeClaudeImagesDoc(doc *ojson.Doc) (int, error) {
 	}
 	changed := 0
 	for _, item := range images {
-		data := item.source.Get("data").String()
+		data := resolve(item.source.Get("data").String())
 		reader := func() *strings.Reader { return strings.NewReader(data) }
 		cfg, _, err := image.DecodeConfig(base64.NewDecoder(base64.StdEncoding, reader()))
 		if err != nil || cfg.Width <= edge && cfg.Height <= edge {
