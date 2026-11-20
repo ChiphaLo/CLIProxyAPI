@@ -4,16 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/MoeForge/moego/json"
+	"github.com/MoeForge/moego/regexp"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/config"
 	homekv "github.com/router-for-me/CLIProxyAPI/v8/internal/home"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v8/sdk/cliproxy/auth"
@@ -323,9 +323,8 @@ func extractClaudeDeviceProfile(headers http.Header, cfg *config.Config) (Claude
 		return ClaudeDeviceProfile{}, false
 	}
 
-	userAgent := strings.TrimSpace(headers.Get("User-Agent"))
-	version, ok := parseClaudeCLIVersion(userAgent)
-	if !ok || !claudeCodeNativeUserAgentPattern.MatchString(userAgent) {
+	userAgent, ok := parseClaudeCodeUserAgent(headers.Get("User-Agent"))
+	if !ok {
 		return ClaudeDeviceProfile{}, false
 	}
 
@@ -339,12 +338,12 @@ func extractClaudeDeviceProfile(headers http.Header, cfg *config.Config) (Claude
 		runtimeVersion = baseline.RuntimeVersion
 	}
 	profile := ClaudeDeviceProfile{
-		UserAgent:      userAgent,
+		UserAgent:      userAgent.profileUserAgent,
 		PackageVersion: packageVersion,
 		RuntimeVersion: runtimeVersion,
 		OS:             firstNonEmptyHeader(headers, "X-Stainless-Os", baseline.OS),
 		Arch:           firstNonEmptyHeader(headers, "X-Stainless-Arch", baseline.Arch),
-		version:        version,
+		version:        userAgent.version,
 		hasVersion:     true,
 	}
 	return profile, true
@@ -637,9 +636,22 @@ func (value claudeDeviceProfileKVValue) ToProfile() ClaudeDeviceProfile {
 	return profile
 }
 
-func ApplyClaudeDeviceProfileHeaders(r *http.Request, profile ClaudeDeviceProfile) {
+// ApplyClaudeDeviceProfileHeaders applies a stable software identity. An optional
+// UA from a confirmed native caller supplies only this request's extension fields.
+func ApplyClaudeDeviceProfileHeaders(r *http.Request, profile ClaudeDeviceProfile, requestUserAgent ...string) {
 	if r == nil {
 		return
+	}
+	userAgent := profile.UserAgent
+	if len(requestUserAgent) > 0 {
+		stable, validStable := parseClaudeCodeUserAgent(profile.UserAgent)
+		current, validCurrent := parseClaudeCodeUserAgent(requestUserAgent[0])
+		if validStable && validCurrent {
+			userAgent = stable.profileUserAgent
+			if len(current.requestFields) > 0 {
+				userAgent = strings.TrimSuffix(userAgent, ")") + "," + strings.Join(current.requestFields, ",") + ")"
+			}
+		}
 	}
 	for _, headerName := range []string{
 		"User-Agent",
@@ -650,7 +662,7 @@ func ApplyClaudeDeviceProfileHeaders(r *http.Request, profile ClaudeDeviceProfil
 	} {
 		r.Header.Del(headerName)
 	}
-	r.Header.Set("User-Agent", profile.UserAgent)
+	r.Header.Set("User-Agent", userAgent)
 	r.Header.Set("X-Stainless-Package-Version", profile.PackageVersion)
 	r.Header.Set("X-Stainless-Runtime-Version", profile.RuntimeVersion)
 	r.Header.Set("X-Stainless-Os", profile.OS)

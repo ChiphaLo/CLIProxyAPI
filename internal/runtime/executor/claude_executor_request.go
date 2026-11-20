@@ -54,6 +54,8 @@ const (
 	claudeRedactThinkingBeta         = "redact-thinking-2026-02-12"
 	claudeAFKModeBeta                = "afk-mode-2026-01-31"
 	claudeToolProvenanceBeta         = "tool-provenance-2026-10-26"
+	claudeThinkingTokenCountBeta     = "thinking-token-count-2026-05-13"
+	claudeMessageThreadsBeta         = "message-threads-2026-08-12"
 )
 
 // claudeCodeCLIConstantBetas are the betas Claude Code sends on every
@@ -66,7 +68,6 @@ const (
 var claudeCodeCLIConstantBetas = []string{
 	"interleaved-thinking-2025-05-14",
 	claudeRedactThinkingBeta,
-	"thinking-token-count-2026-05-13",
 	"context-management-2025-06-27",
 	"prompt-caching-scope-2026-01-05",
 }
@@ -113,6 +114,8 @@ var claudeManagedBetaSet = func() map[string]bool {
 		claudeRedactThinkingBeta,
 		claudeAFKModeBeta,
 		claudeToolProvenanceBeta,
+		claudeThinkingTokenCountBeta,
+		claudeMessageThreadsBeta,
 	}
 	managed = append(managed, claudeCodeCLIConstantBetas...)
 	managed = append(managed, claudeCodeTrailingBetas...)
@@ -170,6 +173,7 @@ func isManagedClaudeBeta(beta string) bool {
 //	27 extended-cache-ttl-2025-04-11      OAuth credentials (omitted on subagent & probe)
 //	28 prompt-caching-evict-2026-05-12    evict_on_complete, or requested
 //	29 cache-diagnosis-2026-04-07         requests with diagnostics only
+//	30 message-threads-2026-08-12         requests with a thread object, or requested
 //
 // An empty body keeps the optimistic role=system default, matching the cloaking
 // policy for unknown and future model IDs.
@@ -179,11 +183,13 @@ func claudeCodeCLIBetas(body []byte, requested map[string]bool, oauthToken bool)
 
 func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthToken bool, facts helps.ClaudeRequestFacts) string {
 	get, isProbeOrHelper := facts.Get, facts.IsProbeOrHelper
-	currentAdaptive := isClaudeCurrentAdaptiveModel(get("model").String())
-	currentHaiku := isClaudeHaiku55Model(get("model").String())
+	model := get("model").String()
+	currentAdaptive := isClaudeCurrentAdaptiveModel(model)
+	claudeCodeAfterScope := isClaudeHaiku55Model(model)
+	isQuotaProbe := isProbeOrHelper && get("max_tokens").Int() == 1 && helps.IsClaudeQuotaProbeRequest(body)
 
-	betas := make([]string, 0, len(claudeCodeCLIConstantBetas)+len(claudeCodeTrailingBetas)+10)
-	if !currentHaiku {
+	betas := make([]string, 0, len(claudeCodeCLIConstantBetas)+len(claudeCodeTrailingBetas)+12)
+	if !isQuotaProbe && !claudeCodeAfterScope {
 		betas = append(betas, claudeCodeBeta)
 	}
 	if oauthToken {
@@ -198,27 +204,23 @@ func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthTo
 		if beta == claudeRedactThinkingBeta && !redactThinking {
 			continue
 		}
-		if currentAdaptive && beta == "thinking-token-count-2026-05-13" {
-			continue
-		}
 		betas = append(betas, beta)
 	}
-	// Haiku inserts the client beta after its shared SDK feature betas.
-	if currentHaiku {
+	// Haiku 5.5 inserts the client beta after its shared SDK feature betas.
+	if !isQuotaProbe && claudeCodeAfterScope {
 		betas = append(betas, claudeCodeBeta)
 	}
-	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) {
-		// Current adaptive models accept system turns without this legacy beta.
-		if !currentAdaptive || requested[claudeMidConvSystemBeta] {
+	if !util.IsClaudeLegacySystemReminderModel(model) {
+		if requested[claudeMidConvSystemBeta] {
 			betas = append(betas, claudeMidConvSystemBeta)
 		}
-		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(get("model").String()) {
+		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(model) {
 			betas = append(betas, claudePerTurnControlBeta)
 		}
-		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(get("model").String()) && facts.HasPerTurnTiming) {
+		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(model) && facts.HasPerTurnTiming) {
 			betas = append(betas, claudePerTurnTimingBeta)
 		}
-		if !isClaudeSonnet5Model(get("model").String()) {
+		if !isClaudeSonnet5Model(model) {
 			betas = append(betas, claudeMidConvToolChangesBeta)
 		}
 		if requested[claudeInlineToolsBeta] || facts.HasInlineTools {
@@ -227,34 +229,45 @@ func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthTo
 	} else {
 		// Legacy models have no mid-conversation slot. A caller that still names
 		// these betas keeps them, in the same relative order, ahead of effort.
-		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(get("model").String()) {
+		if requested[claudePerTurnControlBeta] || claudeModelHasPerTurnEffort(model) {
 			betas = append(betas, claudePerTurnControlBeta)
 		}
-		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(get("model").String()) && facts.HasPerTurnTiming) {
+		if requested[claudePerTurnTimingBeta] || (claudeModelHasPerTurnTiming(model) && facts.HasPerTurnTiming) {
 			betas = append(betas, claudePerTurnTimingBeta)
 		}
 	}
-	// Measured in the 2.1.325 CLI and SDK on all current adaptive models.
+	// Measured in the 2.1.325 CLI and SDK on all current adaptive models:
+	// tool-provenance and thinking-token-count precede advisor-tool there.
 	if requested[claudeToolProvenanceBeta] || (currentAdaptive && oauthToken && !isProbeOrHelper) {
 		betas = append(betas, claudeToolProvenanceBeta)
 	}
 	if currentAdaptive {
-		betas = append(betas, "thinking-token-count-2026-05-13")
+		betas = append(betas, claudeThinkingTokenCountBeta)
 	}
 	if requested[claudeAdvisorToolBeta] || facts.HasAdvisorTool {
 		betas = append(betas, claudeAdvisorToolBeta)
 	}
+	if !currentAdaptive && (!isQuotaProbe || requested[claudeThinkingTokenCountBeta]) {
+		betas = append(betas, claudeThinkingTokenCountBeta)
+	}
 	if requested[claudeAdvancedToolUseBeta] || facts.HasAdvancedTool {
 		betas = append(betas, claudeAdvancedToolUseBeta)
 	}
-	if !util.IsClaudeLegacySystemReminderModel(get("model").String()) && (requested[claudeMidConvSystemClearAtBeta] || claudeModelUsesProgressDisplay(get("model").String()) || facts.HasClearAt) {
+	if !util.IsClaudeLegacySystemReminderModel(model) && (requested[claudeMidConvSystemClearAtBeta] || claudeModelUsesProgressDisplay(model) || facts.HasClearAt) {
 		betas = append(betas, claudeMidConvSystemClearAtBeta)
 	}
-	if requested[claudeDangerousToolUseBeta] || get("safeguards").Exists() {
+	dangerous := requested[claudeDangerousToolUseBeta] || get("safeguards").Exists()
+	effort := claudeRequestFieldsSupportEffort(get, isProbeOrHelper)
+	// 2.1.325 adaptive models send dangerous-tool-use ahead of effort; 2.1.321
+	// sends effort first everywhere else.
+	if currentAdaptive && dangerous {
 		betas = append(betas, claudeDangerousToolUseBeta)
 	}
-	if claudeRequestFieldsSupportEffort(get, isProbeOrHelper) {
+	if effort {
 		betas = append(betas, claudeEffortBeta)
+	}
+	if !currentAdaptive && dangerous {
+		betas = append(betas, claudeDangerousToolUseBeta)
 	}
 	if !isProbeOrHelper && (requested[claudeServerSideFallbackBeta] || get("fallbacks").Exists()) {
 		betas = append(betas, claudeServerSideFallbackBeta)
@@ -303,6 +316,9 @@ func claudeCodeCLIBetasWithFacts(body []byte, requested map[string]bool, oauthTo
 	}
 	if diagnostics := get("diagnostics"); diagnostics.IsObject() {
 		betas = append(betas, claudeCacheDiagnosisBeta)
+	}
+	if requested[claudeMessageThreadsBeta] || ojson.GetBytesNoCopy(body, "thread").IsObject() {
+		betas = append(betas, claudeMessageThreadsBeta)
 	}
 	return strings.Join(betas, ",")
 }
@@ -516,9 +532,17 @@ func claudeModelHasPerTurnEffort(model string) bool {
 // is set, so the beta follows the body or an explicit caller request.
 func claudeModelHasPerTurnTiming(model string) bool {
 	model = claudeCanonicalModel(model)
-	return (claudeModelHasPerTurnEffort(model) && !isClaudeHaiku55Model(model)) || strings.HasPrefix(model, "claude-mythos-5-1")
+	if isClaudeHaiku55Model(model) {
+		return false
+	}
+	return claudeModelHasPerTurnEffort(model) ||
+		strings.HasPrefix(model, "claude-mythos-5-1") ||
+		strings.HasPrefix(model, "claude-mythos-5-2") ||
+		strings.HasPrefix(model, "claude-mythos-5.2")
 }
 
+// claudeIncludePerTurnControl also covers the models Claude Code 2.1.321 sends
+// per-turn-control-2026-07-01 for on every main-thread request.
 func claudeIncludePerTurnControl(body []byte, requested map[string]bool) bool {
 	if requested[claudePerTurnControlBeta] {
 		return true
@@ -1239,6 +1263,7 @@ func applyClaudeHeadersWithNativeProfile(
 
 	incomingBetas := strings.TrimSpace(strings.Join(helps.HeaderValuesCaseInsensitive(incomingHeaders, "Anthropic-Beta"), ","))
 	countTokens := r.URL != nil && strings.HasSuffix(r.URL.Path, "/count_tokens")
+	preserveThreadCapabilities := !countTokens && (incomingBetas != "" || len(extraBetas) > 0) && ojson.GetBytesNoCopy(body, "thread").IsObject()
 	if !confirmedClaudeCode && !wirePolicy.Cloak && wirePolicy.ExplicitNever && !wirePolicy.Uncloak {
 		det := helps.DetectClaudeCodeRequest(incomingHeaders, body, countTokens, cfg)
 		if det.ConfirmedShape {
@@ -1273,7 +1298,7 @@ func applyClaudeHeadersWithNativeProfile(
 			baseBetas = withClaudeAdvisorToolBeta(baseBetas)
 		}
 		// Measured Haiku helper requests already carry their own cache-ttl beta
-		// choice (omitting extended-cache-ttl on 2.1.220/2.1.280 probes/title
+		// choice (omitting extended-cache-ttl on 2.1.220/2.1.280/2.1.321 probes/title
 		// helpers), while helpers arriving via ANTHROPIC_BASE_URL still need
 		// oauth-2025-04-20 when CPA authenticates upstream with OAuth.
 		// Native Claude Code subagents and probes also omit extended-cache-ttl.
@@ -1355,6 +1380,25 @@ func applyClaudeHeadersWithNativeProfile(
 			}
 		}
 	}
+	// A Thread declares capabilities for all turns, not just its first body.
+	// Preserve them before binding the final emitted profile to its response ID.
+	if preserveThreadCapabilities {
+		threadCapabilities := incomingBetas
+		if useOAuthBetas {
+			threadCapabilities = withClaudeOAuthCredentialBetas(threadCapabilities, !wirePolicy.Uncloak)
+		}
+		for _, beta := range extraBetas {
+			threadCapabilities = withClaudeBetaAppended(threadCapabilities, beta)
+		}
+		// Keep required protocol additions after the client-declared capabilities.
+		for _, beta := range strings.Split(baseBetas, ",") {
+			threadCapabilities = withClaudeBetaAppended(threadCapabilities, beta)
+		}
+		if advisorNeeded {
+			threadCapabilities = withClaudeAdvisorToolBeta(threadCapabilities)
+		}
+		baseBetas = threadCapabilities
+	}
 	applyBetaHeader := func() {
 		if wirePolicy.Uncloak {
 			baseBetas = withoutClaudeBeta(baseBetas, claudeCodeBeta)
@@ -1371,29 +1415,30 @@ func applyClaudeHeadersWithNativeProfile(
 				baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
 			}
 		}
-		// Enforce strict native Claude Code 2.1.280 model & turn beta gating:
-		if !supportsEffort {
-			baseBetas = withoutClaudeBeta(baseBetas, claudeEffortBeta)
-		}
 		reqProbeOrHelper := probeOrHelper
-		if reqProbeOrHelper && !helperProfile {
-			baseBetas = withoutClaudeBeta(baseBetas, claudeServerSideFallbackBeta)
-			baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
-			baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
-		}
-		reqThinkingType := get("thinking.type").String()
-		if reqThinkingType == "disabled" {
-			baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
-		}
-		if isSubagentRequest && !subagentRequests1h {
-			baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
+		if !preserveThreadCapabilities {
+			// Per-turn gating remains unchanged outside caller-declared Threads.
+			if !supportsEffort {
+				baseBetas = withoutClaudeBeta(baseBetas, claudeEffortBeta)
+			}
+			if reqProbeOrHelper && !helperProfile {
+				baseBetas = withoutClaudeBeta(baseBetas, claudeServerSideFallbackBeta)
+				baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
+				baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
+			}
+			if get("thinking.type").String() == "disabled" {
+				baseBetas = withoutClaudeBeta(baseBetas, claudeThinkingDisplayUpdatesBeta)
+			}
+			if isSubagentRequest && !subagentRequests1h {
+				baseBetas = withoutClaudeBeta(baseBetas, claudeExtendedCacheTTLBeta)
+			}
+			reqModel := strings.ToLower(strings.TrimSpace(get("model").String()))
+			if isClaudeHaikuModel(reqModel) && !get("fallbacks").Exists() && !helperProfile {
+				baseBetas = withoutClaudeBeta(baseBetas, claudeServerSideFallbackBeta)
+			}
 		}
 		if !reqProbeOrHelper && !countTokens && has1hTTL {
 			baseBetas = withClaudeExtendedCacheTTLBeta(baseBetas)
-		}
-		reqModel := strings.ToLower(strings.TrimSpace(get("model").String()))
-		if isClaudeHaikuModel(reqModel) && !get("fallbacks").Exists() && !helperProfile {
-			baseBetas = withoutClaudeBeta(baseBetas, claudeServerSideFallbackBeta)
 		}
 		// A body carrying thinking.block_binding is rejected upstream unless
 		// the binding-controls beta travels with it, in every fingerprint
@@ -1616,7 +1661,7 @@ func applyClaudeHeadersWithNativeProfile(
 			if errDeviceProfile != nil {
 				return errDeviceProfile
 			}
-			helps.ApplyClaudeDeviceProfileHeaders(r, deviceProfile)
+			helps.ApplyClaudeDeviceProfileHeaders(r, deviceProfile, helps.HeaderValueCaseInsensitive(incomingHeaders, "User-Agent"))
 		} else {
 			helps.ApplyClaudeDefaultDeviceProfileHeaders(r, cfg)
 		}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestDeferredMediaPreservesLargeAndEscapedSources(t *testing.T) {
-	data := strings.Repeat("ABC+/=&<>\"\\\n", 10000)
+	data := strings.Repeat("ABC+/=&<>\"\\\n", 10000) + "QUJD"
 	part := map[string]any{"type": "input_image", "image_url": "data:image/png;base64," + data}
 	file := map[string]any{"type": "input_file", "file_data": "data:application/pdf;base64," + data}
 	body, _ := json.Marshal(map[string]any{"input": []any{
